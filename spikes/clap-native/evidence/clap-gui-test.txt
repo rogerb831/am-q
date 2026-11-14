@@ -1,0 +1,6 @@
+editor size 1180 x 672 (native px), DPI scale 1.00, child HWND 0000000000120E92
+after open: {"graphDraws":1,"curveDraws":1,"handleDraws":1,"panelDraws":1,"mouseEvents":0,"curveIntervalMeanMs":0.000,"curveIntervalP95Ms":0.000,"inputToDrawMeanMs":0.000,"inputToDrawMaxMs":0.000,"refreshHz":32.0,"appW":1180,"appH":672,"graphW":1180,"graphH":672,"resizes":1}
+A idle 1 s: {"graphDraws":0,"curveDraws":0,"handleDraws":0,"panelDraws":0,"mouseEvents":0,"curveIntervalMeanMs":0.000,"curveIntervalP95Ms":0.000,"inputToDrawMeanMs":0.000,"inputToDrawMaxMs":0.000,"refreshHz":32.0,"appW":1180,"appH":672,"graphW":1180,"graphH":672,"resizes":1}
+B hover in/out: {"graphDraws":0,"curveDraws":0,"handleDraws":2,"panelDraws":0,"mouseEvents":0,"curveIntervalMeanMs":0.000,"curveIntervalP95Ms":0.000,"inputToDrawMeanMs":0.000,"inputToDrawMaxMs":0.000,"refreshHz":32.0,"appW":1180,"appH":672,"graphW":1180,"graphH":672,"resizes":1}
+C drag 3 s: {"graphDraws":0,"curveDraws":97,"handleDraws":98,"panelDraws":97,"mouseEvents":186,"curveIntervalMeanMs":31.267,"curveIntervalP95Ms":32.111,"inputToDrawMeanMs":7.757,"inputToDrawMaxMs":17.194,"refreshHz":32.0,"appW":1180,"appH":672,"graphW":1180,"graphH":672,"resizes":1}
+Freq after drag: 1213.2 Hz (plugin parameter, written through the GUI setter)

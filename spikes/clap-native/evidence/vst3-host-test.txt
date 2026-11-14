@@ -1,0 +1,21 @@
+﻿.\build-vst3tools\Release\vst3_host_test.exe : 	AUDIO in: 1, out: 1
+At line:1 char:592
++ ... TEXITCODE"; .\build-vst3tools\Release\vst3_host_test.exe .\build\Rele ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (	AUDIO in: 1, out: 1:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+	AUDIO in: 1, out: 1
+	AUDIO in: 1, out: 1
+	AUDIO in: 1, out: 1
+	AUDIO in: 1, out: 1
+	AUDIO in: 1, out: 1
+	AUDIO in: 1, out: 1
+	AUDIO in: 1, out: 1
+	AUDIO in: 1, out: 1
+[PASS] VST3 automation step 'Output Gain -6 dB' at block 1 offset 37: first changed sample 293, expected 293
+[PASS] VST3 automation step 'Band Gain +12 dB' at block 1 offset 101: first changed sample 357, expected 357
+[PASS] VST3 automation step 'Output Gain at offset 0' at block 1 offset 0: first changed sample 256, expected 256
+[PASS] VST3 automation step 'Output Gain at last sample' at block 1 offset 255: first changed sample 511, expected 511
+[PASS] VST3 latency: before 0, restartComponent calls 1 (with kLatencyChanged: 1) before restart, total kLatencyChanged 2, after 64, impulse peak at 64
+ALL PASSED (0 failures)

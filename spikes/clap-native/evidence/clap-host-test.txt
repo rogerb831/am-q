@@ -1,0 +1,9 @@
+﻿[PASS] automation step 'Output Gain -6 dB' at block 1 offset 37: first changed sample 293, expected 293
+[PASS] automation step 'Band Gain +12 dB' at block 1 offset 101: first changed sample 357, expected 357
+[PASS] automation step 'Freq 4 kHz (band gain +12 dB)' at block 1 offset 1: first changed sample 257, expected 257
+[PASS] automation step 'Q 4 (band gain +12 dB)' at block 1 offset 200: first changed sample 456, expected 456
+[PASS] automation step 'Output Gain at offset 0' at block 1 offset 0: first changed sample 256, expected 256
+[PASS] automation step 'Output Gain at last sample' at block 1 offset 255: first changed sample 511, expected 511
+[PASS] latency: before 0, request_callback 2, request_restart 1, latency.changed 1, after 64, impulse peak at 64
+[PASS] off-main-thread calls: latency.get 0, gui size 1180x672, calls ok 1, rescan deferred 0->1, gain after state load 6.0 dB
+ALL PASSED (0 failures)
