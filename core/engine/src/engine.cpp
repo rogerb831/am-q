@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <cmath>
 
+static_assert(amq::analysis::kBandCount == amq::params::kBandCount, "snapshot band count");
+
 namespace amq::engine {
 
 namespace {
@@ -71,6 +73,7 @@ bool Engine::prepare(double sampleRate, uint32_t maxFrames) noexcept {
     refineGlideSamples_ = static_cast<uint32_t>(std::llround(kRefineGlideMs * 1e-3 * sampleRate));
     pos_ = rampClock_ = 0;
     stats_ = {};
+    publisher_.prepare(sampleRate, kMaxChannels);  // dynamics arrive with area 06: gain change stays 0 dB
     for (auto& b : bands_) {
         b = Band{};
     }
@@ -479,6 +482,7 @@ void Engine::process(const float* const* in, uint32_t numIn, float* const* out, 
     retargetAll();
 
     const uint32_t outCh = std::min(numOut, kMaxChannels);
+    publisher_.meterInput(in, std::min(numIn, kMaxChannels), frames);
     double* w[kMaxChannels] = {work_.data(), work_.data() + maxFrames_};
     for (uint32_t c = 0; c < outCh; ++c) {
         const float* x = in[std::min(c, numIn - 1)];
@@ -532,6 +536,8 @@ void Engine::process(const float* const* in, uint32_t numIn, float* const* out, 
     }
     for (uint32_t c = kMaxChannels; c < numOut; ++c)
         if (out[c]) std::fill(out[c], out[c] + frames, 0.0f);
+    publisher_.meterOutput(out, outCh, frames);
+    publisher_.advance(frames, end);
     pos_ = end;
 }
 

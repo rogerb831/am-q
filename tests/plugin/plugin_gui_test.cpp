@@ -301,7 +301,56 @@ int main(int argc, char** argv) {
     gui->destroy(p);
     pump(100);
 
-    // 5. Open/close soak (area 12 R1): no growth in GDI/USER objects or memory.
+    // 5. Idle CPU (area 12 R7): editor open, no edits, analyzer off. First with no audio, then
+    // with silent audio at real-time block rate, so snapshots keep arriving at 60 Hz.
+    {
+        auto cpuSeconds = [] {
+            FILETIME c, e, k, u;
+            GetProcessTimes(GetCurrentProcess(), &c, &e, &k, &u);
+            auto t = [](FILETIME f) { return (static_cast<unsigned long long>(f.dwHighDateTime) << 32 | f.dwLowDateTime) * 1e-7; };
+            return t(k) + t(u);
+        };
+        // The test host's own message loop (1 ms polling) costs CPU too: measure it without an
+        // editor and report the editor's share as the difference.
+        auto measure = [&](DWORD ms) {
+            const double c = cpuSeconds();
+            const DWORD t = GetTickCount();
+            pump(ms);
+            return (cpuSeconds() - c) / ((GetTickCount() - t) * 1e-3) * 100.0;
+        };
+        const double base = measure(10000);
+        gui->create(p, CLAP_WINDOW_API_WIN32, false);
+        gui->set_parent(p, &win);
+        gui->show(p);
+        pump(1000);
+        const double open = measure(10000);
+        const double idle = open - base;
+        std::printf("  host loop alone %.2f %%, with the editor open %.2f %%\n", base, open);
+        double c0 = cpuSeconds();
+        DWORD t0 = GetTickCount();
+        std::fill(l.begin(), l.end(), 0.0f);
+        std::fill(r.begin(), r.end(), 0.0f);
+        c0 = cpuSeconds();
+        t0 = GetTickCount();
+        DWORD next = t0;
+        while (GetTickCount() - t0 < 5000) {
+            Events ev;
+            processOnce(ev);  // 512 samples at 48 kHz: one block every 10.7 ms
+            next += 11;
+            while (static_cast<int>(next - GetTickCount()) > 0) pump(1);
+        }
+        const double silent = (cpuSeconds() - c0) / ((GetTickCount() - t0) * 1e-3) * 100.0 - base;
+        std::printf("  idle CPU of the editor: %.2f %% of one core (no audio), %.2f %% (silent audio, incl. processing)\n",
+                    idle, silent);
+        // R7's target is under 1 %. A 10 s sample through GetProcessTimes is too coarse to prove
+        // it (repeat runs vary by about 0.8 %), so this is a regression guard; the 60 s idle-CPU
+        // benchmark (area 12, Phase 3) checks the target itself.
+        check(idle < 2.0, "idle editor CPU regression guard: under 2 % of one core");
+        gui->destroy(p);
+        pump(100);
+    }
+
+    // 6. Open/close soak (area 12 R1): no growth in GDI/USER objects or memory.
     auto handles = [] {
         return GetGuiResources(GetCurrentProcess(), GR_GDIOBJECTS) + GetGuiResources(GetCurrentProcess(), GR_USEROBJECTS);
     };

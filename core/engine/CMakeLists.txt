@@ -6,7 +6,7 @@ add_library(amq_engine STATIC
     src/engine.cpp)
 add_library(amq::engine ALIAS amq_engine)
 target_include_directories(amq_engine PUBLIC include)
-target_link_libraries(amq_engine PUBLIC amq::params amq::dsp)
+target_link_libraries(amq_engine PUBLIC amq::params amq::dsp amq::analysis)
 target_compile_features(amq_engine PUBLIC cxx_std_20)
 find_package(Threads REQUIRED)
 target_link_libraries(amq_engine PUBLIC Threads::Threads)

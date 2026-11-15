@@ -42,6 +42,9 @@ public:
     void addListener(params::ParameterListener* l) override { table_.addListener(l); }
     void removeListener(params::ParameterListener* l) override { table_.removeListener(l); }
     void dispatchNotifications() override { table_.dispatchNotifications(); }
+    const analysis::LevelSnapshot* pullLevels() noexcept override { return engine_.snapshots().pullLevels(); }
+    const analysis::GainChangeSnapshot* pullGainChange() noexcept override { return engine_.snapshots().pullGainChange(); }
+    const analysis::SpectrumSnapshot* pullSpectrum() noexcept override { return engine_.snapshots().pullSpectrum(); }
     void beginEdit(params::ParamIndex index) override;
     void performEdit(params::ParamIndex index, double plain) override;
     void endEdit(params::ParamIndex index) override;

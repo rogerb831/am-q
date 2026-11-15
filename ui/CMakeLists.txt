@@ -7,7 +7,7 @@ add_library(amq_ui_model STATIC
     src/graph_model.cpp)
 add_library(amq::ui_model ALIAS amq_ui_model)
 target_include_directories(amq_ui_model PUBLIC include)
-target_link_libraries(amq_ui_model PUBLIC amq::params amq::dsp)
+target_link_libraries(amq_ui_model PUBLIC amq::params amq::dsp amq::analysis)
 amq_set_warnings(amq_ui_model)
 
 if(AMQ_BUILD_PLUGIN)

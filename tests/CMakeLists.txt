@@ -28,6 +28,11 @@ target_compile_definitions(amq_params_tests PRIVATE
 amq_set_warnings(amq_params_tests)
 add_test(NAME amq_params_tests COMMAND amq_params_tests)
 
+add_executable(amq_analysis_tests test_main.cpp analysis/test_analysis.cpp)
+target_link_libraries(amq_analysis_tests PRIVATE amq::analysis doctest::doctest)
+amq_set_warnings(amq_analysis_tests)
+add_test(NAME amq_analysis_tests COMMAND amq_analysis_tests)
+
 add_executable(amq_engine_tests test_main.cpp engine/test_engine.cpp engine/test_bands.cpp engine/test_refine.cpp engine/test_midside.cpp)
 target_link_libraries(amq_engine_tests PRIVATE amq::engine doctest::doctest)
 amq_set_warnings(amq_engine_tests)

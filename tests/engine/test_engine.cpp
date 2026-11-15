@@ -243,3 +243,31 @@ TEST_CASE("In-place processing and mono input") {
     e.process(mi, 1, oo, 2, 64);
     CHECK(ol[5] == orr[5]);
 }
+
+TEST_CASE("The engine meters input and output and publishes snapshots (areas 11, 12, 14)") {
+    params::ParameterTable t;
+    engine::Engine e(t);
+    REQUIRE(e.prepare(48000.0, 512));
+    t.set(kLevel, -6.0, ParamSource::Host);
+    e.snapToTable();
+    std::vector<float> l(512), r(512, 0.0f), ol(512), orr(512);
+    uint64_t n = 0;
+    for (int blk = 0; blk < 94; ++blk) {  // about 1 s of a 0.5-amplitude sine on the left only
+        for (size_t i = 0; i < l.size(); ++i) l[i] = static_cast<float>(0.5 * std::sin(0.1 * static_cast<double>(n + i)));
+        const float* in[2] = {l.data(), r.data()};
+        float* out[2] = {ol.data(), orr.data()};
+        e.process(in, 2, out, 2, 512);
+        n += 512;
+    }
+    const auto* s = e.snapshots().pullLevels();
+    REQUIRE(s != nullptr);
+    CHECK(e.snapshots().publishedCount() == doctest::Approx(60.0).epsilon(0.05));
+    CHECK(s->channels == 2);
+    CHECK(s->input[0].peakDb == doctest::Approx(-6.02).epsilon(0.01));
+    CHECK(s->output[0].peakDb == doctest::Approx(-12.04).epsilon(0.01));  // after Output Level -6 dB
+    CHECK(s->input[1].peakDb == analysis::kFloorDb);
+    CHECK(s->output[1].peakDb == analysis::kFloorDb);
+    const auto* g = e.snapshots().pullGainChange();
+    REQUIRE(g != nullptr);
+    CHECK(g->currentDb[0] == 0.0f);  // no dynamics yet (area 06)
+}

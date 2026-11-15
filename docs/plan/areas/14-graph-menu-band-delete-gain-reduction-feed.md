@@ -40,7 +40,7 @@ Gain reduction is measured on the audio thread per band, after the dynamics dete
 - [ ] Implement band split (Product designer to define the behaviour; DSP lead to implement) (DSP lead, Phase 3)
 - [ ] Add per-band gain-reduction measurement and snapshot publishing (DSP lead, Phase 2)
 - [ ] Draw gain reduction on the node and the band panel indicator (GUI engineer, Phase 2)
-- [ ] Make snapshot publishing allocation-free with drop-when-full (Plugin and host engineer, Phase 1)
+- [x] Make snapshot publishing allocation-free with drop-when-full (Plugin and host engineer, Phase 1). Fixed memory; an unread frame is replaced by the next. Tested: 10 s of publishing with no reader allocates nothing
 - [ ] Evaluate the optional host gain-reduction and track-context extensions (Plugin and host engineer, Phase 3)
 
 ## Acceptance tests

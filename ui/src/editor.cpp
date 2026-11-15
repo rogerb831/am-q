@@ -3,6 +3,7 @@
 #include "amq/params/mappings.hpp"
 #include "amq/params/shape_info.hpp"
 #include "amq/ui/graph_model.hpp"
+#include "amq/ui/snapshot_poller.hpp"
 
 #include <clap/ext/gui.h>
 #include <visage/app.h>
@@ -301,6 +302,11 @@ struct Editor::Impl : params::ParameterListener {
     CurveFrame curveFrame;
     NodesFrame nodes;
     ReadoutFrame readout;
+    // Snapshot polling on Visage's event loop, which runs timers on the display-paced vblank
+    // tick (area 12 R5/R10). Nothing draws the meters yet (band panel and metering: Phase 2),
+    // so a poll changes no pixels and presents nothing.
+    SnapshotPoller poller;
+    visage::EventTimer pollTimer;
     std::array<std::unique_ptr<BandNodeAccessible>, params::kBandCount> nodeAccess;
     GraphAccessible graphAccess;
     RootAccessible rootAccess;
@@ -320,8 +326,12 @@ struct Editor::Impl : params::ParameterListener {
             readout.redraw();
         };
         c.addListener(this);
+        pollTimer.onTimerCallback() += [this] { poller.poll(c); };
     }
-    ~Impl() override { c.removeListener(this); }
+    ~Impl() override {
+        pollTimer.stopTimer();
+        c.removeListener(this);
+    }
 
     Editor* owner = nullptr;
     double lastScale = 0.0;           // host-unit scale at the last layout
@@ -464,6 +474,7 @@ Editor::~Editor() {
 void Editor::attach(void* nativeParent) {
     impl_->app.show(nativeParent);
     impl_->layout();  // the window's DPI is known only now
+    impl_->pollTimer.startTimer(static_cast<int>(SnapshotPoller::kPollMs));
 }
 
 bool Editor::hostSize(uint32_t* w, uint32_t* h) const {

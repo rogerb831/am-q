@@ -38,6 +38,7 @@ endfunction()
 
 add_subdirectory(core/dsp)
 add_subdirectory(core/params)
+add_subdirectory(core/analysis)
 add_subdirectory(core/engine)
 
 if(AMQ_BUILD_PLUGIN)

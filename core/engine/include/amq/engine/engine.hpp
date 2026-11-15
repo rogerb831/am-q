@@ -31,6 +31,7 @@
 // snapToTable() and the read accessors on the audio thread. process() never allocates, locks
 // or blocks (area 01 R19).
 
+#include "amq/analysis/publisher.hpp"
 #include "amq/dsp/mid_side.hpp"
 #include "amq/dsp/realtime_design.hpp"
 #include "amq/engine/design_worker.hpp"
@@ -116,6 +117,10 @@ public:
     [[nodiscard]] size_t bandSectionCount(int band) const noexcept { return bands_[static_cast<size_t>(band)].coeffs.size(); }
     [[nodiscard]] bool bandRefined(int band) const noexcept { return bands_[static_cast<size_t>(band)].refined; }
 
+    // Meters and gain-change snapshots (areas 11, 12, 14). The engine publishes on the audio
+    // thread; the editor pulls on the GUI thread through the pull* functions only.
+    [[nodiscard]] analysis::SnapshotPublisher& snapshots() noexcept { return publisher_; }
+
     // Test hooks: read and redesign intervals in samples. Production uses 4 and 32; 1 and 1
     // gives the per-sample "offline ideal" for zipper measurements.
     void setRedesignIntervalForTests(uint32_t samples) noexcept { redesignInterval_ = samples ? samples : 1; }
@@ -169,6 +174,7 @@ private:
     void refineStep(int b, uint64_t sample) noexcept;
 
     const params::ParameterTable& table_;
+    analysis::SnapshotPublisher publisher_;
     double sampleRate_ = 48000.0;
     bool prepared_ = false;
     uint32_t maxFrames_ = 0;

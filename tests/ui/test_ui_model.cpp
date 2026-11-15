@@ -4,6 +4,7 @@
 #include "amq/params/mappings.hpp"
 #include "amq/ui/graph_model.hpp"
 #include "amq/ui/param_attachment.hpp"
+#include "amq/ui/snapshot_poller.hpp"
 
 #include <doctest/doctest.h>
 
@@ -198,4 +199,44 @@ TEST_CASE("Response curve: matches the analog prototype and recomputes only dirt
     curve.markDirty(0);
     curve.update(t);
     CHECK(curve.combinedDb()[1] == 0.0);
+}
+
+namespace {
+// Serves snapshot frames like the plugin does (one reader, newest frame or nothing new).
+class FeedController : public MockController {
+public:
+    analysis::LevelSnapshot next{};
+    bool fresh = false;
+    const analysis::LevelSnapshot* pullLevels() noexcept override {
+        if (!fresh) return nullptr;
+        fresh = false;
+        return &next;
+    }
+    void serve(uint64_t stamp, float outPeakDb) {
+        next.header.stamp = stamp;
+        next.channels = 2;
+        next.output[0].peakDb = outPeakDb;
+        fresh = true;
+    }
+};
+}  // namespace
+
+TEST_CASE("Snapshot poller: floor first, stamps checked, redraw only on visible change") {
+    FeedController c;
+    ui::SnapshotPoller p;
+    CHECK(p.levels().output[0].peakDb == analysis::kFloorDb);  // area 12 R11
+    CHECK(p.poll(c) == ui::SnapshotPoller::kNone);             // nothing published yet
+    c.serve(1, -20.0f);
+    CHECK(p.poll(c) == ui::SnapshotPoller::kLevels);
+    CHECK(p.levels().output[0].peakDb == -20.0f);
+    c.serve(2, -20.04f);  // below the redraw step
+    CHECK(p.poll(c) == ui::SnapshotPoller::kNone);
+    CHECK(p.framesTaken() == 2);
+    c.serve(2, -3.0f);  // same stamp again: never drawn as new
+    CHECK(p.poll(c) == ui::SnapshotPoller::kNone);
+    CHECK(p.staleSkipped() == 1);
+    CHECK(p.levels().output[0].peakDb == doctest::Approx(-20.04f));
+    c.serve(3, -3.0f);
+    CHECK(p.poll(c) == ui::SnapshotPoller::kLevels);
+    CHECK(p.polls() == 5);
 }
