@@ -37,7 +37,7 @@ Am-Q's dynamic EQ uses a log-domain side-chain detector, a soft-knee gain comput
 
 - [ ] Write the timing spec: knob tapers, minimum-cycles attack rule, dual-release times and the 90 % time definition (DSP lead, Phase 0)
 - [ ] Prototype the detector and gain-computer chain offline, and compare candidate tapers by ear on drums, bass and vocals (DSP lead, Phase 0)
-- [ ] Implement the dB-domain one-pole attack/release smoother with an instant mode for time 0, in core/dsp (DSP lead, Phase 1)
+- [x] Implement the dB-domain one-pole attack/release smoother with an instant mode for time 0, in core/dsp (DSP lead, Phase 1). `core/dsp/include/amq/dsp/db_smoother.hpp`: the decoupled form from Giannoulis, Massberg and Reiss, with coefficients from the shared 90 % time convention. Tested: 0.25 ms to 250 ms attack and 5 ms to 1 s release within ±5 % at 44.1 to 192 kHz; time 0 is instant; coefficients recomputed only on change; knob moves do not step the value; fuzz stays finite and a settled value snaps to its target (no denormal tail). The dual release, gain computer and knob tapers are the Phase 2 tasks
 - [ ] Implement the dual-release stage and final attack/release stage per band, with SIMD across bands (DSP lead, Phase 2)
 - [ ] Implement the soft-knee gain computer with range cap and range sign (DSP lead, Phase 2)
 - [ ] Implement stereo-linked detection for Stereo placement (DSP lead, Phase 2)
