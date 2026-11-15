@@ -60,8 +60,8 @@ Am-Q runs bands serially per channel in an L/R stage and an M/S stage, each with
 
 ## Implementation tasks
 
-- [ ] Write the routing builder: per-channel IIR and FFT lists per stage, with placement and speaker-group tests (DSP lead, Phase 1)
-- [ ] Add the per-band, per-channel enable ramp and atomic list swap (DSP lead, Phase 1)
+- [ ] Write the routing builder: per-channel IIR and FFT lists per stage, with placement and speaker-group tests (DSP lead, Phase 1). Progress: the IIR routing is done. The L/R stage, then the M/S stage, each in band index order; placement masks; mono runs Stereo bands only. Still to do: the FFT groups (Phase 2) and the speaker groups (inactive in v1)
+- [ ] Add the per-band, per-channel enable ramp and atomic list swap (DSP lead, Phase 1). Progress: a per-band 10 ms enable crossfade with placement masks; a fully-off band is skipped and bit-transparent. Still to do: the FFT-group list swap, which comes with Phase 2 modes
 - [ ] Define the speaker descriptor and speaker-group enums; stereo and mono only in v1 (DSP lead, Phase 1)
 - [ ] Implement the combined L/R + M/S STFT processing for FFT bands (DSP lead, Phase 2)
 - [ ] Implement the latency function and its table-driven unit test (DSP lead, Phase 1)
@@ -69,7 +69,7 @@ Am-Q runs bands serially per channel in an L/R stage and an M/S stage, each with
 - [ ] Implement the latency-matched dry path shared by bypass and solo (Plugin and host engineer, Phase 2)
 - [ ] Implement solo audition filters with Solo Gain, and tune the width law by listening (DSP lead and Product designer, Phase 2)
 - [ ] Add the three design-mode selections to the filter design API (DSP lead, Phase 1)
-- [ ] Add a safe-silence state for unprepared or invalid configurations (Plugin and host engineer, Phase 1)
+- [x] Add a safe-silence state for unprepared or invalid configurations (Plugin and host engineer, Phase 1)
 - [ ] Build an automated latency measurement harness that runs in several hosts (Build and QA engineer, Phase 2)
 
 ## Acceptance tests

@@ -26,12 +26,12 @@ Am-Q propagates parameter changes through one explicit path: setter, then listen
 
 ## Implementation tasks
 
-- [ ] Implement the Q mapping pair and its unit test (Plugin and host engineer, Phase 1)
-- [ ] Implement message-thread notification coalescing and audio slot publishing in set() (Plugin and host engineer, Phase 1)
-- [ ] Implement the per-field audio ramp bank with retarget and reseed (DSP lead, Phase 1)
+- [x] Implement the Q mapping pair and its unit test (Plugin and host engineer, Phase 1)
+- [x] Implement message-thread notification coalescing and audio slot publishing in set() (Plugin and host engineer, Phase 1)
+- [ ] Implement the per-field audio ramp bank with retarget and reseed (DSP lead, Phase 1). Progress: ramps exist for frequency, gain, Q, range and threshold on all 24 bands, plus the output fields, with retarget and reseed on prepare and state load. Still to do: reseed on shape and band activation, which comes with the filter kernel
 - [ ] Implement last-input change detection for coefficients and the spectral grid (DSP lead, Phase 2)
-- [ ] Implement the GUI parameter attachment class bound by id (GUI engineer, Phase 1)
-- [ ] Implement formatters and parsers for every parameter (GUI engineer, Phase 1)
+- [x] Implement the GUI parameter attachment class bound by id (GUI engineer, Phase 1). `ui/include/amq/ui/param_attachment.hpp`: string ids, gestures, text entry, change callback
+- [ ] Implement formatters and parsers for every parameter (GUI engineer, Phase 1). Progress: host-facing formatters and parsers exist in `core/params`, round-trip tested for all 573 parameters. Still to do: editor display styles
 
 ## Acceptance tests
 

@@ -37,8 +37,11 @@ struct Biquad {
     [[nodiscard]] std::complex<double> response(double omega) const noexcept;
 };
 
+inline constexpr std::size_t kMaxDigitalSections = kMaxAnalogSections + 2;
+
 struct DigitalFilter {
-    std::vector<Biquad> sections;
+    // Order-N sections plus at most one correction section. Fixed capacity: no allocation.
+    FixedVector<Biquad, kMaxDigitalSections> sections;
     double sampleRate = 48000.0;
     int clampedSections = 0;  // matched design: sections whose 3-point target was unrealisable
 

@@ -131,6 +131,10 @@ external test tool. Full table: `THIRD_PARTY.md`.
 - **Gain change:** gain steps are applied without ramps, so exactness can be measured. R3 ramps are Phase 1 work.
 - **Not implemented:** 64-bit audio, bypass, side chain and resizing.
 
+## Decision (2026-11-14)
+
+The product owner chose **(b): CLAP-native core + clap-wrapper with Visage**. Screen-reader accessibility does not have to ship in v1. Recorded as D1 in `docs/plan/decisions.md`. The recommendation below is kept as written.
+
 ## Recommendation
 
 - **Host and format layer: CLAP-native + clap-wrapper works.**

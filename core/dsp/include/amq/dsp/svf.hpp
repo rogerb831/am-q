@@ -1,0 +1,97 @@
+#pragma once
+// TPT / ZDF state-variable filter kernel (area 01 R18; Zavalishin, "The Art of VA Filter
+// Design"; Simper, "Solving the continuous SVF equations using trapezoidal integration").
+//
+// Any strictly stable digital biquad is realised exactly by a trapezoidal SVF plus an output
+// mix. With sigma = (z - 1) / (z + 1), the trapezoidal SVF has
+//     band v1 = g*sigma / D,   low v2 = g^2 / D,   D = sigma^2 + k*g*sigma + g^2,
+// and the output m0*x + m1*v1 + m2*v2. Substituting z = (1 + sigma) / (1 - sigma) into the
+// biquad and matching D and the numerator gives g, k, m0, m1 and m2 (svfFromBiquad). The
+// designed transfer function is kept exactly; the SVF brings well-behaved coefficient
+// modulation (any g > 0, k > 0 is stable, so interpolating g and k between designs is safe)
+// and good low-frequency precision. State is double.
+
+#include "amq/dsp/digital_design.hpp"
+
+#include <cmath>
+
+namespace amq::dsp {
+
+// Interpolatable parameters of one SVF section.
+struct SvfParams {
+    double g = 1.0, k = 2.0;              // pre-warped cutoff and damping (g > 0, k > 0)
+    double m0 = 1.0, m1 = 0.0, m2 = 0.0;  // output mix
+};
+
+// Per-sample coefficients derived from SvfParams.
+struct SvfCoeffs {
+    double a1 = 1.0, a2 = 0.0, a3 = 0.0;  // 1/(1+g(g+k)), g*a1, g*a2
+    double m0 = 1.0, m1 = 0.0, m2 = 0.0;
+};
+
+struct SvfState {
+    double ic1 = 0.0, ic2 = 0.0;
+};
+
+[[nodiscard]] inline SvfCoeffs svfCoeffs(const SvfParams& p) noexcept {
+    SvfCoeffs c;
+    c.a1 = 1.0 / (1.0 + p.g * (p.g + p.k));
+    c.a2 = p.g * c.a1;
+    c.a3 = p.g * c.a2;
+    c.m0 = p.m0;
+    c.m1 = p.m1;
+    c.m2 = p.m2;
+    return c;
+}
+
+// Removes a pole/zero pair cancelling at z = -1 (bilinear writes first-order sections this
+// way). Returns the reduced biquad; unchanged if there is no such pair.
+[[nodiscard]] inline Biquad reduceNyquistPair(const Biquad& b) noexcept {
+    const double d2 = 1.0 - b.a1 + b.a2;
+    const double n2 = b.b0 - b.b1 + b.b2;
+    const double scale = std::abs(b.b0) + std::abs(b.b1) + std::abs(b.b2) + 1e-300;
+    if (std::abs(d2) > 1e-12 || std::abs(n2) > 1e-9 * scale) return b;
+    // (1 + z^-1)(1 + p z^-1) => a1 = 1 + p, a2 = p;  (1 + z^-1)(b0 + q z^-1) => b2 = q.
+    Biquad r;
+    r.b0 = b.b0;
+    r.b1 = b.b2;
+    r.b2 = 0.0;
+    r.a1 = b.a2;
+    r.a2 = 0.0;
+    return r;
+}
+
+// Returns false (out unchanged) if the biquad has no strictly stable SVF form: a pole on or
+// outside the unit circle, or at z = -1 without a matching zero.
+[[nodiscard]] inline bool svfFromBiquad(const Biquad& in, SvfParams& out) noexcept {
+    const Biquad b = reduceNyquistPair(in);
+    const double d2 = 1.0 - b.a1 + b.a2;  // sigma^2 coefficient of the denominator
+    const double d1 = 2.0 - 2.0 * b.a2;   // sigma^1
+    const double d0 = 1.0 + b.a1 + b.a2;  // sigma^0
+    if (!(d2 > 0.0) || !(d1 > 0.0) || !(d0 > 0.0)) return false;
+    const double c2 = (b.b0 - b.b1 + b.b2) / d2;
+    const double c1 = (2.0 * b.b0 - 2.0 * b.b2) / d2;
+    const double c0 = (b.b0 + b.b1 + b.b2) / d2;
+    SvfParams p;
+    p.g = std::sqrt(d0 / d2);
+    p.k = (d1 / d2) / p.g;
+    p.m0 = c2;
+    p.m1 = (c1 - c2 * p.k * p.g) / p.g;
+    p.m2 = c0 / (p.g * p.g) - c2;
+    if (!std::isfinite(p.g) || !std::isfinite(p.k) || !std::isfinite(p.m0) || !std::isfinite(p.m1) ||
+        !std::isfinite(p.m2) || !(p.g > 0.0) || !(p.k > 0.0))
+        return false;
+    out = p;
+    return true;
+}
+
+[[nodiscard]] inline double svfTick(const SvfCoeffs& c, SvfState& s, double v0) noexcept {
+    const double v3 = v0 - s.ic2;
+    const double v1 = c.a1 * s.ic1 + c.a2 * v3;
+    const double v2 = s.ic2 + c.a2 * s.ic1 + c.a3 * v3;
+    s.ic1 = 2.0 * v1 - s.ic1;
+    s.ic2 = 2.0 * v2 - s.ic2;
+    return c.m0 * v0 + c.m1 * v1 + c.m2 * v2;
+}
+
+}  // namespace amq::dsp

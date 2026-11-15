@@ -11,15 +11,20 @@ namespace {
 
 using cd = std::complex<double>;
 
+// Root and factor storage: order <= 16 maps to at most 32 roots (band-pass doubles the order);
+// Flat Tilt uses 20. No allocation (area 01 R19).
+inline constexpr std::size_t kMaxRoots = 40;
+using Roots = FixedVector<cd, kMaxRoots>;
+
 // Zero/pole/gain form: H(s) = k * prod(s - z) / prod(s - p). Internal only.
 struct Zpk {
-    std::vector<cd> zeros;
-    std::vector<cd> poles;
+    Roots zeros;
+    Roots poles;
     double k = 1.0;
 };
 
 // Two roots of s^2 + (r/Q) s + r^2 (a pole or zero pair of radius r and quality Q).
-void appendPairFromRadiusQ(std::vector<cd>& out, double r, double q) {
+void appendPairFromRadiusQ(Roots& out, double r, double q) {
     const double zeta = 1.0 / (2.0 * q);
     if (zeta < 1.0) {
         const double im = std::sqrt(1.0 - zeta * zeta);
@@ -34,8 +39,8 @@ void appendPairFromRadiusQ(std::vector<cd>& out, double r, double q) {
 
 // Unit-radius Butterworth poles of order m. The dominant (highest-Q) pair has its Q
 // multiplied by qScale (PROVISIONAL Q convention, see qMappingNotes()).
-std::vector<cd> butterworthPoles(int m, double qScale) {
-    std::vector<cd> p;
+Roots butterworthPoles(int m, double qScale) {
+    Roots p;
     for (int i = 0; i < m / 2; ++i) {
         double q = 1.0 / (2.0 * std::sin((2.0 * i + 1.0) * kPi / (2.0 * m)));
         if (i == 0) q *= qScale;
@@ -45,7 +50,7 @@ std::vector<cd> butterworthPoles(int m, double qScale) {
     return p;
 }
 
-double realProduct(const std::vector<cd>& v, double sign) {
+double realProduct(const Roots& v, double sign) {
     cd prod = 1.0;
     for (const auto& x : v) prod *= sign * x;
     return prod.real();
@@ -92,7 +97,7 @@ Zpk highShelf(int m, double g, double qScale) {
 // standard analog frequency transformation). Doubles the order.
 Zpk lowpassToBandpass(const Zpk& in, double qb) {
     Zpk out;
-    auto map = [qb](const cd& r, std::vector<cd>& dst) {
+    auto map = [qb](const cd& r, Roots& dst) {
         const cd half = r / (2.0 * qb);
         const cd root = std::sqrt(half * half - 1.0);
         dst.push_back(half + root);
@@ -123,9 +128,9 @@ struct Factor {
     double q = 0.0;                       // pole quality, for ordering
 };
 
-std::vector<Factor> groupIntoFactors(const std::vector<cd>& roots) {
-    std::vector<Factor> out;
-    std::vector<double> reals;
+FixedVector<Factor, kMaxRoots> groupIntoFactors(const Roots& roots) {
+    FixedVector<Factor, kMaxRoots> out;
+    FixedVector<double, kMaxRoots> reals;
     for (const auto& r : roots) {
         const double tol = 1e-12 * std::max(1.0, std::abs(r));
         if (r.imag() > tol) {
@@ -170,14 +175,19 @@ std::vector<Factor> groupIntoFactors(const std::vector<cd>& roots) {
 // Converts zero/pole/gain into cascaded sections. Each pole factor takes the nearest
 // unused zero factor of the same degree (falling back to a lower degree), so every
 // section stays proper and its dynamic range stays small.
-std::vector<AnalogSection> zpkToSections(const Zpk& zpk) {
+FixedVector<AnalogSection, kMaxAnalogSections> zpkToSections(const Zpk& zpk) {
     auto poleFactors = groupIntoFactors(zpk.poles);
     auto zeroFactors = groupIntoFactors(zpk.zeros);
-    std::stable_sort(poleFactors.begin(), poleFactors.end(),
-                     [](const Factor& a, const Factor& b) { return a.q > b.q; });
+    // Stable insertion sort by descending Q (std::stable_sort may allocate a buffer).
+    for (size_t i = 1; i < poleFactors.size(); ++i) {
+        const Factor f = poleFactors[i];
+        size_t j = i;
+        for (; j > 0 && poleFactors[j - 1].q < f.q; --j) poleFactors[j] = poleFactors[j - 1];
+        poleFactors[j] = f;
+    }
 
-    std::vector<bool> used(zeroFactors.size(), false);
-    std::vector<AnalogSection> sections;
+    FixedVector<bool, kMaxRoots> used(zeroFactors.size(), false);
+    FixedVector<AnalogSection, kMaxAnalogSections> sections;
     sections.reserve(poleFactors.size());
     for (const auto& pf : poleFactors) {
         int best = -1;

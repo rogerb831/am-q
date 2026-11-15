@@ -31,9 +31,9 @@ The snapshot pull runs on the GUI render schedule. In-process it reads the lock-
 
 ## Implementation tasks
 
-- [ ] Finalise the parameter table with Spectral Tilt in the band block, reserved ids and stable host ids (Plugin and host engineer, Phase 1)
-- [ ] Add bounds-checked lookups with error results (Plugin and host engineer, Phase 1)
-- [ ] Implement typed parameters (continuous, two-state, choice) behind one setter (Plugin and host engineer, Phase 1)
+- [x] Finalise the parameter table with Spectral Tilt in the band block, reserved ids and stable host ids (Plugin and host engineer, Phase 1). Ids frozen by `tests/params/host_ids.golden.txt`
+- [x] Add bounds-checked lookups with error results (Plugin and host engineer, Phase 1)
+- [x] Implement typed parameters (continuous, two-state, choice) behind one setter (Plugin and host engineer, Phase 1)
 - [ ] Route all GUI controls, global toggles, menu actions, solo and band creation through the setter (GUI engineer, Phase 2)
 - [ ] Implement band-create defaults in one undo step (Plugin and host engineer, Phase 2)
 - [ ] Implement block-boundary mode, resolution and spectral switching with a latency-changed notification (DSP lead, Phase 2)

@@ -24,6 +24,7 @@ Am-Q is a 24-band parametric EQ. v1 offers zero-latency, natural-phase and linea
 - **AU, AAX and VST2.** AAX needs Avid signing; VST2 is no longer licensable for new products.
 - **Oversampling, Character modes, MIDI learn.**
 - **Inter-instance features** (instance list, cross-instance EQ Match).
+- **Screen-reader support** (UIA, NSAccessibility). v1 ships keyboard navigation and an accessible-control model, so the screen-reader layer can be added later without a rewrite ([D1](decisions.md)).
 
 ## Clean-room rules
 
@@ -131,7 +132,7 @@ The editor is a resizable, GPU-rendered view built around one large response gra
 
 - **Drawing.** A render loop paced to the display refresh rate, drawing only dirty regions through the framework's GPU backend.
 - **Analyzer data** comes from the processor by pull: about 30 times a second the editor asks the processor for a snapshot (spectra, meters, per-band gain reduction). In-process this is a lock-free FIFO read; across processes it is a VST3 message or a CLAP timer read. The processor never blocks on the GUI.
-- **Scaling and accessibility.** HiDPI scaling at 100–300 %, keyboard navigation of the band list, and screen-reader names for every control.
+- **Scaling and accessibility.** HiDPI scaling at 100–300 % and keyboard navigation of bands and controls in v1. Every control carries a name, role, value and actions in the UI model from the start (area 15 R12). The screen-reader layer that exposes them is post-v1 ([D1](decisions.md)).
 
 ## Analyzer and EQ Match
 
@@ -156,11 +157,16 @@ EQ Match runs on a worker thread and shows progress, so the GUI never stalls.
 
 ## Formats, framework and host integration
 
-Recommendation: JUCE 8 for wrappers and GUI, with the DSP core and parameter table as our own framework-free libraries. JUCE gets VST3 and CLAP shipping fastest and leaves AU and AAX open for v2. The alternative is a CLAP-native core wrapped to VST3 with clap-wrapper and a custom GPU UI: no framework licence, but about 2 extra months.
+Decision ([D1](decisions.md), 2026-11-14): a CLAP-native plugin, wrapped to VST3 with clap-wrapper, with a Visage GPU editor. The DSP core and parameter table stay our own framework-free libraries. There is no framework licence; the plan's estimate for this route is about 2 extra months over JUCE 8. clap-wrapper can also build AUv2 if AU moves into v1. The decision follows the framework spike (`spikes/clap-native/`).
+
+Rules carried from the spike:
+
+- **Any-thread callbacks.** Every plugin callback a VST3 host can reach through clap-wrapper (latency, parameter info, value and text, state, audio ports, GUI size) is safe on any thread. VST3's threading is looser than CLAP's, and the wrapper passes it through.
+- **Never abort the host.** Shipping builds use clap-helpers' `Ignore` handler with checks off. `Terminate` and maximal checking are a development build option only.
 
 | Concern | Requirement |
 | --- | --- |
-| Formats | VST3 and CLAP (CLAP via the clap-juce-extensions project if JUCE). Confirm current licence terms for the VST3 SDK, JUCE and every wrapper before Phase 1 ends. |
+| Formats | CLAP native; VST3 via clap-wrapper. Confirm current licence terms for the VST3 SDK, clap-wrapper, Visage and every other dependency before Phase 1 ends (`THIRD_PARTY.md`). |
 | Platforms | Windows 10+ x64; macOS 12+ universal binary, signed and notarized |
 | Buses | Main stereo or mono in/out; optional stereo side-chain input bus |
 | Parameter events | Sample-accurate: split each block at every parameter-change offset |
@@ -168,7 +174,7 @@ Recommendation: JUCE 8 for wrappers and GUI, with the DSP core and parameter tab
 | Latency | Report on load and on every change: VST3 `restartComponent(kLatencyChanged)`, CLAP latency extension with a host restart request |
 | Bypass | Host bypass parameter mapped to our smoothed, latency-compensated wet/dry bypass |
 | Precision and rates | 32-bit float processing with double-precision filter state; 44.1–384 kHz; any block size including 1 |
-| Threads | No allocation, locks or I/O on the audio thread; kernel rebuilds and EQ Match on worker threads; CLAP thread-check passes |
+| Threads | No allocation, locks or I/O on the audio thread; kernel rebuilds and EQ Match on worker threads; CLAP thread-check passes; every VST3-reachable callback safe on any thread; nothing aborts the host |
 | State | Versioned chunk saved and restored by host projects; presets as files in a user folder |
 | GUI to processor | Pull model with a lock-free snapshot queue; nothing in the GUI may block `process` |
 
@@ -225,10 +231,13 @@ The plan assumes four full-time engineers plus part-time design, legal and a wal
 | Host quirks (latency changes, bypass, threading) | Bugs only in some hosts | Validators in CI plus the manual host matrix from Phase 3 |
 | GUI smoothness on low-end GPUs | Laggy graph | Dirty-region drawing, frame-rate cap, software fallback |
 | Framework licence terms change | Cost or licence conflict | Keep DSP and parameter code framework-free; confirm terms in Phase 1 |
+| Visage is young (v1.0, one release) and has no accessibility layer | UI bugs we must fix ourselves; screen-reader work later | Pin the version; keep our widgets behind our own UI model; accessible-control model from Phase 1 (area 15 R12) |
+| CLAP-first threading leaks VST3's looser threading into our callbacks | Host-specific crashes (seen in the spike) | Any-thread rule for VST3-reachable callbacks; off-thread regression test; strict checks in development builds only |
+| Editor and macOS untested in real DAWs | Late platform or host surprises | Phase 1 tasks: editor check in Reaper or Studio One on a local display; first macOS build (area 01). Windows editing works in Fender Studio (2026-11-14); frame pacing, key pass-through and macOS are still open |
 
 Open decisions:
 
-- [ ] JUCE 8 or a CLAP-native core with clap-wrapper and a custom UI (Formats, framework and host integration)
+- [x] JUCE 8 or a CLAP-native core with clap-wrapper and a custom UI. Decided 2026-11-14: CLAP-native + clap-wrapper + Visage; screen reader post-v1 ([D1](decisions.md))
 - [ ] Is AU in v1 or v2? Logic users would need it at launch.
 - [ ] Final CPU target and minimum hardware
 - [ ] Visual identity and naming of shapes and modes (designer + counsel)
@@ -236,7 +245,7 @@ Open decisions:
 
 ## Area plan index
 
-This file is the index. The detail lives in the area plans under `areas/`: one plan per area, in signal-flow order. Each area plan has requirements, design, tasks, acceptance tests and open questions. Per the clean-room rules, area plans describe behaviour and Am-Q's own design.
+This file is the index. Closed decisions are in the [decision log](decisions.md). The detail lives in the area plans under `areas/`: one plan per area, in signal-flow order. Each area plan has requirements, design, tasks, acceptance tests and open questions. Per the clean-room rules, area plans describe behaviour and Am-Q's own design.
 
 | # | Area plan | Feeds index sections |
 | --- | --- | --- |

@@ -23,7 +23,7 @@ Am-Q builds its editor as one GPU-rendered window with a display-paced render lo
 
 ## Am-Q design
 
-The editor is a JUCE 8 component tree hosted in a GPU context. The ui/ module owns the graph, band panel, header/footer and analyzer bar. EQ Match lives in its own lazily constructed component, as in Tab 16.
+The editor is a Visage frame tree on Visage's GPU backend (Direct3D 11 on Windows, Metal on macOS) ([D1](../decisions.md)). Every widget also implements the accessible-control model (area 15 R12). The ui/ module owns the graph, band panel, header/footer and analyzer bar. EQ Match lives in its own lazily constructed component, as in Tab 16.
 
 A dedicated render driver paces frames to the display refresh. On Windows it uses the compositor's timing. On macOS it uses the display link. Widgets mark rectangles dirty, and the driver skips presentation when the dirty set is empty. Am-Q polls snapshots once per frame inside the render driver at a capped rate, so polling and drawing share one schedule.
 
@@ -32,9 +32,9 @@ Processor-to-GUI data uses lock-free single-producer, single-consumer FIFOs in a
 ## Implementation tasks
 
 - [ ] Define the editor region map and the visual hierarchy, including the selected-band style (Product designer, Phase 0)
-- [ ] Build the editor shell: view creation, a resizable GPU context, and HiDPI scaling (GUI engineer, Phase 1)
+- [ ] Build the editor shell: view creation, a resizable GPU context, and HiDPI scaling (GUI engineer, Phase 1). Progress: view creation and the GPU context. The response graph is a cached ground plus a curve layer from the analog prototypes, recomputed per dirty band, plus band nodes and a readout. Resizing is done: free resize between 640×360 and 3840×2160 logical pixels (PROVISIONAL limits, default 1180×672), no fixed aspect ratio, size queries safe on any thread, and the editor reopens at its last size. HiDPI follows Visage's per-monitor DPI on Windows (Am-Q declines gui.set_scale); on a DPI change the editor keeps its logical size and asks the host to resize. Verified at 100 % only (`tests/plugin/plugin_gui_test.cpp`: limits, set_size, layout at the new size, reopen). Still to do: check at 150–300 % and on a live scale change in a DAW, and macOS (points)
 - [ ] Implement a display-paced render driver with a fallback rate, dirty-region tracking and skip-when-idle (GUI engineer, Phase 1)
-- [ ] Implement GPU resource teardown on editor close, plus a leak counter for tests (GUI engineer, Phase 1)
+- [ ] Implement GPU resource teardown on editor close, plus a leak counter for tests (GUI engineer, Phase 1). Progress: a live-editor counter. Over 200 open/close cycles, GDI/USER objects stay flat. Memory grows 15.7 MB over the first 100 cycles and 1.8 MB over the second, which is mostly a cache fill. Still to do: a GPU object counter, and a longer soak to rule out the residual 18 KB per cycle
 - [ ] Implement snapshot types (spectra, meters, per-band gain reduction) with sequence numbers and a silence-floor initial state (DSP lead, Phase 1)
 - [ ] Implement lock-free snapshot FIFOs between the processor and the GUI (Plugin and host engineer, Phase 1)
 - [ ] Share the curve evaluation code between core/dsp and ui/ (DSP lead, Phase 2)

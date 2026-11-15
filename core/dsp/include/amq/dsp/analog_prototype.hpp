@@ -19,6 +19,8 @@
 // decision still open (Phase 0 task "Define and document the displayed-Q to section-Q
 // mapping"). The mapping used here is a documented placeholder; see qMappingNotes().
 
+#include "amq/dsp/fixed_vector.hpp"
+
 #include <complex>
 #include <string_view>
 #include <vector>
@@ -81,13 +83,17 @@ struct AnalogSection {
     }
 };
 
+// At most 10 sections today (Flat Tilt: 20 real poles); 16 leaves headroom.
+inline constexpr std::size_t kMaxAnalogSections = 16;
+
 struct AnalogPrototype {
     Shape shape = Shape::Bell;
     double centreHz = 1000.0;  // the normalisation frequency f0
     int order = 0;              // nominal order from R10 (0 if unsupported)
     double q = 1.0;             // displayed Q after clamping (R8), for tolerance rules
     bool supported = false;     // false for Brickwall (Phase 2)
-    std::vector<AnalogSection> sections;  // the overall gain is folded into sections[0]
+    // The overall gain is folded into sections[0]. Fixed capacity: no allocation (area 01 R19).
+    FixedVector<AnalogSection, kMaxAnalogSections> sections;
 
     // H(j*Omega), Omega = f / f0.
     [[nodiscard]] std::complex<double> evaluate(double omega) const noexcept;

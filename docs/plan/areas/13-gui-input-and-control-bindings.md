@@ -29,7 +29,7 @@ Am-Q implements the standard EQ graph gestures: double-click to create, drag to 
 
 ## Am-Q design
 
-Input lives in ui/interaction. A platform adapter turns JUCE mouse events into an Am-Q event with a logical modifier set. A gesture state machine (idle, pending, dragging node, dragging range, lasso, menu) chooses which parameter ids to write. Each gesture opens one begin/perform/end transaction through set(id, plain, GUI), so undo groups it automatically.
+Input lives in ui/interaction. A platform adapter turns Visage mouse events into an Am-Q event with a logical modifier set. A gesture state machine (idle, pending, dragging node, dragging range, lasso, menu) chooses which parameter ids to write. Each gesture opens one begin/perform/end transaction through set(id, plain, GUI), so undo groups it automatically.
 
 Am-Q addresses band fields by string id (band03.freq, band03.gain, band03.q, band03.dynRange), never by numeric index. That avoids the index confusion the static study ran into. Shape capability flags come from one helper in core/params (Tab 15) that says whether a shape has gain, Q and slope.
 
@@ -45,13 +45,13 @@ The exact modifier-to-action table is an original Am-Q design document.
 
 - [ ] Write the Am-Q interaction spec: gestures, modifier table, drag threshold, fine factor and new-band defaults (Product designer, Phase 0)
 - [ ] Have Counsel review the interaction spec for similarity to existing products (Counsel, Phase 0)
-- [ ] Implement platform modifier normalisation and the click-versus-drag threshold (GUI engineer, Phase 1)
+- [x] Implement platform modifier normalisation and the click-versus-drag threshold (GUI engineer, Phase 1). Ctrl and Cmd map to one `command` modifier. The 3 px threshold is PROVISIONAL until the interaction spec
 - [ ] Implement the gesture state machine with begin/perform/end transactions and clamping (GUI engineer, Phase 2)
-- [ ] Implement band creation by double-click, including variants and defaults in one undo step (GUI engineer, Phase 2)
+- [ ] Implement band creation by double-click, including variants and defaults in one undo step (GUI engineer, Phase 2). Progress: double-click creates the first free band at the pointer with every field at its default, in one gesture. Still to do: variants and undo
 - [ ] Implement selection: click, add, toggle, lasso and clear (GUI engineer, Phase 2)
-- [ ] Implement node and range-handle drag, fine adjust, Q-drag modifier and multi-band drag with axis lock (GUI engineer, Phase 2)
-- [ ] Implement wheel bindings for Q, Gain, Dyn Range and Slope, plus horizontal zoom (GUI engineer, Phase 2)
-- [ ] Implement Alt-click toggles for Enabled and Dynamics Enabled (GUI engineer, Phase 2)
+- [ ] Implement node and range-handle drag, fine adjust, Q-drag modifier and multi-band drag with axis lock (GUI engineer, Phase 2). Progress: single-node drag of frequency and gain, or Q for shapes without gain, with the grab offset kept. Still to do: the rest, which needs the interaction spec
+- [ ] Implement wheel bindings for Q, Gain, Dyn Range and Slope, plus horizontal zoom (GUI engineer, Phase 2). Progress: the plain wheel changes Q. Still to do: the modifier wheels and zoom
+- [ ] Implement Alt-click toggles for Enabled and Dynamics Enabled (GUI engineer, Phase 2). Progress: Enabled is done. Still to do: Dynamics Enabled, which needs the range handle
 - [ ] Implement solo-level drag with an on-screen indicator (GUI engineer, Phase 2)
 - [ ] Implement optional Gain-Q coupling, off by default (DSP lead, Phase 3)
 - [ ] Bind every band-panel control to its parameter id, with host-to-GUI refresh (GUI engineer, Phase 2)

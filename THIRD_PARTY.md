@@ -12,8 +12,9 @@ Counsel must clear an entry before it ships in a product build.
 ## Framework spike (`spikes/clap-native/`, not product code)
 
 Cloned into `spikes/clap-native/deps/` (git-ignored) or fetched by Visage's CMake at configure
-time. If the CLAP-native route is chosen, these become Phase 1 dependencies and need counsel
-clearance.
+time. The CLAP-native route was chosen on 2026-11-14 (`docs/plan/decisions.md`, D1), so the
+entries linked into the plugin become Phase 1 product dependencies and need counsel clearance
+before a product build ships.
 
 | Name | Version / commit | Licence | Used for | Linked into the plugin binary? | Source |
 | --- | --- | --- | --- | --- | --- |

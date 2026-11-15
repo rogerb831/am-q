@@ -1,6 +1,6 @@
 # 01 Core DSP and host path
 
-Am-Q is one framework-free C++20 DSP core behind JUCE 8 VST3 and CLAP wrappers. It runs 24 serial bands built from cascaded analog prototypes, converts them to digital with a magnitude-matched design, and applies every parameter change sample-accurately and without clicks.
+Am-Q is one framework-free C++20 DSP core behind a CLAP-native plugin, wrapped to VST3 by clap-wrapper ([D1](../decisions.md)). It runs 24 serial bands built from cascaded analog prototypes, converts them to digital with a magnitude-matched design, and applies every parameter change sample-accurately and without clicks.
 
 ## Requirements
 
@@ -48,7 +48,7 @@ Am-Q is one framework-free C++20 DSP core behind JUCE 8 VST3 and CLAP wrappers. 
 
 ## Am-Q design
 
-**Formats and host path.** JUCE 8 hosts the VST3 and CLAP wrappers in plugin/, and both call one core/dsp processor entry. The wrapper walks the host's parameter queue and splits the block at each change offset. It then calls the core per piece, with values already applied as ramp targets. Side chain is a real auxiliary bus in both formats. Double-precision host buffers are converted to float at the wrapper edge.
+**Formats and host path.** plugin/ is a CLAP plugin built on clap-helpers. clap-wrapper's clap-first build produces the VST3 from the same static library, and both formats call one core/dsp processor entry. The plugin walks the host's event queue and splits the block at each change offset. It then calls the core per piece, with values already applied as ramp targets. Side chain is a real auxiliary bus in both formats. Double-precision host buffers are converted to float at the wrapper edge.
 
 **Bypass.** Bypass uses a latency-compensated wet/dry crossfade inside the core. The dry path uses a delay line sized to the reported latency, so toggling bypass never shifts timing. VST3 bypass is a dedicated parameter with the bypass flag. CLAP bypass is a dedicated parameter with the bypass flag set.
 
@@ -56,13 +56,28 @@ Am-Q is one framework-free C++20 DSP core behind JUCE 8 VST3 and CLAP wrappers. 
 
 **Filter design.** Each shape is a cascade of second-order analog sections, with order = slope ÷ 6. The default analog-to-digital map is a magnitude-matched design that matches the analog magnitude up to Nyquist (Orfanidis 2005; Vicanek 2016). The fallback is bilinear with frequency pre-warp. All Pass uses the bilinear design, pre-warped at its centre frequency, because only its phase matters. Brickwall is our own steep design, tuned by measurement.
 
-**Kernel.** The kernel is a TPT/ZDF SVF (Zavalishin 2012; Simper 2013) with double state, float I/O, and SIMD lanes across channels. Mono, linked-stereo and independent-stereo variants share one template.
+**Kernel.** The kernel is a TPT/ZDF SVF (Zavalishin 2012; Simper 2013) with double state, float I/O, and SIMD lanes across channels. Each designed digital biquad maps exactly onto an SVF plus output mix: substitute z = (1 + σ)/(1 − σ) and match the denominator and numerator (`core/dsp/include/amq/dsp/svf.hpp`). A bilinear first-order section's cancelling pair at z = −1 is divided out first.
 
-**Smoothing.** Ramps are read every 4 samples, and coefficients are redesigned at most every 32 samples. A large frequency jump forces an immediate redesign and a short internal crossfade. A section-count change runs old and new cascades in parallel for a 100 ms equal-gain crossfade. Near-zero gain bands fade to bypass through a wet level.
+**Design tiers (Phase 1).** The joint-refined design that meets R12 costs 1–66 ms per band, and the least-squares design 0.1–3 ms. Neither fits the audio thread at a 32-sample cadence.
+- **Audio thread:** the allocation-free three-point matched design, about 1 µs per band (`designBandRealtime`). All Pass uses its bilinear design. A stability fallback to pre-warped bilinear exists, but no case in the 162,000-case sweep needed it.
+- **Worker thread** (`core/engine/design_worker.hpp`): the refined design (the Phase 0 default, with the conditional correction section), requested once a band's ramps stop moving.
+  - **Hand-off.** It goes through per-band sequence-locked slots: the audio thread only stores and checks an id, and never waits.
+  - **Swap.** The result is swapped in 50 ms after the request (PROVISIONAL), so normal playback is repeatable. The coefficients glide over 20 ms (PROVISIONAL).
+  - **Pairing.** Sections are paired by proximity in log g and log k. When the correction section adds or removes one, the shorter cascade is padded with identity SVF sections (mix 1, 0, 0: output equals input exactly), and padding left as identity is dropped exactly. A settled band therefore meets R12 about 70 ms after it stops moving.
+  - **Measured.** Through the engine, a 6 kHz Bell (+12 dB, Q 0.7) at 44.1 kHz is 0.52 dB off with the fast design and 0.004 dB after the swap. The largest per-sample jump in the swap difference is 0.0025 (`tests/engine/test_refine.cpp`).
+- **Offline render** (CLAP render mode offline): the refined design runs at once on the audio thread, so renders are exact and identical for any block size. Mono, linked-stereo and independent-stereo variants share one template.
+
+**Smoothing.** Ramps are read every 4 samples, and coefficients are redesigned at most every 32 samples. Each redesign targets the ramp values one interval ahead (the ramps are deterministic), and the SVF's g, k and mix gains glide there per sample. Any g > 0, k > 0 is stable, so the glide is safe, and the coefficient path follows the ramp instead of stepping. Measured zipper residual against a per-sample design: −94 dBFS on a 100 Hz → 10 kHz sweep in 0.5 s (`tests/engine/test_bands.cpp`). A large frequency jump forces an immediate redesign and a short internal crossfade. A section-count change runs old and new cascades in parallel for a 100 ms equal-gain crossfade. Near-zero gain bands fade to bypass through a wet level.
 
 **Conventions.** One header in core/dsp defines dB↔linear, time-to-coefficient (90 % step time) and the log2 frequency encoding. Every module uses it.
 
-**CLAP.** The CLAP wrapper uses JUCE's CLAP extensions where they are mature and native CLAP glue elsewhere. Latency changes go through the latency extension and a host restart request.
+**CLAP and VST3.** The plugin implements the CLAP extensions directly. Latency changes go through the latency extension and a host restart request; clap-wrapper turns them into VST3 `restartComponent(kLatencyChanged)`.
+
+**Threading across formats.** A VST3 host may call through clap-wrapper on threads CLAP would not allow (Blue Cat's Axiom calls `getLatencySamples()` off the main thread). Every callback a VST3 interface can reach is therefore safe on any thread:
+- latency, parameter info, value and text, audio ports and GUI size read atomics or constant data;
+- state load publishes values for the audio thread and defers host notifications and editor updates to the main thread.
+
+Shipping builds use clap-helpers' `Ignore` handler with checking off: its checks allocate and log on the calling thread, and `Terminate` aborts the host. A development build option turns on `Terminate` with maximal checking. The spike's `clap_host_test` case 3 is the pattern for the regression test.
 
 **Design commitments.**
 
@@ -71,24 +86,30 @@ Am-Q is one framework-free C++20 DSP core behind JUCE 8 VST3 and CLAP wrappers. 
 - No hidden shape values.
 - A documented time definition.
 - Latency independent of the placement mix.
+- Every VST3-reachable callback safe on any thread; nothing in a shipping build aborts the host.
 
 ## Implementation tasks
 
-- [ ] Set up the CMake project with JUCE 8 wrappers, the CLAP target and framework-free core libraries (Build and QA engineer, Phase 1)
-- [ ] Write the core processor entry with block splitting at parameter-change offsets for VST3 and CLAP (Plugin and host engineer, Phase 1)
-- [ ] Add a side-chain bus and 64-bit-to-float conversion at the wrapper edge (Plugin and host engineer, Phase 1)
+- [x] Set up the CMake project: CLAP plugin on clap-helpers, VST3 via clap-wrapper, Visage editor, framework-free core libraries, pinned dependency versions (Build and QA engineer, Phase 1). Done on Windows on 2026-11-14 (`plugin/`, `ui/`, `cmake/AmqPluginDeps.cmake`). macOS is the separate first-build task below.
+- [ ] Add the host-check build option: shipping uses `Ignore` with checks off, development uses `Terminate` with maximal checks; CI builds both (Build and QA engineer, Phase 1). Progress: the option `AMQ_STRICT_HOST_CHECKS` exists and the shipping configuration is built and tested. Not done: CI, which doesn't exist yet, and a strict-configuration build.
+- [ ] Audit every VST3-reachable callback for any-thread safety, and add an off-main-thread regression test in our CLAP and VST3 test hosts (Plugin and host engineer, Phase 1). Progress: the skeleton's callbacks are any-thread safe, and `tests/plugin/plugin_host_test.cpp` covers them in CLAP. Still to do: the VST3 host test, and re-auditing as parameters and state are added.
+- [ ] Check the editor in Reaper or Studio One on a local high-refresh display: open, drag, frame pacing, key pass-through (GUI engineer, Phase 1, early). Progress (2026-11-14): Am-Q's VST3 (format inferred: Fender Studio hosts VST3), with the Phase 1 editor, works in Fender Studio on the user's local display. The user reports that everything worked: load, editor, double-click create, drag, wheel Q, Alt-click enable, and automation record and playback. Still to do: frame-pacing measurement on a high-refresh display, and key pass-through once the key dispatcher exists (area 15)
+- [ ] First macOS build (universal binary, CLAP and VST3) with the Visage Metal backend; load it in a host and in the validators (Build and QA engineer, Phase 1, early)
+- [x] Write the core processor entry with block splitting at parameter-change offsets for VST3 and CLAP (Plugin and host engineer, Phase 1). `core/engine` is the entry, and `plugin/` splits at every CLAP event offset (VST3 via clap-wrapper). Exact-sample automation is tested on the plugin binary
+- [ ] Add a side-chain bus and 64-bit-to-float conversion at the wrapper edge (Plugin and host engineer, Phase 1). Progress: 64-bit conversion is done and tested. Still to do: the side-chain bus
 - [ ] Implement latency-compensated smoothed global bypass and map host bypass to it (Plugin and host engineer, Phase 2)
 - [ ] Implement the analog prototype library for all ten shapes as cascaded second-order sections (DSP lead, Phase 0)
 - [ ] Implement the magnitude-matched design with a bilinear pre-warp fallback, and the All Pass bilinear path (DSP lead, Phase 0)
 - [ ] Design and tune a brickwall prototype for the cut shapes by measurement (DSP lead, Phase 2)
 - [ ] Define and document the displayed-Q to section-Q mapping per shape, including the tilt Q curves and the Flat Tilt gain limit (DSP lead and Product designer, Phase 0)
-- [ ] Implement the TPT SVF kernel with mono, linked and independent variants and SIMD lanes (DSP lead, Phase 1)
-- [ ] Implement the redesign scheduler: read every 4 samples, redesign at most every 32, jump detection (DSP lead, Phase 1)
+- [ ] Implement the TPT SVF kernel with mono, linked and independent variants and SIMD lanes (DSP lead, Phase 1). Progress: the kernel, the exact biquad-to-SVF mapping, and linked-stereo and single-channel bands are done. Still to do: SIMD, and the independent-stereo variant (needed for M/S and per-channel dynamics)
+- [x] Design bands on a worker thread with the refined (R12) design and swap them in when a band settles; crossfade if the section count changes (DSP lead, Phase 1). Section-count changes between design tiers glide, with identity padding and pairing by proximity. Shape and slope changes still switch hard; that is the R17 task
+- [x] Implement the redesign scheduler: read every 4 samples, redesign at most every 32, jump detection (DSP lead, Phase 1). Reads are on an absolute-time grid, so output is identical for any host block sizes; events force a read, so band changes are sample-accurate; designs look ahead and coefficients glide. Zipper −94 dBFS
 - [ ] Implement the 100 ms section-count crossfade and near-zero-gain bypass fade (DSP lead, Phase 2)
 - [ ] Write the shared conventions header for dB, time constants and log2 frequency (DSP lead, Phase 1)
 - [ ] Build the FFT and partitioned convolution interface with a permissive backend (DSP lead, Phase 1)
 - [ ] Add the speaker-group field and channel descriptor to the band model, inactive in v1 (DSP lead, Phase 1)
-- [ ] Implement the CLAP params, state, latency, audio-ports and render extensions (Plugin and host engineer, Phase 2)
+- [ ] Implement the CLAP params, state, latency, audio-ports and render extensions (Plugin and host engineer, Phase 1: with a CLAP-native core these are the plugin's host interface, D1). Progress: params, state, latency, stereo audio ports and render (offline uses the refined designs at once) are done. Still to do: param gestures from the editor and the side-chain port
 - [ ] Add pluginval, the VST3 validator and clap-validator to CI on both platforms (Build and QA engineer, Phase 1)
 - [ ] Write a clean-room review checklist and review this plan and the code against it (Counsel, Phase 0)
 
@@ -103,6 +124,7 @@ Am-Q is one framework-free C++20 DSP core behind JUCE 8 VST3 and CLAP wrappers. 
 | Section-count crossfade | Change slope while playing a sine | No discontinuity; crossfade lasts 100 ms ±5 % |
 | Bypassed band transparency | Disabled band versus no band | Bit-identical |
 | Global bypass null | Bypass on: output versus input delayed by the reported latency | ≤ −140 dBFS |
+| Off-thread callbacks | Call latency, params, state, audio-ports and GUI-size callbacks from a non-main thread in our CLAP and VST3 test hosts | No abort; values correct; state reaches the audio thread; host notifications happen on the main thread |
 | 64-bit I/O | Host requests double precision | Output equals the float path within float precision |
 | Block-size robustness | Block sizes 1, 2, 3, 64, 4096 and random | Identical output within float precision |
 | Real-time safety | Allocation and lock detector during process | Zero events |

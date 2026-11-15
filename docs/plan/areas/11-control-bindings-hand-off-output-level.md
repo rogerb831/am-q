@@ -36,7 +36,7 @@ Am-Q binds every control by parameter id and keeps styling separate. Analyzer, m
 - [ ] Publish per-band gain change and meter data from the processor (DSP lead, Phase 2)
 - [ ] Implement editor pulling at about 30 Hz with stamp checks (GUI engineer, Phase 2)
 - [ ] Specify the Output Level segments and fade curve (Product designer, DSP lead, Phase 0)
-- [ ] Implement the Output Level forward and inverse mappings and the dB helpers (Plugin and host engineer, Phase 1)
+- [x] Implement the Output Level forward and inverse mappings and the dB helpers (Plugin and host engineer, Phase 1). The fade start (0.1) and the fade law are PROVISIONAL, for the Product designer
 - [ ] Document ranges for Gain Scale, Output Pan and solo gain (Product designer, Phase 0)
 
 ## Acceptance tests

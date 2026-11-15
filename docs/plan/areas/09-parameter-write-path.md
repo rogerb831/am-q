@@ -31,7 +31,7 @@ Every Am-Q parameter write goes through one clamped setter. GUI edits are wrappe
   - Controls call beginEdit on mouse-down, perform on each move and endEdit on release.
   - Double-click reset and typed entry wrap one perform in begin/end.
   - Multi-parameter drags open one gesture per parameter, all closed together. A graph node drag is an example (frequency and gain).
-- **Host mapping.** Stable string ids (band03.freq) map to fixed indices through a versioned table. JUCE 8 wrappers expose these; CLAP uses the same indices as param ids.
+- **Host mapping.** Stable string ids (band03.freq) map to fixed indices through a versioned table. CLAP uses these indices as param ids, and clap-wrapper exposes the same ids as VST3 parameter ids ([D1](../decisions.md)).
 - **Host to DSP.**
   - The processor scans incoming parameter events and splits the block at each offset.
   - It writes the slot, and the audio-side ramp retargets.
@@ -45,12 +45,12 @@ Every Am-Q parameter write goes through one clamped setter. GUI edits are wrappe
 
 ## Implementation tasks
 
-- [ ] Write the parameter-table spec: encodings, ranges, menu-order tables, fixed host indices, versioning (Plugin and host engineer, Phase 0)
-- [ ] Implement set() with clamp, epsilon compare, source tags and listener notification (Plugin and host engineer, Phase 1)
-- [ ] Implement the GUI gesture helper for single and multi-parameter drags (GUI engineer, Phase 1)
-- [ ] Implement VST3 and CLAP parameter export with fixed indices and linear normalized mapping (Plugin and host engineer, Phase 1)
-- [ ] Implement the event scan and block splitter with slot writes (Plugin and host engineer, Phase 1)
-- [ ] Implement audio-side ramps with size-dependent time, instant jumps and seed-on-prepare (DSP lead, Phase 1)
+- [x] Write the parameter-table spec: encodings, ranges, menu-order tables, fixed host indices, versioning (Plugin and host engineer, Phase 0). Written 2026-11-14 in `docs/params/parameter-table.md`; its PROVISIONAL items are listed there with owners
+- [x] Implement set() with clamp, epsilon compare, source tags and listener notification (Plugin and host engineer, Phase 1). Done in `core/params`: lock-free, any thread, with coalesced main-thread notifications
+- [x] Implement the GUI gesture helper for single and multi-parameter drags (GUI engineer, Phase 1). `ui/include/amq/ui/edit_gesture.hpp`. The plugin turns gestures into CLAP gesture and value events; verified end to end through a real window (`tests/plugin/plugin_gui_test.cpp`)
+- [x] Implement VST3 and CLAP parameter export with fixed indices and linear normalized mapping (Plugin and host engineer, Phase 1). CLAP params extension with hashed, frozen ids; VST3 via clap-wrapper; all three validators clean
+- [x] Implement the event scan and block splitter with slot writes (Plugin and host engineer, Phase 1)
+- [x] Implement audio-side ramps with size-dependent time, instant jumps and seed-on-prepare (DSP lead, Phase 1). `core/engine/ramp.hpp`. The policies (20 ms long, 5 ms short, per-field jump thresholds) are PROVISIONAL until the zipper tests
 - [ ] Implement format bypass with latency-compensated crossfade (Plugin and host engineer, Phase 2)
 - [ ] Implement the processor-controller message layer for latency, preset name and blobs (Plugin and host engineer, Phase 1)
 - [ ] Document the per-shape displayed-Q to design-Q convention (DSP lead, Phase 0)
