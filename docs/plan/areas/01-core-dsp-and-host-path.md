@@ -107,7 +107,7 @@ Shipping builds use clap-helpers' `Ignore` handler with checking off: its checks
 - [x] Implement the redesign scheduler: read every 4 samples, redesign at most every 32, jump detection (DSP lead, Phase 1). Reads are on an absolute-time grid, so output is identical for any host block sizes; events force a read, so band changes are sample-accurate; designs look ahead and coefficients glide. Zipper −94 dBFS
 - [ ] Implement the 100 ms section-count crossfade and near-zero-gain bypass fade (DSP lead, Phase 2)
 - [x] Write the shared conventions header for dB, time constants and log2 frequency (DSP lead, Phase 1). `core/dsp/include/amq/dsp/conventions.hpp` (from Phase 0, with tests): dB law, 90 % time definition and one-pole coefficients, log2-Hz encoding. The dynamics smoother builds on it
-- [ ] Build the FFT and partitioned convolution interface with a permissive backend (DSP lead, Phase 1)
+- [x] Build the FFT and partitioned convolution interface with a permissive backend (DSP lead, Phase 1). `amq/dsp/fft.hpp` (`RealFft`, ordered and packed domains, `FftBuffer`) on PFFFT ([D2](../decisions.md)), and `amq/dsp/partitioned_convolver.hpp`. Tested against a direct DFT (2e-6 relative) and direct convolution (1e-5 relative to peak) for kernels of 1 to 1000 taps and random host block sizes
 - [ ] Add the speaker-group field and channel descriptor to the band model, inactive in v1 (DSP lead, Phase 1)
 - [ ] Implement the CLAP params, state, latency, audio-ports and render extensions (Plugin and host engineer, Phase 1: with a CLAP-native core these are the plugin's host interface, D1). Progress: params, state, latency, stereo audio ports and render (offline uses the refined designs at once) are done, plus param gestures from the editor and the side-chain port. Still to do: a mono main layout (audio-ports-config), when the host matrix needs it
 - [ ] Add pluginval, the VST3 validator and clap-validator to CI on both platforms (Build and QA engineer, Phase 1)
@@ -135,6 +135,6 @@ Shipping builds use clap-helpers' `Ignore` handler with checking off: its checks
 
 ## Open questions
 
-- Which permissive FFT backend do we use, or do we write our own? Counsel must clear any licence.
+- ~~Which permissive FFT backend do we use, or do we write our own?~~ Decided: PFFFT, cleared by Counsel ([D2](../decisions.md)).
 - Do we accept double-precision processing natively in a later version, or only by conversion?
 - What tolerance target is right for brickwall passband ripple and stopband depth?

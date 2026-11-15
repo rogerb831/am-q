@@ -12,6 +12,7 @@ add_executable(amq_dsp_tests
     test_main.cpp
     test_conventions.cpp
     test_db_smoother.cpp
+    test_fft.cpp
     test_analog_prototype.cpp
     test_digital_design.cpp
     test_refined_design.cpp

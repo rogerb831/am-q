@@ -43,7 +43,7 @@ Latency comes from the analytic delay of 256 taps plus the convolver partition, 
 
 - [ ] Implement the kernel builder: half-spectrum, inverse FFT, shift, window (DSP lead, Phase 1)
 - [ ] Evaluate window candidates against the Natural Phase accuracy targets (DSP lead, Phase 0)
-- [ ] Implement the uniformly partitioned convolver with a 64-sample partition (DSP lead, Phase 1)
+- [x] Implement the uniformly partitioned convolver with a 64-sample partition (DSP lead, Phase 1). Uniformly partitioned overlap-save with a frequency-domain delay line (Gardner 1995, Wefers 2015). Latency is exactly one partition: a centred 512-tap kernel puts an impulse at sample 320 (R2). No allocation in process (R3). A 512-tap kernel costs about 0.06 % of one core per channel at 48 kHz. The crossfaded kernel swap (R8) comes with the kernel builder
 - [ ] Implement per-mode spec creation and rate-scaled Linear Phase specs (DSP lead, Phase 2)
 - [ ] Design the Auto Gain weighting, then build the programme corpus and BS.1770 validation script (DSP lead and Build and QA engineer, Phase 2)
 - [ ] Build the weight table at start-up and share it with the GUI (DSP lead, Phase 2)

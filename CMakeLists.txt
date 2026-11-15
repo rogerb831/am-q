@@ -36,6 +36,7 @@ function(amq_set_warnings target)
     endif()
 endfunction()
 
+include(cmake/AmqFftDeps.cmake)
 add_subdirectory(core/dsp)
 add_subdirectory(core/params)
 add_subdirectory(core/analysis)

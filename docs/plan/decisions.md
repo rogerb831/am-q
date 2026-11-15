@@ -28,3 +28,17 @@ Owner's words, relayed by the coordinating session: "No, go CLAP + Visage", in a
 - **Host checks.** clap-helpers' `Terminate` misbehaviour handler never ships, because it aborts the host on a contract violation (the Axiom crash). Strict checks are a development build option only.
 - **Effort.** The plan's estimate for this route was about 2 extra months over JUCE: our own editor widgets, focus handling and accessible-control model, and a less mature UI library (Visage v1.0, one tagged release).
 - **Risks added:** Visage maturity; no Visage accessibility; macOS untested in the spike; the editor not yet checked in a DAW on a local display.
+
+## D2 · FFT backend: PFFFT (2026-11-15)
+
+Owner's words: "counsel is go", then PFFFT chosen from three permissive candidates (PFFFT, PocketFFT, KissFFT).
+
+**What:** PFFFT v1.3.0 (`179a48d`, https://github.com/marton78/pffft), BSD-style licence (FFTPACKv5 / UCAR plus the PFFFT authors). Only its two single-precision core files are compiled (`cmake/AmqFftDeps.cmake`); the benchmark-only copies of other FFT libraries in its repository are not.
+
+**Why:** SIMD real FFTs (SSE, NEON), fast at the 128 to 8192 sizes the analyzer and the Natural Phase convolver use, and widely used in audio.
+
+**What it changes:**
+- **Interface.** It sits behind Am-Q's own `amq/dsp/fft.hpp` (area 01 R22) and can be replaced without touching callers. `fft_pffft.cpp` is the only file in core/dsp that includes it.
+- **Sizes.** Real transforms need n = 32 · 2^a · 3^b · 5^c with SIMD. All planned sizes (128 for the 64-sample partition, 512 for the Natural Phase kernel, the analyzer's powers of two) qualify.
+- **Licence obligations.** Keep the copyright notices and the disclaimer in source and binary distributions (THIRD_PARTY.md; the product's licence notice must reproduce them).
+
