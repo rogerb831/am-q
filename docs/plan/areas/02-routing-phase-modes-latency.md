@@ -64,7 +64,7 @@ Am-Q runs bands serially per channel in an L/R stage and an M/S stage, each with
 - [ ] Add the per-band, per-channel enable ramp and atomic list swap (DSP lead, Phase 1). Progress: a per-band 10 ms enable crossfade with placement masks; a fully-off band is skipped and bit-transparent. Still to do: the FFT-group list swap, which comes with Phase 2 modes
 - [ ] Define the speaker descriptor and speaker-group enums; stereo and mono only in v1 (DSP lead, Phase 1)
 - [ ] Implement the combined L/R + M/S STFT processing for FFT bands (DSP lead, Phase 2)
-- [ ] Implement the latency function and its table-driven unit test (DSP lead, Phase 1)
+- [x] Implement the latency function and its table-driven unit test (DSP lead, Phase 1). `amq/dsp/latency.hpp`: a constexpr `latencySamples(mode, resolution, sampleRate, spectralActive)` with no placement input (R10), and the shared power-of-two `rateFactor()` (the analyzer now uses it too). The test covers all 240 rows: 3 modes × 5 resolutions × 8 rates from 44.1 to 384 kHz × spectral on/off. It also measures impulse delays through the real convolver: the identity Natural Phase kernel at 320 samples for several host block sizes, and a centred delta kernel of full Linear Phase length at every resolution, from 44.1 to 384 kHz (High and below at the two top rate steps). Each matches the function to the sample. The Linear Phase partition is 64 × the rate factor (PROVISIONAL; area 05 R4 scales it with the FIR). `Engine::latencySamples()` reports the latency of what actually runs, and the plugin passes it to the host at activate. That stays 0 until the Phase 2 modes land
 - [ ] Wire latency reporting and change notification for VST3 and CLAP, with fades (Plugin and host engineer, Phase 2)
 - [ ] Implement the latency-matched dry path shared by bypass and solo (Plugin and host engineer, Phase 2)
 - [ ] Implement solo audition filters with Solo Gain, and tune the width law by listening (DSP lead and Product designer, Phase 2)
@@ -90,5 +90,6 @@ Am-Q runs bands serially per channel in an L/R stage and an M/S stage, each with
 ## Open questions
 
 - Should spectral latency in Zero Latency follow the Resolution setting, or use one fixed spectral size?
+- With a spectral band active in Natural Phase, R8 puts the band on the FFT path, whose latency (2112 samples or more) is far above the fixed 320. The latency function currently reports the larger value (PROVISIONAL), so the IIR and kernel path would be delayed to line up. Confirm this, or amend R9, when area 07 settles the spectral latency.
 - Do we keep Solo Gain as a separate global parameter, or fold audition level into Output Level?
 - Should the latency change fade length be fixed or host-dependent?

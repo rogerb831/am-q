@@ -14,6 +14,7 @@ add_executable(amq_dsp_tests
     test_db_smoother.cpp
     test_fft.cpp
     test_natural_phase_kernel.cpp
+    test_latency.cpp
     test_analog_prototype.cpp
     test_digital_design.cpp
     test_refined_design.cpp

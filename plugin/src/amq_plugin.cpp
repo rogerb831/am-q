@@ -125,9 +125,9 @@ bool AmqPlugin::activate(double sampleRate, uint32_t, uint32_t maxFrames) noexce
     }
     engine_.prepare(sampleRate, maxFrames);  // unsupported rates give safe silence (area 02 R3)
     snapPending_.store(false);
-    // Latency may only change during activate (CLAP latency extension). The skeleton is
-    // zero-latency; the latency function (area 02) sets the value here.
-    const uint32_t wanted = 0;
+    // Latency may only change during activate (CLAP latency extension). The engine reports the
+    // latency of what it runs, from the latency function (area 02 R9, R12).
+    const uint32_t wanted = engine_.latencySamples();
     if (latency_.exchange(wanted) != wanted && _host.canUseLatency()) _host.latencyChanged();
     return true;
 }

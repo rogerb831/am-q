@@ -1,4 +1,5 @@
 #include "amq/analysis/analyzer.hpp"
+#include "amq/dsp/latency.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -55,12 +56,7 @@ void makeWindow(AnalyzerWindow type, int n, std::vector<float>& w, WindowScale& 
 
 }  // namespace
 
-int analyzerRateFactor(double sampleRate) noexcept {
-    if (sampleRate <= 50000.0) return 1;
-    if (sampleRate <= 100000.0) return 2;
-    if (sampleRate <= 200000.0) return 4;
-    return 8;
-}
+int analyzerRateFactor(double sampleRate) noexcept { return dsp::rateFactor(sampleRate); }
 
 int analyzerFftSize(int resolution, double sampleRate) noexcept {
     const int r = std::clamp(resolution, 0, kResolutionCount - 1);

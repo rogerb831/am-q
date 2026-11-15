@@ -34,6 +34,7 @@
 #include "amq/analysis/analyzer.hpp"
 #include "amq/analysis/display_spectrum.hpp"
 #include "amq/analysis/publisher.hpp"
+#include "amq/dsp/latency.hpp"
 #include "amq/dsp/mid_side.hpp"
 #include "amq/dsp/realtime_design.hpp"
 #include "amq/engine/design_worker.hpp"
@@ -106,6 +107,12 @@ public:
     void release() noexcept;
     [[nodiscard]] bool prepared() const noexcept { return prepared_; }
     [[nodiscard]] double sampleRate() const noexcept { return sampleRate_; }
+    // The latency of the processing that actually runs (area 02 R9, R12). Only Zero Latency
+    // with no spectral band is implemented in Phase 1, so this is 0 whatever global.mode says;
+    // Phase 2 passes the active mode, resolution and spectral flag (area 21 R12).
+    [[nodiscard]] uint32_t latencySamples() const noexcept {
+        return prepared_ ? dsp::latencySamples(dsp::ProcessingMode::ZeroLatency, 0, sampleRate_, false) : 0u;
+    }
 
     // Jump every ramp to the table value: state and preset restores apply without ramps
     // (area 09 R15). Audio thread, at a piece boundary.
