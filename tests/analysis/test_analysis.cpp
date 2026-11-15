@@ -11,11 +11,13 @@
 #include <thread>
 #include <vector>
 
-// Allocation counter for the publishing path (area 14 R14).
-namespace {
+// Allocation counter for the real-time paths (area 14 R14), shared with test_analyzer.cpp.
+namespace amqtest {
 thread_local bool gCountAllocs = false;
 std::atomic<long> gAllocs{0};
-}  // namespace
+}  // namespace amqtest
+using amqtest::gAllocs;
+using amqtest::gCountAllocs;
 void* operator new(std::size_t n) {
     if (gCountAllocs) ++gAllocs;
     if (void* p = std::malloc(n ? n : 1)) return p;

@@ -64,8 +64,15 @@ bool Engine::prepare(double sampleRate, uint32_t maxFrames) noexcept {
         sampleRate_ = 48000.0;
         return false;
     }
+    analyzer_.stop();  // it writes publisher_'s spectra; nothing may run while we prepare
     try {
         work_.assign(static_cast<size_t>(kMaxChannels) * maxFrames, 0.0);
+        if (!analyzerSubscribed_) {
+            analyzer_.subscribe(&display_, analysis::kAllSources, analysis::SizeChoice::Display);
+            analyzerSubscribed_ = true;
+        }
+        if (!analyzer_.prepare(sampleRate)) return false;
+        display_.prepare(&publisher_, sampleRate, analyzer_.fftSize(analysis::SizeChoice::Display));
     } catch (...) {
         return false;
     }
@@ -81,7 +88,10 @@ bool Engine::prepare(double sampleRate, uint32_t maxFrames) noexcept {
     }
     snapToTable();  // seed from current values, never from defaults
     readBands(0, true, kMaxChannels, true);
-    if (mode_ == DesignMode::Thread) worker_.start();
+    if (mode_ == DesignMode::Thread) {
+        worker_.start();
+        analyzer_.start();
+    }
     rampClock_ = 0;  // ramps are snapped, so nothing moved; sample 0 is read again in process()
     // The channel layout is known only in process(): its first read snaps each band on or off
     // for the real layout (a Left band must not fade out of a mono host's only channel).
@@ -93,6 +103,7 @@ bool Engine::prepare(double sampleRate, uint32_t maxFrames) noexcept {
 void Engine::release() noexcept {
     prepared_ = false;
     worker_.stop();
+    analyzer_.stop();
 }
 
 void Engine::resetBandStates() noexcept {
@@ -483,7 +494,11 @@ void Engine::process(const float* const* in, uint32_t numIn, float* const* out, 
 
     const uint32_t outCh = std::min(numOut, kMaxChannels);
     publisher_.meterInput(in, std::min(numIn, kMaxChannels), frames);
-    if (sc && numSc > 0 && sc[0]) publisher_.meterSidechain(sc, std::min(numSc, kMaxChannels), frames);
+    analyzer_.write(analysis::Source::Pre, in, std::min(numIn, kMaxChannels), frames);  // before any output: in may alias out
+    if (sc && numSc > 0 && sc[0]) {
+        publisher_.meterSidechain(sc, std::min(numSc, kMaxChannels), frames);
+        analyzer_.write(analysis::Source::External, sc, std::min(numSc, kMaxChannels), frames);
+    }
     double* w[kMaxChannels] = {work_.data(), work_.data() + maxFrames_};
     for (uint32_t c = 0; c < outCh; ++c) {
         const float* x = in[std::min(c, numIn - 1)];
@@ -538,6 +553,7 @@ void Engine::process(const float* const* in, uint32_t numIn, float* const* out, 
     for (uint32_t c = kMaxChannels; c < numOut; ++c)
         if (out[c]) std::fill(out[c], out[c] + frames, 0.0f);
     publisher_.meterOutput(out, outCh, frames);
+    analyzer_.write(analysis::Source::Post, out, outCh, frames);
     publisher_.advance(frames, end);
     pos_ = end;
 }

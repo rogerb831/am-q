@@ -65,6 +65,16 @@ public:
     void advance(uint32_t frames, uint64_t samplePosition) noexcept;
     [[nodiscard]] uint64_t publishedCount() const noexcept { return levelStamp_; }
 
+    // ---- Analyzer worker (the one spectrum writer, area 19) ----
+    [[nodiscard]] SpectrumSnapshot& spectrumBack() noexcept { return spectrum_.back(); }
+    void publishSpectrum(uint64_t samplePosition) noexcept {
+        SpectrumSnapshot& s = spectrum_.back();
+        s.header.stamp = ++spectrumStamp_;
+        s.header.samplePosition = samplePosition;
+        spectrum_.publish();
+    }
+    [[nodiscard]] uint64_t spectrumCount() const noexcept { return spectrumStamp_; }
+
     // ---- GUI thread (one reader) ----
     // The newest frame, or nullptr if nothing new since the last pull of that type.
     const LevelSnapshot* pullLevels() noexcept { return levels_.acquire() ? &levels_.front() : nullptr; }
@@ -83,6 +93,7 @@ private:
     uint32_t interval_ = 800;
     uint32_t sincePublish_ = 0;
     uint64_t levelStamp_ = 0, gainStamp_ = 0;
+    uint64_t spectrumStamp_ = 0;  // analyzer worker only
     std::array<float, kBandCount> gainNow_{};
     std::array<float, kBandCount> gainPeak_{};     // since the last publish
     std::array<float, kBandCount> gainPending_{};  // what the last published frame carried

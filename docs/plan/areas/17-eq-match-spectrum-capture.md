@@ -33,7 +33,7 @@ Am-Q captures the input and reference spectra in the shared analyzer engine on a
 ## Implementation tasks
 
 - [ ] Specify capture sources, readiness rule, reset rules and sample-rate handling (DSP lead, Phase 0)
-- [ ] Implement the lock-free input and sidechain taps with overflow counting (Plugin and host engineer, Phase 1)
+- [x] Implement the lock-free input and sidechain taps with overflow counting (Plugin and host engineer, Phase 1). `amq/analysis/audio_tap.hpp`: an SPSC ring of 0.5 s (rounded up to a power of two). The audio thread always writes and never waits. The reader skips ahead when a ring behind and counts dropped frames, and a seqlock-style claim check drops any frames overwritten during a copy. Every read reports a gap, so the framer restarts and uses full frames only (R4). Tested: no allocation on write, exact drop counts, and 1.6 M frames read under a racing producer with no torn frame. The engine taps pre-EQ input, post-EQ output and the side chain
 - [ ] Implement the capture framer: full frames only, 75 % overlap, power-scaled window, power merge across channels (DSP lead, Phase 3)
 - [ ] Implement the audio-file reference: decode, resample, analyse on the worker with progress (Plugin and host engineer, Phase 3)
 - [ ] Implement Start, Stop, Reset and the ready state per capture (Plugin and host engineer, Phase 3)

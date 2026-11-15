@@ -29,11 +29,11 @@ Am-Q has one analyzer engine, on a worker thread, that serves both the live disp
 
 ## Implementation tasks
 
-- [ ] Choose window, FFT library and size table; document scaling for amplitude and power (DSP lead, Phase 0)
-- [ ] Implement the engine core: taps, framer, FFT plans and frame fan-out to consumers (DSP lead, Phase 1)
+- [ ] Choose window, FFT library and size table; document scaling for amplitude and power (DSP lead, Phase 0). Progress: FFT library is PFFFT ([D2](../decisions.md)). Size table: 2048, 4096, 8192, 16384 at 44.1/48 kHz, times 2, 4 or 8 above 50, 100 and 200 kHz (default 4096 at 48 kHz, PROVISIONAL). Scaling is documented in `amq/analysis/analyzer.hpp`: amplitude (2 / sum w)^2, power as the one-sided Welch PSD 2 / (fs sum w^2). Window data: periodic 4-term Blackman-Harris and Kaiser (beta 12, PROVISIONAL) both pass the sidelobe test and both scallop 0.83 dB half a bin off-centre. Still to do: pick the default window
+- [x] Implement the engine core: taps, framer, FFT plans and frame fan-out to consumers (DSP lead, Phase 1). `amq/analysis/analyzer.hpp`: three taps (pre-EQ, post-EQ, side chain), full frames only with hop N/4, one framer per FFT size in use (display or highest; shared when equal), per-channel |X|^2 and the mean-power merge, frames handed to subscribed consumers. First consumer: `DisplaySpectrum` maps the latest frame onto the shared 512-point log grid (largest bin per point, interpolation below one bin) and publishes the pre, post and external spectra through the spectrum snapshot. Tested: a -20 dBFS sine at a bin centre reads -20 dBFS at every resolution; the white-noise PSD is within 0.07 dB RMS (20 Hz to 20 kHz, 60 s); a tone 60 dB down 10 bins away reads its level; hard-left, centre and hard-right noise agree within 1e-6 dB; the worker pass does not allocate. Worker CPU with three stereo sources at 16384 points plus a display consumer: about 0.6 % of one core at 48 kHz (R10 budget 3 %)
 - [ ] Implement the display follower with millisecond rise and fall, freeze, peak-hold and tilt (DSP lead, Phase 2)
 - [ ] Hook the EQ Match accumulators into the engine at highest resolution (DSP lead, Phase 3)
-- [ ] Run the engine on the worker with lifecycle tied to the plugin, not the editor (Plugin and host engineer, Phase 1)
+- [x] Run the engine on the worker with lifecycle tied to the plugin, not the editor (Plugin and host engineer, Phase 1). The engine owns the analyzer: its worker starts in `Engine::prepare` (plugin activate) and stops in `release` (deactivate). The worker flushes denormals to zero, so it can't slow the audio thread (clap-validator's denormal test is clean 6 runs out of 6; without flush-to-zero it warned on every run). Tested: spectra arrive with no editor attached
 - [ ] Render pre, post and side-chain spectra with pixel interpolation and visual smoothing (GUI engineer, Phase 2)
 - [ ] Add CPU budget and real-time safety checks for the engine in CI (Build and QA engineer, Phase 2)
 - [ ] Review the FFT library licence (Counsel, Phase 0)
@@ -54,5 +54,6 @@ Am-Q has one analyzer engine, on a worker thread, that serves both the live disp
 ## Open questions
 
 - Blackman-Harris or Kaiser as the single default? Should the window be user-selectable?
+- Sine calibration at any frequency: half a bin off-centre both windows read 0.83 dB low, so the 0.2 dB target holds only at bin centres. The display follower (Phase 2) needs peak interpolation, or a flat-top display window.
 - Should the match path use more than one FFT size (for example longer frames below 200 Hz) for better low-frequency resolution?
 - Is the CPU budget per instance acceptable for sessions with 50+ instances, or should idle instances throttle the engine?

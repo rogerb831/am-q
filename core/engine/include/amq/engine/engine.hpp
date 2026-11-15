@@ -31,6 +31,8 @@
 // snapToTable() and the read accessors on the audio thread. process() never allocates, locks
 // or blocks (area 01 R19).
 
+#include "amq/analysis/analyzer.hpp"
+#include "amq/analysis/display_spectrum.hpp"
 #include "amq/analysis/publisher.hpp"
 #include "amq/dsp/mid_side.hpp"
 #include "amq/dsp/realtime_design.hpp"
@@ -78,12 +80,15 @@ struct EngineStats {
 class Engine {
 public:
     explicit Engine(const params::ParameterTable& table) noexcept;
-    ~Engine() { worker_.stop(); }
+    ~Engine() {
+        analyzer_.stop();
+        worker_.stop();
+    }
     Engine(const Engine&) = delete;
     Engine& operator=(const Engine&) = delete;
 
-    // Main thread, before prepare(). Thread mode starts the worker in prepare() and stops it in
-    // release().
+    // Main thread, before prepare(). Thread mode starts the design worker and the analyzer
+    // worker in prepare() and stops them in release(); Manual mode leaves both to the tests.
     void setDesignMode(DesignMode m) noexcept { mode_ = m; }
     // Offline rendering (CLAP render mode): refined designs run at once on the audio thread,
     // which may then allocate and take milliseconds, so renders are exact and repeatable.
@@ -91,6 +96,8 @@ public:
     void setOfflineRender(bool offline) noexcept { offline_.store(offline, std::memory_order_relaxed); }
     // Manual mode: run outstanding refined-design requests now (test thread).
     int runDesignJobsForTests() { return worker_.runPending(); }
+    // Manual mode: run the analyzer over the audio tapped so far (test thread).
+    uint64_t runAnalyzerForTests() noexcept { return analyzer_.runPending(); }
 
     // Allocates the work buffers (main thread). Returns false, and the engine outputs silence,
     // for an unsupported sample rate. Ramps and filters are seeded from the current table
@@ -123,6 +130,10 @@ public:
     // Meters and gain-change snapshots (areas 11, 12, 14). The engine publishes on the audio
     // thread; the editor pulls on the GUI thread through the pull* functions only.
     [[nodiscard]] analysis::SnapshotPublisher& snapshots() noexcept { return publisher_; }
+    // The analyzer engine (area 19). The audio thread taps pre-EQ input, post-EQ output and the
+    // external side chain; the analyzer worker fills the spectrum snapshot. Its lifetime follows
+    // prepare() / release(), never the editor.
+    [[nodiscard]] const analysis::Analyzer& analyzer() const noexcept { return analyzer_; }
 
     // Test hooks: read and redesign intervals in samples. Production uses 4 and 32; 1 and 1
     // gives the per-sample "offline ideal" for zipper measurements.
@@ -178,6 +189,9 @@ private:
 
     const params::ParameterTable& table_;
     analysis::SnapshotPublisher publisher_;
+    analysis::DisplaySpectrum display_;  // analyzer consumer; writes publisher_'s spectra
+    analysis::Analyzer analyzer_;
+    bool analyzerSubscribed_ = false;
     double sampleRate_ = 48000.0;
     bool prepared_ = false;
     uint32_t maxFrames_ = 0;
