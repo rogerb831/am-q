@@ -115,7 +115,7 @@ private:
 
     params::ParameterTable table_;
     engine::Engine engine_{table_};
-    std::vector<float> scratch_;              // 64-bit I/O conversion: 2 in + 2 out channels
+    std::vector<float> scratch_;              // 64-bit I/O conversion: 2 in, 2 out, 2 side chain
     uint32_t maxFrames_ = 0;
     std::atomic<bool> snapPending_{false};    // state loaded: jump ramps at the next block
     std::atomic<bool> rescanPending_{false};  // state loaded off the main thread

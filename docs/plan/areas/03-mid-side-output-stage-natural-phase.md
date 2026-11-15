@@ -47,7 +47,7 @@ Am-Q uses the textbook Mid/Side matrix, inserted only when an M or S band is act
 ## Implementation tasks
 
 - [ ] Implement the M/S converter (pass, encode, decode) with SIMD (DSP lead, Phase 1). Progress: the converter is done (`core/dsp/include/amq/dsp/mid_side.hpp`): textbook matrix, round trip ≤ −140 dBFS. Still to do: SIMD
-- [ ] Insert M/S on demand in the router, with the M/S side-chain encoder (DSP lead, Phase 2). Progress: done early for the IIR path. Encode and decode run only while a Mid or Side band is audible; toggling a 0 dB Mid band deviates by −296 dBFS. Still to do: the M/S side-chain encoder, which needs the side chain, and the FFT-stage matrixing (area 02)
+- [ ] Insert M/S on demand in the router, with the M/S side-chain encoder (DSP lead, Phase 2). Progress: done early for the IIR path. Encode and decode run only while a Mid or Side band is audible; toggling a 0 dB Mid band deviates by −296 dBFS. Still to do: the M/S side-chain encoder (the side-chain bus now exists; the encoder comes with the detectors, area 06), and the FFT-stage matrixing (area 02)
 - [ ] Implement Gain Scale in band design and in the GUI curve (DSP lead and GUI engineer, Phase 2)
 - [ ] Implement the Auto Gain worker, lock-free publish and ramp (DSP lead, Phase 2)
 - [x] Implement the Level/Pan/Invert node with balance law and ramps (DSP lead, Phase 1). L/R balance only: M/S pan comes with area 04. SIMD is not used yet

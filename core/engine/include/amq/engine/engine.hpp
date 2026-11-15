@@ -106,8 +106,11 @@ public:
 
     // One piece of a host block, frames <= maxFrames. in == out (in place) is allowed. A mono
     // input feeds every output; output channels beyond kMaxChannels are silenced.
+    // sc / numSc: the external side-chain bus for this piece (area 01 R2), or null / 0 while the
+    // host feeds none. It never reaches the main path; the dynamics (area 06) and the analyzer
+    // (area 19) read it. For now it is metered.
     void process(const float* const* in, uint32_t numIn, float* const* out, uint32_t numOut,
-                 uint32_t frames) noexcept;
+                 uint32_t frames, const float* const* sc = nullptr, uint32_t numSc = 0) noexcept;
 
     // Value of a band field at the last parameter read (for tests and the editor).
     [[nodiscard]] double bandValue(int band, params::BandField field) const noexcept;

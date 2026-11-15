@@ -34,6 +34,10 @@ struct LevelSnapshot {
     uint32_t channels = 0;  // channels metered (1 or 2)
     std::array<ChannelLevel, kMaxChannels> input{};
     std::array<ChannelLevel, kMaxChannels> output{};
+    // External side chain (area 01 R2). sidechainChannels is 0 while the host feeds no
+    // side-chain audio; the levels are then at the floor.
+    uint32_t sidechainChannels = 0;
+    std::array<ChannelLevel, kMaxChannels> sidechain{};
 };
 
 // Per band: the current signed dynamic gain change in dB, and the change with the largest

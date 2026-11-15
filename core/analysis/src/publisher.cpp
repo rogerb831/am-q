@@ -74,6 +74,8 @@ void SnapshotPublisher::prepare(double sampleRate, uint32_t channels) noexcept {
     sincePublish_ = 0;
     input_.prepare(sampleRate);
     output_.prepare(sampleRate);
+    sidechain_.prepare(sampleRate);
+    scChannels_ = 0;
     gainNow_.fill(0.0f);
     gainPeak_.fill(0.0f);
     gainPending_.fill(0.0f);
@@ -104,6 +106,10 @@ void SnapshotPublisher::publish(uint64_t samplePosition) noexcept {
         f.channels = channels_;
         input_.emit(f.input.data(), merge);
         output_.emit(f.output.data(), merge);
+        if (scChannels_ == 0) sidechain_.reset();  // disconnected: back to the floor
+        sidechain_.emit(f.sidechain.data(), merge);
+        f.sidechainChannels = scChannels_;
+        scChannels_ = 0;
         levels_.publish();
     }
     {

@@ -271,3 +271,34 @@ TEST_CASE("The engine meters input and output and publishes snapshots (areas 11,
     REQUIRE(g != nullptr);
     CHECK(g->currentDb[0] == 0.0f);  // no dynamics yet (area 06)
 }
+
+TEST_CASE("The side chain never reaches the main path and is metered on its own (area 01 R2)") {
+    params::ParameterTable t;
+    engine::Engine e(t);
+    REQUIRE(e.prepare(48000.0, 256));
+    std::vector<float> l(1000), r(1000), sl(1000), sr(1000), ol(1000), orr(1000);
+    for (size_t i = 0; i < l.size(); ++i) {
+        l[i] = static_cast<float>(0.25 * std::sin(0.01 * static_cast<double>(i)));
+        r[i] = -l[i];
+        sl[i] = sr[i] = (i & 1) ? 0.9f : -0.9f;
+    }
+    const float* in[2] = {l.data(), r.data()};
+    const float* sc[2] = {sl.data(), sr.data()};
+    float* out[2] = {ol.data(), orr.data()};
+    for (int k = 0; k < 60; ++k) {  // blocks longer than maxFrames are split, side chain included
+        e.process(in, 2, out, 2, 1000, sc, 2);
+        REQUIRE(ol == l);
+        REQUIRE(orr == r);
+    }
+    const auto* s = e.snapshots().pullLevels();
+    REQUIRE(s != nullptr);
+    CHECK(s->sidechainChannels == 2);
+    CHECK(s->sidechain[0].peakDb == doctest::Approx(20.0 * std::log10(0.9)).epsilon(1e-4));
+    CHECK(s->input[0].peakDb == doctest::Approx(20.0 * std::log10(0.25)).epsilon(1e-3));
+    // Side chain gone: the next frames report no side chain and floor levels.
+    for (int k = 0; k < 10; ++k) e.process(in, 2, out, 2, 1000);
+    s = e.snapshots().pullLevels();
+    REQUIRE(s != nullptr);
+    CHECK(s->sidechainChannels == 0);
+    CHECK(s->sidechain[0].peakDb == analysis::kFloorDb);
+}

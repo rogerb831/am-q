@@ -119,8 +119,17 @@ int main(int argc, char** argv) {
     const auto* state = ext<clap_plugin_state>(p, CLAP_EXT_STATE);
     const auto* gui = ext<clap_plugin_gui>(p, CLAP_EXT_GUI);
     clap_audio_port_info pi{};
-    check(ports && ports->count(p, true) == 1 && ports->get(p, 0, true, &pi) && pi.channel_count == 2,
-          "one stereo main input");
+    check(ports && ports->count(p, true) == 2 && ports->get(p, 0, true, &pi) && pi.channel_count == 2 &&
+              (pi.flags & CLAP_AUDIO_PORT_IS_MAIN) && pi.id == 0,
+          "two inputs: the first is the stereo main input");
+    {
+        clap_audio_port_info sc{};
+        check(ports && ports->get(p, 1, true, &sc) && sc.channel_count == 2 && !(sc.flags & CLAP_AUDIO_PORT_IS_MAIN) &&
+                  sc.in_place_pair == CLAP_INVALID_ID && sc.id != 0 && sc.id != 1 &&
+                  std::strcmp(sc.port_type, CLAP_PORT_STEREO) == 0,
+              "the second input is a stereo, non-main side-chain bus (area 01 R2)");
+        check(ports && !ports->get(p, 2, true, &sc), "no third input");
+    }
     check(ports && ports->count(p, false) == 1 && ports->get(p, 0, false, &pi) && pi.channel_count == 2,
           "one stereo main output");
     check(lat && state && gui, "latency, state and gui extensions present");
@@ -311,6 +320,42 @@ int main(int argc, char** argv) {
         q->destroy(q);
     }
 
+    // 5d. Side chain feeds only the side chain (area 01 acceptance test): with dynamics off, a
+    // loud side chain leaves the main output bit-exact, whether 32-bit, 64-bit, mono or absent.
+    {
+        std::vector<float> sl(n), sr(n), o1(n), o2(n);
+        std::vector<double> dsl(n), dsr(n);
+        for (uint32_t i = 0; i < n; ++i) sl[i] = sr[i] = 0.99f * ((i & 1) ? 1.0f : -1.0f), dsl[i] = dsr[i] = sl[i];
+        float* scs[2] = {sl.data(), sr.data()};
+        double* dscs[2] = {dsl.data(), dsr.data()};
+        float* outs2[2] = {o1.data(), o2.data()};
+        auto runWith = [&](clap_audio_buffer sc) {
+            clap_audio_buffer bufs[2] = {ib, sc};
+            clap_audio_buffer ob2{};
+            ob2.data32 = outs2;
+            ob2.channel_count = 2;
+            clap_process sp = pr;
+            sp.audio_inputs = bufs;
+            sp.audio_inputs_count = 2;
+            sp.audio_outputs = &ob2;
+            std::fill(o1.begin(), o1.end(), 9.0f);
+            std::fill(o2.begin(), o2.end(), 9.0f);
+            return p->process(p, &sp) == CLAP_PROCESS_CONTINUE && o1 == inL && o2 == inR;
+        };
+        clap_audio_buffer s32{}, s64{}, smono{}, sempty{}, snull{};
+        s32.data32 = scs;
+        s32.channel_count = 2;
+        s64.data64 = dscs;
+        s64.channel_count = 2;
+        smono.data32 = scs;
+        smono.channel_count = 1;
+        snull.channel_count = 2;  // inactive bus: no buffers
+        check(runWith(s32), "32-bit side chain: main output unchanged");
+        check(runWith(s64), "64-bit side chain: main output unchanged");
+        check(runWith(smono), "mono side chain: main output unchanged");
+        check(runWith(sempty) && runWith(snull), "absent or inactive side chain: main output unchanged");
+    }
+
     // 6. Off-main-thread calls (VST3 hosts may make these through clap-wrapper).
     uint32_t latOff = 99, w = 0, h = 0, countOff = 0, paramCountOff = 0;
     bool saveOff = false, loadOff = false, sizeOff = false, paramOff = false;
@@ -330,7 +375,7 @@ int main(int argc, char** argv) {
         sizeOff = gui->get_size(p, &w, &h);
     });
     t.join();
-    check(latOff == 0 && countOff == 1 && paramCountOff == 573 && paramOff && saveOff && loadOff && sizeOff && w > 0 &&
+    check(latOff == 0 && countOff == 2 && paramCountOff == 573 && paramOff && saveOff && loadOff && sizeOff && w > 0 &&
               h > 0,
           "off-main-thread latency, audio-ports, params, state and gui-size calls");
     p->on_main_thread(p);  // deferred params.rescan

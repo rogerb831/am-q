@@ -63,9 +63,11 @@ private:
         return false;
     }
     static bool differs(const analysis::LevelSnapshot& a, const analysis::LevelSnapshot& b) noexcept {
-        if (a.channels != b.channels) return true;
+        if (a.channels != b.channels || a.sidechainChannels != b.sidechainChannels) return true;
         for (size_t c = 0; c < a.input.size(); ++c)
-            if (differs(a.input[c], b.input[c]) || differs(a.output[c], b.output[c])) return true;
+            if (differs(a.input[c], b.input[c]) || differs(a.output[c], b.output[c]) ||
+                differs(a.sidechain[c], b.sidechain[c]))
+                return true;
         return false;
     }
     static bool differs(const analysis::ChannelLevel& a, const analysis::ChannelLevel& b) noexcept {

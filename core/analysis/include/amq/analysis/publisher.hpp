@@ -55,6 +55,11 @@ public:
         channels_ = channels < 1 ? 1 : channels > kMaxChannels ? kMaxChannels : channels;
         output_.process(x, channels, frames);
     }
+    // External side chain, when the host feeds it this block (area 01 R2).
+    void meterSidechain(const float* const* x, uint32_t channels, uint32_t frames) noexcept {
+        scChannels_ = channels < 1 ? 1 : channels > kMaxChannels ? kMaxChannels : channels;
+        sidechain_.process(x, channels, frames);
+    }
     void setGainChange(int band, float db) noexcept;
     // Advance the clock; publishes when an interval has passed. samplePosition: at block end.
     void advance(uint32_t frames, uint64_t samplePosition) noexcept;
@@ -72,7 +77,8 @@ private:
     TripleBuffer<LevelSnapshot> levels_;
     TripleBuffer<GainChangeSnapshot> gain_;
     TripleBuffer<SpectrumSnapshot> spectrum_;  // written by the analyzer (area 19)
-    LevelMeter input_, output_;
+    LevelMeter input_, output_, sidechain_;
+    uint32_t scChannels_ = 0;  // side-chain channels seen since the last publish
     uint32_t channels_ = 2;
     uint32_t interval_ = 800;
     uint32_t sincePublish_ = 0;

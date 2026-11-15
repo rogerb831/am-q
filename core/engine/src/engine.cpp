@@ -454,7 +454,7 @@ void Engine::runStage(uint8_t stage, double* const* w, uint32_t outCh, uint32_t 
 }
 
 void Engine::process(const float* const* in, uint32_t numIn, float* const* out, uint32_t numOut,
-                     uint32_t frames) noexcept {
+                     uint32_t frames, const float* const* sc, uint32_t numSc) noexcept {
     if (!out || frames == 0) return;
     const bool haveInput = in && numIn > 0;
     if (!prepared_ || !haveInput) {  // safe silence (area 02 R3)
@@ -467,10 +467,13 @@ void Engine::process(const float* const* in, uint32_t numIn, float* const* out, 
         while (done < frames) {
             const uint32_t n = std::min(maxFrames_, frames - done);
             const float* ip[kMaxChannels] = {};
+            const float* sp[kMaxChannels] = {};
             float* op[kMaxChannels] = {};
+            const uint32_t ns = sc ? std::min(numSc, kMaxChannels) : 0;
             for (uint32_t c = 0; c < std::min(numIn, kMaxChannels); ++c) ip[c] = in[c] + done;
+            for (uint32_t c = 0; c < ns; ++c) sp[c] = sc[c] ? sc[c] + done : nullptr;
             for (uint32_t c = 0; c < std::min(numOut, kMaxChannels); ++c) op[c] = out[c] + done;
-            process(ip, std::min(numIn, kMaxChannels), op, std::min(numOut, kMaxChannels), n);
+            process(ip, std::min(numIn, kMaxChannels), op, std::min(numOut, kMaxChannels), n, ns ? sp : nullptr, ns);
             done += n;
         }
         for (uint32_t c = kMaxChannels; c < numOut; ++c)
@@ -483,6 +486,7 @@ void Engine::process(const float* const* in, uint32_t numIn, float* const* out, 
 
     const uint32_t outCh = std::min(numOut, kMaxChannels);
     publisher_.meterInput(in, std::min(numIn, kMaxChannels), frames);
+    if (sc && numSc > 0 && sc[0]) publisher_.meterSidechain(sc, std::min(numSc, kMaxChannels), frames);
     double* w[kMaxChannels] = {work_.data(), work_.data() + maxFrames_};
     for (uint32_t c = 0; c < outCh; ++c) {
         const float* x = in[std::min(c, numIn - 1)];

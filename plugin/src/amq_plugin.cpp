@@ -119,7 +119,7 @@ bool AmqPlugin::activate(double sampleRate, uint32_t, uint32_t maxFrames) noexce
     // Main thread: allocation is allowed here, never in process().
     maxFrames_ = maxFrames;
     try {
-        scratch_.assign(static_cast<size_t>(maxFrames) * 4, 0.0f);
+        scratch_.assign(static_cast<size_t>(maxFrames) * 6, 0.0f);
     } catch (...) {
         return false;
     }
@@ -178,6 +178,25 @@ clap_process_status AmqPlugin::process(const clap_process* p) noexcept {
         }
         if (numOut && !outCh[0]) numOut = 0;
     }
+    // Side-chain bus (input port 1, area 01 R2). Hosts that feed nothing give no channels or
+    // null buffers; then the engine gets no side chain. Never taken from extra main inputs.
+    const float* scCh[engine::kMaxChannels] = {};
+    uint32_t numSc = 0;
+    if (p->audio_inputs_count >= 2) {
+        const auto& b = p->audio_inputs[1];
+        numSc = std::min(b.channel_count, engine::kMaxChannels);
+        for (uint32_t c = 0; c < numSc; ++c) {
+            if (b.data32) {
+                scCh[c] = b.data32[c];
+            } else if (b.data64 && b.data64[c] && fits) {
+                float* s = scratch_.data() + static_cast<size_t>(4 + c) * maxFrames_;
+                for (uint32_t i = 0; i < n; ++i) s[i] = static_cast<float>(b.data64[c][i]);
+                scCh[c] = s;
+            }
+        }
+        if (numSc && !scCh[0]) numSc = 0;
+        if (numSc == 2 && !scCh[1]) numSc = 1;
+    }
 
     // Sample-accurate changes (area 01 R3): split the block at every event offset. Events at
     // or before the piece start are written to the table first; the engine retargets its
@@ -194,10 +213,12 @@ clap_process_status AmqPlugin::process(const clap_process* p) noexcept {
         if (ei < ne) next = std::min(n, evs->get(evs, ei)->time);
         if (numOut) {
             const float* ip[engine::kMaxChannels] = {};
+            const float* sp[engine::kMaxChannels] = {};
             float* op[engine::kMaxChannels] = {};
             for (uint32_t c = 0; c < numIn; ++c) ip[c] = inCh[c] + pos;
+            for (uint32_t c = 0; c < numSc; ++c) sp[c] = scCh[c] + pos;
             for (uint32_t c = 0; c < numOut; ++c) op[c] = outCh[c] + pos;
-            engine_.process(numIn ? ip : nullptr, numIn, op, numOut, next - pos);
+            engine_.process(numIn ? ip : nullptr, numIn, op, numOut, next - pos, numSc ? sp : nullptr, numSc);
         }
         pos = next;
     }
@@ -351,20 +372,34 @@ void AmqPlugin::requestGuiRefresh() noexcept {
 }
 
 // ---------------------------------------------------------------------------
-// Audio ports: one stereo main pair. The side-chain bus is a later area 01 task.
+// Audio ports: a stereo main pair, plus an optional stereo side-chain input (area 01 R2).
+// clap-wrapper turns the non-main input into a VST3 aux bus. Any thread: constant answers.
 // ---------------------------------------------------------------------------
 
-uint32_t AmqPlugin::audioPortsCount(bool) const noexcept { return 1; }
+namespace {
+constexpr clap_id kMainInId = 0, kMainOutId = 1, kSidechainId = 2;
+}
+
+uint32_t AmqPlugin::audioPortsCount(bool isInput) const noexcept { return isInput ? 2 : 1; }
 
 bool AmqPlugin::audioPortsInfo(uint32_t index, bool isInput, clap_audio_port_info* info) const noexcept {
-    if (index != 0 || !info) return false;
+    if (!info || index >= audioPortsCount(isInput)) return false;
     std::memset(info, 0, sizeof(*info));
-    info->id = isInput ? 0 : 1;
+    if (isInput && index == 1) {
+        info->id = kSidechainId;
+        std::snprintf(info->name, sizeof(info->name), "%s", "Sidechain");
+        info->flags = CLAP_AUDIO_PORT_SUPPORTS_64BITS;  // not main: optional, never in place
+        info->channel_count = 2;
+        info->port_type = CLAP_PORT_STEREO;
+        info->in_place_pair = CLAP_INVALID_ID;
+        return true;
+    }
+    info->id = isInput ? kMainInId : kMainOutId;
     std::snprintf(info->name, sizeof(info->name), "%s", isInput ? "Main In" : "Main Out");
     info->flags = CLAP_AUDIO_PORT_IS_MAIN | CLAP_AUDIO_PORT_SUPPORTS_64BITS;
     info->channel_count = 2;
     info->port_type = CLAP_PORT_STEREO;
-    info->in_place_pair = isInput ? 1 : 0;
+    info->in_place_pair = isInput ? kMainOutId : kMainInId;
     return true;
 }
 
