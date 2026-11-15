@@ -37,7 +37,7 @@ ui/access holds the accessible-control model: an `AccessibleControl` interface i
 ## Implementation tasks
 
 - [x] Define the shape enum, fixed ids and ShapeInfo table (DSP lead, Phase 1). `dsp::Shape` ids plus `params::shapeInfo`
-- [ ] Add a state-chunk test that pins shape ids across versions (Build and QA engineer, Phase 1)
+- [x] Add a state-chunk test that pins shape ids across versions (Build and QA engineer, Phase 1). `tests/plugin/fixtures/shape_ids_v2.amqs` is a frozen version-2 state chunk. A script writes it from the documented chunk format and the golden host ids, not from the plugin; it is committed once and never regenerated. Band k holds shape id k − 1 for bands 1–10, and bands 11–24 are absent. The plugin host test loads it into a fresh instance and checks every band's value and its text (Bell to All Pass), with absent bands loading Bell. It also checks that saving writes each shape pair back bit-identical, and that every Shape parameter is stepped from 0 to at least 9, so shapes can only be appended. A params unit test pins the enum values and the choice labels for ids 0–9
 - [ ] Write the Am-Q key map: delete, cancel, navigation, nudge and pass-through (Product designer, Phase 0)
 - [ ] Implement the key dispatcher with focus-first, graph commands and host fall-through (GUI engineer, Phase 2)
 - [ ] Wire Delete and Backspace to the band delete service (Tab 14) (GUI engineer, Phase 2)

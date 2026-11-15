@@ -202,3 +202,19 @@ TEST_CASE("Shape descriptors agree with the DSP") {
     CHECK(shapeInfo(amq::dsp::Shape::Bell).family == ShapeFamily::BellType);
     CHECK(parameterSpecs()[bandParam(0, BandField::Shape)].def == 0.0);  // Bell is the default (area 15 R10)
 }
+
+TEST_CASE("Shape ids and names are pinned (area 15 R7)") {
+    // Stored ids never renumber; a new shape takes the next free id. Never edit these lines.
+    using amq::dsp::Shape;
+    static_assert(static_cast<int>(Shape::Bell) == 0 && static_cast<int>(Shape::LowShelf) == 1 &&
+                  static_cast<int>(Shape::LowCut) == 2 && static_cast<int>(Shape::HighShelf) == 3 &&
+                  static_cast<int>(Shape::HighCut) == 4 && static_cast<int>(Shape::Notch) == 5 &&
+                  static_cast<int>(Shape::BandPass) == 6 && static_cast<int>(Shape::TiltShelf) == 7 &&
+                  static_cast<int>(Shape::FlatTilt) == 8 && static_cast<int>(Shape::AllPass) == 9);
+    static_assert(amq::dsp::kShapeCount >= 10);
+    const char* const names[] = {"Bell",      "Low Shelf", "Low Cut",    "High Shelf", "High Cut",
+                                 "Notch",     "Band Pass", "Tilt Shelf", "Flat Tilt",  "All Pass"};
+    const auto& choices = parameterSpecs()[bandParam(0, BandField::Shape)].choices;
+    REQUIRE(choices.size() >= 10);
+    for (size_t i = 0; i < 10; ++i) CHECK(choices[i] == names[i]);
+}

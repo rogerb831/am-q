@@ -4,7 +4,8 @@
 //  2. Audio ports and latency.
 //  3. Stereo pass-through is bit-exact (skeleton behaviour).
 //  4. State save/load round trip; foreign data is rejected.
-//  5. Parameters: 573 exposed, frozen ids, readable choices, automation, state round trip.
+//  5. Parameters: 573 exposed, frozen ids, readable choices, automation, state round trip,
+//     shape ids pinned by a frozen state chunk (area 15 R7).
 //  6. Off-main-thread calls a wrapped VST3 host may make (latency, audio ports, params, state,
 //     GUI size) do not abort and return correct values (area 01, docs/plan/decisions.md D1).
 //
@@ -20,6 +21,8 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <fstream>
+#include <iterator>
 #include <random>
 #include <thread>
 #include <vector>
@@ -225,6 +228,65 @@ int main(int argc, char** argv) {
     check(state2->load(p2, &withGain.is) && params2->get_value(p2, gainId, &v) && v == 7.5,
           "state round trip into a new instance keeps Band 1 Gain");
     p2->destroy(p2);
+
+    // 5a. Shape ids are pinned (area 15 R7). The frozen chunk tests/plugin/fixtures/
+    //     shape_ids_v2.amqs holds shape id k - 1 on band k (1..10) and nothing for bands 11..24.
+    //     Every later build must load each id as the same shape, and save it back unchanged.
+    {
+        static const char* const kShapeNames[] = {"Bell",      "Low Shelf", "Low Cut",    "High Shelf", "High Cut",
+                                                  "Notch",     "Band Pass", "Tilt Shelf", "Flat Tilt",  "All Pass"};
+        Mem fixture;
+        {
+            std::ifstream in(AMQ_SHAPE_FIXTURE, std::ios::binary);
+            fixture.b.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+        }
+        check(fixture.b.size() == 12 + 10 * 12, "shape-id fixture read (132 bytes)");
+        const clap_plugin* p3 = f->create_plugin(f, &th.host, d->id);
+        p3->init(p3);
+        const auto* state3 = ext<clap_plugin_state>(p3, CLAP_EXT_STATE);
+        const auto* params3 = ext<clap_plugin_params>(p3, CLAP_EXT_PARAMS);
+        check(state3->load(p3, &fixture.is), "shape-id fixture loads");
+        std::vector<clap_id> shapeIds;
+        bool rangeOk = true;
+        for (uint32_t i = 0; i < params3->count(p3); ++i) {
+            clap_param_info info{};
+            params3->get_info(p3, i, &info);
+            const size_t len = std::strlen(info.name);
+            if (len > 6 && !std::strcmp(info.name + len - 6, " Shape") && !std::strncmp(info.name, "Band ", 5)) {
+                shapeIds.push_back(info.id);
+                // Shapes may be appended later, never removed or reordered.
+                rangeOk &= info.min_value == 0.0 && info.max_value >= 9.0 && info.default_value == 0.0 &&
+                           (info.flags & CLAP_PARAM_IS_STEPPED);
+            }
+        }
+        check(shapeIds.size() == 24 && rangeOk, "24 stepped band Shape parameters, ids 0..9 or more, default Bell");
+        bool valuesOk = shapeIds.size() == 24, namesOk = valuesOk;
+        for (size_t b = 0; valuesOk && b < 24; ++b) {
+            const double want = b < 10 ? static_cast<double>(b) : 0.0;
+            double got = -1;
+            char name[64] = {};
+            valuesOk &= params3->get_value(p3, shapeIds[b], &got) && got == want;
+            namesOk &= params3->value_to_text(p3, shapeIds[b], got, name, sizeof(name)) &&
+                       !std::strcmp(name, kShapeNames[static_cast<size_t>(want)]);
+            if (!namesOk || !valuesOk) std::printf("  band %zu: value %g, text \"%s\"\n", b + 1, got, name);
+        }
+        check(valuesOk, "fixture: band k loads shape id k - 1; absent bands load Bell");
+        check(namesOk, "fixture: each shape id names the same shape (Bell .. All Pass)");
+        Mem resaved;
+        state3->save(p3, &resaved.os);
+        int found = 0;
+        bool sameValues = true;
+        for (size_t k = 0; k < 10; ++k) {
+            const uint8_t* want = fixture.b.data() + 12 + 12 * k;
+            for (size_t off = 12; off + 12 <= resaved.b.size(); off += 12)
+                if (!std::memcmp(resaved.b.data() + off, want, 4)) {
+                    ++found;
+                    sameValues &= !std::memcmp(resaved.b.data() + off + 4, want + 4, 8);
+                }
+        }
+        check(found == 10 && sameValues, "fixture: saving writes each shape pair back bit-identical");
+        p3->destroy(p3);
+    }
 
     // 5b. Sample-accurate automation through the CLAP event queue (area 01 R3, area 09):
     //     an Output Level change at offset k must first change the output at sample k.

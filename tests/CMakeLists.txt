@@ -54,6 +54,8 @@ if(AMQ_BUILD_PLUGIN AND WIN32 AND NOT AMQ_STRICT_HOST_CHECKS)
     target_link_libraries(amq_plugin_host_test PRIVATE clap)
     amq_set_warnings(amq_plugin_host_test)
     add_dependencies(amq_plugin_host_test AmQ_clap)
+    target_compile_definitions(amq_plugin_host_test PRIVATE
+        AMQ_SHAPE_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/plugin/fixtures/shape_ids_v2.amqs")
     add_test(NAME amq_plugin_host_test COMMAND amq_plugin_host_test $<TARGET_FILE:AmQ_clap>)
 
     # Editor in a real window: needs a desktop session, so it is not part of ctest by default.
