@@ -14,6 +14,7 @@
 #include "amq/dsp/digital_design.hpp"
 
 #include <cmath>
+#include <complex>
 
 namespace amq::dsp {
 
@@ -83,6 +84,14 @@ struct SvfState {
         return false;
     out = p;
     return true;
+}
+
+// Exact transfer function of one SVF section at z (area 04 R10): with sigma = (z-1)/(z+1),
+// H = m0 + m1 * g*sigma / D + m2 * g^2 / D, D = sigma^2 + k*g*sigma + g^2 (see the header note).
+[[nodiscard]] inline std::complex<double> svfResponse(const SvfParams& p, std::complex<double> z) noexcept {
+    const std::complex<double> sigma = (z - 1.0) / (z + 1.0);
+    const std::complex<double> d = sigma * sigma + p.k * p.g * sigma + p.g * p.g;
+    return p.m0 + (p.m1 * p.g * sigma + p.m2 * p.g * p.g) / d;
 }
 
 [[nodiscard]] inline double svfTick(const SvfCoeffs& c, SvfState& s, double v0) noexcept {

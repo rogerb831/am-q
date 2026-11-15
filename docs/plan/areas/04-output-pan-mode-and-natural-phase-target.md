@@ -39,10 +39,10 @@ Am-Q's Output Pan Mode switches the output balance between L/R and M/S by wrappi
 
 - [ ] Add the Output Pan Mode parameter and per-mode pan display text (Plugin and host engineer, Phase 2)
 - [ ] Build the output graph with mode converters and the 20 ms mode-switch crossfade (DSP lead, Phase 2)
-- [ ] Implement analog prototype evaluation and digital section evaluation (DSP lead, Phase 1)
+- [x] Implement analog prototype evaluation and digital section evaluation (DSP lead, Phase 1). Analog: `AnalogPrototype::evaluate` (≤ 1e-9 against an independent reference, Phase 0 test). Digital: `dsp::svfResponse` / `svfCascadeResponseHz` evaluate the exact SVF sections the audio runs (5e-11 against the source biquads), and `engine::bandMagnitudeDb` designs through the engine's own calls (R10)
 - [ ] Implement per-band response caches with version stamps (DSP lead, Phase 2)
 - [ ] Implement a rate-limited kernel rebuild scheduler with crossfaded swaps (DSP lead, Phase 2)
-- [ ] Define the shared 512-point log grid for Auto Gain and the GUI curve (DSP lead, Phase 1)
+- [x] Define the shared 512-point log grid for Auto Gain and the GUI curve (DSP lead, Phase 1). `core/dsp/include/amq/dsp/log_grid.hpp`: 20 Hz to 20 kHz inclusive, one shared instance
 - [ ] Design Pan Mode button labels and pan-end labels (Product designer and GUI engineer, Phase 2)
 
 ## Acceptance tests

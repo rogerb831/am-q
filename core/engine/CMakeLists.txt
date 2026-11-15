@@ -2,6 +2,7 @@
 # block piece (area 01 R3). Depends on core/params for the value slots and core/dsp.
 
 add_library(amq_engine STATIC
+    src/band_response.cpp
     src/design_worker.cpp
     src/engine.cpp)
 add_library(amq::engine ALIAS amq_engine)

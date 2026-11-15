@@ -1,5 +1,7 @@
 #include "amq/engine/design_worker.hpp"
 
+#include "amq/engine/band_response.hpp"
+
 #include "amq/params/mappings.hpp"
 
 #include <chrono>
@@ -8,13 +10,7 @@
 namespace amq::engine {
 
 bool designRefinedCascade(const DesignInputs& in, dsp::SvfCascade& out) {
-    dsp::BandSpec spec;
-    spec.shape = static_cast<dsp::Shape>(in.shape);
-    spec.slope = static_cast<dsp::Slope>(in.slope);
-    spec.frequencyHz = std::exp2(in.freqLog2);
-    spec.gainDb = in.gainDb;
-    spec.q = params::qFromPosition(in.qPos);
-    const auto proto = dsp::designAnalogPrototype(spec);
+    const auto proto = dsp::designAnalogPrototype(bandSpecFrom(in));
     if (!proto.supported) return false;
     // The area 01 default: joint-refined magnitude match with the conditional correction
     // section. All Pass keeps its bilinear design (area 02 R15).

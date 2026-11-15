@@ -19,6 +19,15 @@ struct SvfCascade {
     FixedVector<SvfParams, kMaxDigitalSections> sections;
 };
 
+// Exact response of the cascade the audio runs, at hz for sample rate fs (area 04 R10).
+[[nodiscard]] inline std::complex<double> svfCascadeResponseHz(const SvfCascade& c, double hz, double fs) noexcept {
+    const double w = 2.0 * 3.14159265358979323846 * hz / fs;
+    const std::complex<double> z{std::cos(w), std::sin(w)};
+    std::complex<double> h{1.0, 0.0};
+    for (const auto& p : c.sections) h *= svfResponse(p, z);
+    return h;
+}
+
 enum class RealtimeDesignResult : uint8_t { Matched, BilinearFallback, Unsupported };
 
 [[nodiscard]] RealtimeDesignResult designBandRealtime(const BandSpec& spec, double sampleRate,

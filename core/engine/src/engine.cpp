@@ -1,5 +1,7 @@
 #include "amq/engine/engine.hpp"
 
+#include "amq/engine/band_response.hpp"
+
 #include "amq/params/mappings.hpp"
 
 #include <algorithm>
@@ -171,14 +173,9 @@ void Engine::designBand(int b, uint64_t sample, double freqLog2, double gainDb, 
                         int slope, bool hardSwitch) noexcept {
     Band& band = bands_[static_cast<size_t>(b)];
     const int oldShape = band.dShape, oldSlope = band.dSlope;
-    dsp::BandSpec spec;
-    spec.shape = static_cast<dsp::Shape>(shape);
-    spec.slope = static_cast<dsp::Slope>(slope);
-    spec.frequencyHz = std::exp2(freqLog2);
-    spec.gainDb = gainDb;
-    spec.q = params::qFromPosition(qPos);
     dsp::SvfCascade next;
-    const auto res = dsp::designBandRealtime(spec, sampleRate_, next);
+    const auto res = dsp::designBandRealtime(bandSpecFrom({sampleRate_, freqLog2, gainDb, qPos, shape, slope}),
+                                             sampleRate_, next);
     ++stats_.designs;
     band.dFreq = freqLog2;
     band.dGain = gainDb;

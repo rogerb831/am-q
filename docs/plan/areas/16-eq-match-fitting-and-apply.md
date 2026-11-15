@@ -47,7 +47,7 @@ Am-Q fits the smoothed, level-aligned difference curve with a greedy matching-pu
 
 - [ ] Write the EQ Match fitting spec: grid, error metric, candidate families, stop rule, ranges and ordering (DSP lead, Phase 0)
 - [ ] Prototype the greedy fitter offline against synthetic curves and real mix pairs; tune K, tolerance and line-search sweeps (DSP lead, Phase 0)
-- [ ] Expose a magnitude-response evaluator for every band shape at any sample rate, shared with the audio path (DSP lead, Phase 1)
+- [x] Expose a magnitude-response evaluator for every band shape at any sample rate, shared with the audio path (DSP lead, Phase 1). `core/engine/include/amq/engine/band_response.hpp`: the engine, the design worker and the evaluator share one parameter-to-spec conversion and one design call per tier (fast or refined). Tested against the running engine: within 4e-7 dB of measured steady-state gain. Note for the fitter: a refined design costs about 6 ms per band
 - [ ] Implement the fitter as a pure, deterministic library with no GUI or host dependencies (DSP lead, Phase 3)
 - [ ] Add range clamping and the non-resonant Q limit for shelves and cuts (DSP lead, Phase 3)
 - [ ] Run the fit on the analysis worker with progress, cancel and a lock-free result hand-off (Plugin and host engineer, Phase 3)
