@@ -5,6 +5,7 @@ add_library(amq_dsp STATIC
     src/digital_design.cpp
     src/fft_pffft.cpp
     src/joint_fit.cpp
+    src/natural_phase_kernel.cpp
     src/partitioned_convolver.cpp
     src/realtime_design.cpp
 )

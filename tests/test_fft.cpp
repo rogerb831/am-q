@@ -12,6 +12,7 @@
 #include <new>
 #include <random>
 #include <stdexcept>
+#include <thread>
 #include <vector>
 
 // Allocation counter for the real-time paths.
@@ -180,4 +181,84 @@ TEST_CASE("Convolver process is real-time safe and reset clears the tail") {
     PartitionedConvolver bad;
     CHECK_FALSE(bad.prepare(50, 512));  // 100 is not a valid FFT size
     CHECK_FALSE(c.setKernel(h.data(), 4096));  // longer than prepared
+}
+
+TEST_CASE("Kernel swap crossfades linearly from the old kernel to the new one (area 05 R8)") {
+    // Old kernel: gain a at tap 0. New kernel: gain b at tap 0. y[n] = k(n) * x[n - 64].
+    const float a = 1.0f, bGain = -0.5f;
+    PartitionedConvolver c;
+    REQUIRE(c.prepare(64, 512, 256));
+    CHECK(c.fadeSamples() == 256);
+    REQUIRE(c.setKernel(&a, 1));
+    const auto x = noise(4096, 11);
+    std::vector<float> y(x.size());
+    const size_t submitAt = 1024;  // a partition boundary
+    c.process(x.data(), y.data(), submitAt);
+    gAllocs = 0;
+    gCountAllocs = true;
+    CHECK(c.submitKernel(&bGain, 1));
+    CHECK(c.swapInProgress());
+    CHECK_FALSE(c.submitKernel(&a, 1));  // refused while pending
+    for (size_t pos = submitAt; pos < x.size(); pos += 37) c.process(x.data() + pos, y.data() + pos, std::min<size_t>(37, x.size() - pos));
+    gCountAllocs = false;
+    CHECK(gAllocs.load() == 0);
+    CHECK_FALSE(c.swapInProgress());
+    double err = 0.0;
+    for (size_t n = 64; n < x.size(); ++n) {
+        const size_t start = submitAt + 64;  // first output of the partition computed after the submit
+        double g = n < start ? 0.0 : std::min(1.0, static_cast<double>(n - start + 1) / 256.0);
+        const double k = a + g * (bGain - a);
+        err = std::max(err, std::abs(k * x[n - 64] - y[n]));
+    }
+    CHECK(err < 1e-5);
+    // The writer may submit again once the fade is done.
+    CHECK(c.submitKernel(&a, 1));
+}
+
+TEST_CASE("Kernel swap with no fade switches at the partition boundary") {
+    const float a = 1.0f, bGain = 2.0f;
+    PartitionedConvolver c;
+    REQUIRE(c.prepare(64, 64, 0));
+    REQUIRE(c.setKernel(&a, 1));
+    std::vector<float> x(512, 1.0f), y(512);
+    c.process(x.data(), y.data(), 128);
+    REQUIRE(c.submitKernel(&bGain, 1));
+    c.process(x.data() + 128, y.data() + 128, 384);
+    CHECK(y[191] == doctest::Approx(1.0f));
+    CHECK(y[192] == doctest::Approx(2.0f));
+    CHECK_FALSE(c.swapInProgress());
+}
+
+TEST_CASE("Kernel swaps from a writer thread while audio runs (area 05 R8)") {
+    // Every kernel is a scaled unit tap with gain in [0.5, 1], so the output is always a blend of
+    // two such gains times the delayed input: |y| <= |x[n - 64]| and finite.
+    PartitionedConvolver c;
+    REQUIRE(c.prepare(64, 512, 256));
+    std::vector<float> h(512, 0.0f);
+    h[0] = 1.0f;
+    REQUIRE(c.setKernel(h.data(), 512));
+    std::atomic<bool> stop{false};
+    std::atomic<int> accepted{0};
+    std::thread writer([&] {
+        std::vector<float> k(512, 0.0f);
+        int i = 0;
+        while (!stop.load()) {
+            k[0] = 0.5f + 0.5f * static_cast<float>(i % 7) / 6.0f;
+            if (c.submitKernel(k.data(), 512)) { ++accepted; ++i; }
+            std::this_thread::yield();
+        }
+    });
+    const auto x = noise(48000 * 4, 12);
+    std::vector<float> y(x.size());
+    for (size_t pos = 0; pos < x.size(); pos += 128) c.process(x.data() + pos, y.data() + pos, 128);
+    stop = true;
+    writer.join();
+    MESSAGE(accepted.load() << " kernels swapped in 4 s of audio");
+    CHECK(accepted.load() > 100);
+    double worst = 0.0;
+    for (size_t n = 64; n < x.size(); ++n) {
+        REQUIRE(std::isfinite(y[n]));
+        worst = std::max(worst, static_cast<double>(std::abs(y[n])) - std::abs(x[n - 64]));
+    }
+    CHECK(worst < 1e-5);
 }

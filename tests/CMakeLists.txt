@@ -13,6 +13,7 @@ add_executable(amq_dsp_tests
     test_conventions.cpp
     test_db_smoother.cpp
     test_fft.cpp
+    test_natural_phase_kernel.cpp
     test_analog_prototype.cpp
     test_digital_design.cpp
     test_refined_design.cpp
@@ -35,7 +36,7 @@ target_link_libraries(amq_analysis_tests PRIVATE amq::analysis doctest::doctest)
 amq_set_warnings(amq_analysis_tests)
 add_test(NAME amq_analysis_tests COMMAND amq_analysis_tests)
 
-add_executable(amq_engine_tests test_main.cpp engine/test_engine.cpp engine/test_bands.cpp engine/test_refine.cpp engine/test_midside.cpp engine/test_response.cpp)
+add_executable(amq_engine_tests test_main.cpp engine/test_engine.cpp engine/test_bands.cpp engine/test_refine.cpp engine/test_midside.cpp engine/test_response.cpp engine/test_natural_phase.cpp)
 target_link_libraries(amq_engine_tests PRIVATE amq::engine doctest::doctest)
 amq_set_warnings(amq_engine_tests)
 add_test(NAME amq_engine_tests COMMAND amq_engine_tests)

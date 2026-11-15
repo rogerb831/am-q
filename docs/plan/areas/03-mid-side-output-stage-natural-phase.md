@@ -53,7 +53,7 @@ Am-Q uses the textbook Mid/Side matrix, inserted only when an M or S band is act
 - [x] Implement the Level/Pan/Invert node with balance law and ramps (DSP lead, Phase 1). L/R balance only: M/S pan comes with area 04. SIMD is not used yet
 - [ ] Implement per-band analog and digital response caches on the shared grid (DSP lead, Phase 2)
 - [ ] Prototype the combined 2×2 Natural Phase correction and compare it with per-stage correction (DSP lead, Phase 0)
-- [ ] Implement correction regularisation and the Nyquist phase taper (DSP lead, Phase 2)
+- [ ] Implement correction regularisation and the Nyquist phase taper (DSP lead, Phase 2). Finding from the area 05 window evaluation: without regularisation a 15 kHz Q4 notch misses the accuracy target next to its zero (0.43 dB at 48 kHz, 1.27 dB and 2.2 degrees at 96 kHz); every other tested shape passes
 - [ ] Document Brickwall behaviour in Natural Phase for the manual (Product designer, Phase 3)
 
 ## Acceptance tests
