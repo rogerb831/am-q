@@ -88,4 +88,15 @@ int ParameterTable::dispatchNotifications() {
     return count;
 }
 
+DisplayContext displayContext(const ParameterTable& t) noexcept {
+    DisplayContext c;
+    c.panMidSide = t.value(globalParam(GlobalParam::PanMode)) >= 0.5;
+    return c;
+}
+
+std::string displayText(const ParameterTable& t, ParamIndex index) {
+    const ParamSpec* s = specAt(index);
+    return s ? formatPlain(*s, t.value(index), displayContext(t)) : std::string();
+}
+
 }  // namespace amq::params

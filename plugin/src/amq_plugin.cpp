@@ -236,6 +236,7 @@ clap_process_status AmqPlugin::process(const clap_process* p) noexcept {
     while (ei < ne) applyEvent(evs->get(evs, ei++));  // events at or after the block end
     if (ne) requestGuiRefresh();
     requestRestartIfNeeded(true);
+    requestTextRescanIfNeeded();
 
     if (out64) {
         for (uint32_t c = 0; c < numOut; ++c)
@@ -255,6 +256,7 @@ clap_process_status AmqPlugin::process(const clap_process* p) noexcept {
 void AmqPlugin::onMainThread() noexcept {
     refreshRequested_.store(false);
     if (rescanPending_.exchange(false) && _host.canUseParams()) _host.paramsRescan(CLAP_PARAM_RESCAN_VALUES);
+    rescanTextIfNeeded();
     table_.dispatchNotifications();  // editor listeners, once the editor binds controls
 }
 
@@ -299,7 +301,7 @@ bool AmqPlugin::paramsValueToText(clap_id id, double value, char* display, uint3
     const auto idx = params::findByHostId(id);
     if (!idx || !display || size == 0) return false;
     const auto& s = *params::specAt(*idx);
-    copyName(display, size, params::formatPlain(s, params::fromHost(s, value)));
+    copyName(display, size, params::formatPlain(s, params::fromHost(s, value), params::displayContext(table_)));
     return true;
 }
 
@@ -320,6 +322,21 @@ void AmqPlugin::paramsFlush(const clap_input_events* in, const clap_output_event
     for (uint32_t i = 0; i < n; ++i) applyEvent(in->get(in, i));
     if (n) requestGuiRefresh();
     requestRestartIfNeeded(false);
+    rescanTextIfNeeded();
+}
+
+// The Output Pan text follows Pan Mode (area 04 R6): when the mode changes, tell the host to
+// fetch the value text again. Off the main thread this asks for a main-thread callback.
+void AmqPlugin::requestTextRescanIfNeeded() noexcept {
+    if (params::displayContext(table_).panMidSide != textPanMidSide_.load(std::memory_order_relaxed) &&
+        !textCallbackRequested_.exchange(true))
+        _host.requestCallback();
+}
+
+void AmqPlugin::rescanTextIfNeeded() noexcept {
+    textCallbackRequested_.store(false);
+    const bool ms = params::displayContext(table_).panMidSide;
+    if (textPanMidSide_.exchange(ms) != ms && _host.canUseParams()) _host.paramsRescan(CLAP_PARAM_RESCAN_TEXT);
 }
 
 // ---------------------------------------------------------------------------
@@ -464,6 +481,7 @@ bool AmqPlugin::stateLoad(const clap_istream* stream) noexcept {
     requestRestartIfNeeded(false);  // a restored state may hold another processing mode
     if (onMainThreadNow()) {
         if (_host.canUseParams()) _host.paramsRescan(CLAP_PARAM_RESCAN_VALUES);
+        rescanTextIfNeeded();
         table_.dispatchNotifications();
     } else {
         rescanPending_.store(true);

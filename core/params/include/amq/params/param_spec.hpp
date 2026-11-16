@@ -115,6 +115,13 @@ inline constexpr ParamIndex kParamCount = kBandCount * kBandFieldCount + kGlobal
 [[nodiscard]] double fromNormalised(const ParamSpec& s, double normalised) noexcept;
 
 // Display text and parsing (area 10 R7). parse returns nullopt for unreadable text.
+// Some text depends on other parameters: Output Pan reads "L"/"R" in L/R Pan Mode and
+// "M"/"S" in M/S Pan Mode (area 04 R6). The two-argument form uses the defaults (L/R);
+// ParameterTable's displayContext() gives the current one. Parsing accepts either form.
+struct DisplayContext {
+    bool panMidSide = false;  // Pan Mode is M/S
+};
+[[nodiscard]] std::string formatPlain(const ParamSpec& s, double plain, const DisplayContext& ctx);
 [[nodiscard]] std::string formatPlain(const ParamSpec& s, double plain);
 [[nodiscard]] std::optional<double> parsePlain(const ParamSpec& s, std::string_view text);
 

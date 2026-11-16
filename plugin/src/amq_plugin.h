@@ -113,6 +113,8 @@ private:
     void requestGuiRefresh() noexcept;                             // audio thread
     void requestHostFlush() noexcept;                              // main thread
     void requestRestartIfNeeded(bool processing) noexcept;         // any thread
+    void requestTextRescanIfNeeded() noexcept;                     // any thread
+    void rescanTextIfNeeded() noexcept;                            // main thread
 
     params::ParameterTable table_;
     engine::Engine engine_{table_};
@@ -125,6 +127,8 @@ private:
     std::atomic<bool> refreshRequested_{false};
     std::atomic<uint32_t> latency_{0};        // written on the main thread in activate()
     std::atomic<bool> restartRequested_{false};  // one request_restart per mode change
+    std::atomic<bool> textPanMidSide_{false};    // Pan Mode the host's value text was last rescanned for
+    std::atomic<bool> textCallbackRequested_{false};
     std::unique_ptr<ui::Editor> editor_;
     // Editor size, for size queries off the main thread and for reopening at the same size.
     // Written on the main thread after every editor layout.

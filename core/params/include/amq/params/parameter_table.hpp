@@ -67,6 +67,11 @@ private:
     std::vector<ParameterListener*> listeners_;
 };
 
+// The display context for text that depends on other parameters (area 04 R6). Any thread.
+[[nodiscard]] DisplayContext displayContext(const ParameterTable& t) noexcept;
+// Current display text of one parameter, with its context. Any thread.
+[[nodiscard]] std::string displayText(const ParameterTable& t, ParamIndex index);
+
 // True if a and b differ by less than one representable step of the parameter: exact index
 // compare for toggles and choices, 1e-9 of the range for continuous values (area 09 R1).
 [[nodiscard]] bool sameValue(const ParamSpec& s, double a, double b) noexcept;

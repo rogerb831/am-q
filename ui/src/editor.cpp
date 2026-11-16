@@ -185,13 +185,12 @@ public:
         float x = 96.0f;
         for (int i = 0; i < 3; ++i) {
             const auto id = params::bandParam(b, fields[i]);
-            const auto& spec = *params::specAt(id);
             c.setColor(tok::inkMuted);
             c.text(visage::String(caps[i]), cap_, visage::Font::kLeft, x, 6.0f, 96.0f, 14.0f);
             c.setColor(tok::surface300);
             c.roundedRectangle(x, 22.0f, 90.0f, 22.0f, 4.0f);
             c.setColor(tok::accent);
-            c.text(visage::String(params::formatPlain(spec, t_.value(id))), label_, visage::Font::kCenter, x, 22.0f,
+            c.text(visage::String(params::displayText(t_, id)), label_, visage::Font::kCenter, x, 22.0f,
                    90.0f, 22.0f);
             x += 100.0f;
         }

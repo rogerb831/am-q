@@ -241,7 +241,9 @@ double fromNormalised(const ParamSpec& s, double n) noexcept {
 // Display text
 // ---------------------------------------------------------------------------
 
-std::string formatPlain(const ParamSpec& s, double plain) {
+std::string formatPlain(const ParamSpec& s, double plain) { return formatPlain(s, plain, DisplayContext{}); }
+
+std::string formatPlain(const ParamSpec& s, double plain, const DisplayContext& ctx) {
     plain = clampPlain(s, plain);
     char buf[64];
     switch (s.type) {
@@ -264,7 +266,9 @@ std::string formatPlain(const ParamSpec& s, double plain) {
         case Unit::Knob: std::snprintf(buf, sizeof(buf), "%.1f", plain); break;
         case Unit::Pan:
             if (std::abs(plain) < 0.05) return "C";
-            std::snprintf(buf, sizeof(buf), "%.1f %c", std::abs(plain), plain < 0 ? 'L' : 'R');
+            // M/S: left lowers Side (towards Mid), right lowers Mid (towards Side), area 04 R3.
+            std::snprintf(buf, sizeof(buf), "%.1f %c", std::abs(plain),
+                          ctx.panMidSide ? (plain < 0 ? 'M' : 'S') : (plain < 0 ? 'L' : 'R'));
             break;
         case Unit::OutputLevelDb:
             if (plain <= kOutputSilenceDb) return "-inf dB";
@@ -333,8 +337,8 @@ std::optional<double> parsePlain(const ParamSpec& s, std::string_view text) {
             break;
         case Unit::QPosition: x = positionFromQ(x); break;
         case Unit::Pan:
-            if (!r.empty() && r[0] == 'l') x = -std::abs(x);
-            else if (!r.empty() && r[0] == 'r') x = std::abs(x);
+            if (!r.empty() && (r[0] == 'l' || r[0] == 'm')) x = -std::abs(x);
+            else if (!r.empty() && (r[0] == 'r' || r[0] == 's')) x = std::abs(x);
             break;
         default: break;
     }

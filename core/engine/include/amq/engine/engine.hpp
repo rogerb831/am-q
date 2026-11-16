@@ -73,6 +73,7 @@ inline constexpr double kEnableFadeMs = 10.0;      // area 02 R6 initial value
 inline constexpr double kRefineSwapDelayMs = 50.0; // PROVISIONAL: swap a refined design this long after the request
 inline constexpr double kRefineGlideMs = 20.0;     // PROVISIONAL: glide from the fast to the refined design
 inline constexpr double kBypassFadeMs = 20.0;      // PROVISIONAL: global bypass crossfade (90 % time)
+inline constexpr double kPanModeFadeMs = 20.0;     // area 04 R4 initial value: Pan Mode crossfade (whole length)
 inline constexpr double kModeFadeMs = 10.0;        // PROVISIONAL: fade out / in around a mode change (area 02 open question)
 inline constexpr double kRestartWaitMs = 1000.0;   // PROVISIONAL: silent wait for the host's restart before fading back in
 
@@ -148,6 +149,8 @@ public:
     }
     // Current bypass mix (0 = processed, 1 = bypassed) and mode-fade gain (tests).
     [[nodiscard]] double bypassMix() const noexcept { return bypass_.current(); }
+    // Output Pan Mode mix: 0 = L/R graph, 1 = M/S graph, in between while crossfading.
+    [[nodiscard]] double panModeMix() const noexcept { return panMode_.current(); }
     [[nodiscard]] double modeFadeGain() const noexcept { return fade_.current(); }
     // Natural Phase kernel sets handed to the convolvers since prepare (tests).
     [[nodiscard]] uint64_t kernelSwaps() const noexcept { return np_.swaps(); }
@@ -281,6 +284,7 @@ private:
     RampPolicy levelPolicy_;
     LinearRamp pan_;         // -100 .. +100
     RampPolicy panPolicy_;
+    LinearRamp panMode_;     // 0 = L/R, 1 = M/S (area 04 R4)
     LinearRamp polarity_;    // +1 / -1, always ramped
     RampPolicy polarityPolicy_;
     RampPolicy wetPolicy_;

@@ -189,6 +189,7 @@ void Engine::snapToTable() noexcept {
     levelTargetDb_ = table_.value(params::globalParam(GlobalParam::OutputLevel));
     levelGain_.snap(params::outputLevelGain(levelTargetDb_));
     pan_.snap(table_.value(params::globalParam(GlobalParam::OutputPan)));
+    panMode_.snap(table_.value(params::globalParam(GlobalParam::PanMode)) >= 0.5 ? 1.0 : 0.0);
     polarity_.snap(table_.value(params::globalParam(GlobalParam::Invert)) >= 0.5 ? -1.0 : 1.0);
     bypass_.snap(table_.value(params::globalParam(GlobalParam::Bypass)) >= 0.5 ? 1.0 : 0.0);
     for (auto& b : bands_) b.event = true;
@@ -247,6 +248,14 @@ void Engine::retargetAll() noexcept {
 
     const double pan = table_.value(params::globalParam(GlobalParam::OutputPan));
     if (pan != pan_.target()) pan_.retarget(pan, rampSamples(panPolicy_, pan - pan_.current(), sampleRate_));
+    // Pan Mode: the old and new output graphs crossfade linearly over kPanModeFadeMs (area 04 R4).
+    // Both graphs are linear gains on the same input, so running both and mixing is the same as
+    // mixing their 2x2 matrices. A switch back midway reverses from the current mix.
+    const double pm = table_.value(params::globalParam(GlobalParam::PanMode)) >= 0.5 ? 1.0 : 0.0;
+    if (pm != panMode_.target()) {
+        const double len = std::abs(pm - panMode_.current()) * kPanModeFadeMs * 1e-3 * sampleRate_;
+        panMode_.retarget(pm, static_cast<uint32_t>(std::lround(len)));
+    }
 
     const double pol = table_.value(params::globalParam(GlobalParam::Invert)) >= 0.5 ? -1.0 : 1.0;
     const double byp = table_.value(params::globalParam(GlobalParam::Bypass)) >= 0.5 ? 1.0 : 0.0;
@@ -644,23 +653,39 @@ void Engine::process(const float* const* in, uint32_t numIn, float* const* out, 
     // Natural Phase: the combined correction after every IIR stage (area 03 R14).
     if (activeMode_ == dsp::ProcessingMode::NaturalPhase) np_.process(w, outCh, frames);
 
-    // Level / Pan / Invert node (area 03 R10-R12). Pan is a linear balance that only
-    // attenuates, in stereo L/R only; the M/S pan mode arrives with area 04.
+    // Output graph (area 03 R10-R12, area 04 R1-R5, R8): mode encoder, Level / Pan / Invert,
+    // mode decoder. Pan is a linear balance that only attenuates: b1 = 1 - p/100 for p > 0,
+    // b2 = 1 + p/100 for p < 0. In L/R mode it scales L by b1 and R by b2. In M/S mode it
+    // scales M by b1 and S by b2, so pan right lowers Mid (wider) and pan left lowers Side
+    // (mono at full left); with the encode and decode of dsp/mid_side.hpp that is the matrix
+    //     L' = (b1+b2)/2 L + (b1-b2)/2 R,   R' = (b1-b2)/2 L + (b1+b2)/2 R.
+    // During a Pan Mode switch the two matrices crossfade with a (area 04 R4). Level and Invert
+    // scale both components alike, so they are the same in both modes (R5). Mono: no pan (R8).
     const bool stereo = outCh >= 2;
-    const bool panLR = stereo && table_.value(params::globalParam(GlobalParam::PanMode)) < 0.5;
     for (uint32_t i = 0; i < frames; ++i) {
         const double g = levelGain_.next() * polarity_.next();
         const double p = pan_.next();
-        double gl = g, gr = g;
-        if (panLR) {
-            if (p > 0.0) gl *= 1.0 - p / 100.0;
-            else if (p < 0.0) gr *= 1.0 + p / 100.0;
+        const double a = panMode_.next();
+        double gl = g, gr = g, x = 0.0;  // x: cross term L -> R and R -> L
+        if (stereo) {
+            const double b1 = p > 0.0 ? 1.0 - p / 100.0 : 1.0;
+            const double b2 = p < 0.0 ? 1.0 + p / 100.0 : 1.0;
+            if (a == 0.0) {
+                gl *= b1, gr *= b2;
+            } else {
+                const double h = 0.5 * a * (b2 - b1);  // written so that b1 == b2 stays exact
+                gl *= b1 + h, gr *= b2 - h, x = -g * h;
+            }
         }
         // Global bypass: crossfade to the delayed dry input; fully bypassed it is the dry input
         // exactly (area 01 R6, area 02 R2). Then the mode-change fade (area 02 R13).
         const double m = bypass_.next();
         const double fz = fade_.next();
         double yl = w[0][i] * gl, yr = stereo ? w[1][i] * gr : 0.0;
+        if (x != 0.0) {
+            const double l = w[0][i], r = w[1][i];
+            yl += x * r, yr += x * l;
+        }
         if (m == 1.0) {
             yl = dry[0][i];
             if (stereo) yr = dry[1][i];

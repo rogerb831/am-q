@@ -43,6 +43,8 @@ struct TestHost {
     clap_host host{};
     clap_host_thread_check threadExt{};
     clap_host_latency latencyExt{};
+    clap_host_params paramsExt{};
+    int textRescans = 0;
     std::thread::id mainThread = std::this_thread::get_id();
     int latencyChanged = 0;
     int restartRequests = 0;
@@ -58,6 +60,7 @@ struct TestHost {
             auto* self = static_cast<TestHost*>(h->host_data);
             if (!std::strcmp(id, CLAP_EXT_THREAD_CHECK)) return &self->threadExt;
             if (!std::strcmp(id, CLAP_EXT_LATENCY)) return &self->latencyExt;
+            if (!std::strcmp(id, CLAP_EXT_PARAMS)) return &self->paramsExt;
             return nullptr;
         };
         host.request_restart = [](const clap_host* h) { ++static_cast<TestHost*>(h->host_data)->restartRequests; };
@@ -68,6 +71,11 @@ struct TestHost {
         };
         threadExt.is_audio_thread = [](const clap_host*) { return true; };  // processes on main too
         latencyExt.changed = [](const clap_host* h) { ++static_cast<TestHost*>(h->host_data)->latencyChanged; };
+        paramsExt.rescan = [](const clap_host* h, clap_param_rescan_flags flags) {
+            if (flags & CLAP_PARAM_RESCAN_TEXT) ++static_cast<TestHost*>(h->host_data)->textRescans;
+        };
+        paramsExt.clear = [](const clap_host*, clap_id, clap_param_clear_flags) {};
+        paramsExt.request_flush = [](const clap_host*) {};
     }
 };
 
@@ -223,6 +231,38 @@ int main(int argc, char** argv) {
     p->process(p, &pr);
     pr.in_events = &inEv;
     check(params->get_value(p, gainId, &v) && v == 7.5, "host automation event reaches the table");
+
+    // Output Pan text follows Pan Mode (area 04 R6); a mode change asks the host to rescan text.
+    clap_id panId = 0, panModeId = 0;
+    for (uint32_t i = 0; i < params->count(p); ++i) {
+        clap_param_info info{};
+        params->get_info(p, i, &info);
+        if (!std::strcmp(info.name, "Output Pan")) panId = info.id;
+        if (!std::strcmp(info.name, "Pan Mode")) panModeId = info.id;
+    }
+    check(panId && panModeId && params->value_to_text(p, panId, 50.0, text, sizeof(text)) && !std::strcmp(text, "50.0 R"),
+          "Output Pan text in L/R mode: 50.0 R");
+    pe.param_id = panModeId;
+    pe.value = 1.0;
+    pr.in_events = &oneEv;
+    p->process(p, &pr);
+    pr.in_events = &inEv;
+    const int rescansBefore = th.textRescans;
+    p->on_main_thread(p);
+    check(th.textRescans == rescansBefore + 1 && params->value_to_text(p, panId, 50.0, text, sizeof(text)) &&
+              !std::strcmp(text, "50.0 S"),
+          "Pan Mode M/S: one text rescan, Output Pan reads 50.0 S");
+    p->on_main_thread(p);
+    check(th.textRescans == rescansBefore + 1, "no further text rescans while Pan Mode is unchanged");
+    pe.value = 0.0;
+    pr.in_events = &oneEv;
+    p->process(p, &pr);
+    pr.in_events = &inEv;
+    p->on_main_thread(p);
+    check(th.textRescans == rescansBefore + 2 && params->value_to_text(p, panId, 50.0, text, sizeof(text)) &&
+              !std::strcmp(text, "50.0 R"),
+          "Pan Mode back to L/R: another text rescan");
+    pe.param_id = gainId;
     Mem withGain;
     state->save(p, &withGain.os);
     const clap_plugin* p2 = f->create_plugin(f, &th.host, d->id);

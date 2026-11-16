@@ -152,6 +152,37 @@ TEST_CASE("Formatter and parser round trip for every parameter") {
     CHECK(formatPlain(shape, 0) == "Bell");  // readable choice names (area 21 R15)
 }
 
+TEST_CASE("Output Pan text follows Pan Mode (area 04 R6)") {
+    const auto& pan = parameterSpecs()[globalParam(GlobalParam::OutputPan)];
+    const DisplayContext lr{}, ms{true};
+    CHECK(formatPlain(pan, -25.0, lr) == "25.0 L");
+    CHECK(formatPlain(pan, 50.0, lr) == "50.0 R");
+    CHECK(formatPlain(pan, -25.0, ms) == "25.0 M");
+    CHECK(formatPlain(pan, 50.0, ms) == "50.0 S");
+    CHECK(formatPlain(pan, 0.0, ms) == "C");
+    CHECK(formatPlain(pan, 50.0) == "50.0 R");  // no context: L/R
+    // Parsing takes either form, whatever the mode.
+    CHECK(*parsePlain(pan, "30 M") == -30.0);
+    CHECK(*parsePlain(pan, "30 s") == 30.0);
+    CHECK(*parsePlain(pan, "30 L") == -30.0);
+    // Round trip in M/S text.
+    for (int i = 0; i <= 40; ++i) {
+        const double v = -100.0 + 5.0 * i;
+        const std::string text = formatPlain(pan, v, ms);
+        INFO(text);
+        CHECK(formatPlain(pan, *parsePlain(pan, text), ms) == text);
+    }
+    // The table gives the context.
+    ParameterTable t;
+    const auto ip = globalParam(GlobalParam::OutputPan);
+    t.set(ip, 40.0, ParamSource::Preset);
+    CHECK(displayText(t, ip) == "40.0 R");
+    t.set(globalParam(GlobalParam::PanMode), 1, ParamSource::Preset);
+    CHECK(displayContext(t).panMidSide);
+    CHECK(displayText(t, ip) == "40.0 S");
+    CHECK(displayText(t, globalParam(GlobalParam::PanMode)) == "M/S");
+}
+
 TEST_CASE("No-op writes and coalescing") {
     struct Counter : ParameterListener {
         int calls = 0;

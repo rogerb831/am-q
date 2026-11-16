@@ -32,7 +32,7 @@ public:
     [[nodiscard]] const params::ParamSpec& spec() const noexcept { return *params::specAt(index_); }
     [[nodiscard]] double value() const noexcept { return valid_ ? c_.table().value(index_) : 0.0; }
     [[nodiscard]] double normalised() const noexcept { return valid_ ? params::toNormalised(spec(), value()) : 0.0; }
-    [[nodiscard]] std::string text() const { return valid_ ? params::formatPlain(spec(), value()) : std::string(); }
+    [[nodiscard]] std::string text() const { return valid_ ? params::displayText(c_.table(), index_) : std::string(); }
 
     void beginGesture() {
         if (valid_) gesture_.open(c_, {index_});
