@@ -36,9 +36,17 @@ void fill(params::ParameterTable& t, dsp::Slope slope, int placementMix) {
 
 // Fraction of one core used to process `seconds` of stereo audio in 64-sample blocks.
 double load(dsp::Slope slope, int placementMix, dsp::ProcessingMode mode, bool automate, double seconds = 4.0,
-            bool dynamic = false) {
+            bool dynamic = false, int spectralBands = 0) {
     params::ParameterTable t;
     fill(t, slope, placementMix);
+    for (int b = 0; b < spectralBands; ++b) {
+        t.set(params::bandParam(b, BandField::Shape), static_cast<int>(dsp::Shape::Bell), ParamSource::Preset);
+        t.set(params::bandParam(b, BandField::DynEnabled), 1, ParamSource::Preset);
+        t.set(params::bandParam(b, BandField::DynRange), -6.0, ParamSource::Preset);
+        t.set(params::bandParam(b, BandField::Spectral), 1, ParamSource::Preset);
+        t.set(params::bandParam(b, BandField::SpectralDensity), 100.0, ParamSource::Preset);
+        t.set(params::bandParam(b, BandField::Q), params::positionFromQ(0.3), ParamSource::Preset);
+    }
     if (dynamic)
         for (int b = 0; b < params::kBandCount; ++b) {
             t.set(params::bandParam(b, BandField::DynEnabled), 1, ParamSource::Preset);
@@ -98,6 +106,10 @@ TEST_CASE("CPU report: 24 bands, 48 kHz, 64-sample blocks" * doctest::skip()) {
     for (const auto& r : rows) std::printf("  %-48s %6.2f %% of one core\n", r.name, 100.0 * load(r.slope, r.mix, r.mode, r.automate));
     std::printf("  %-48s %6.2f %% of one core\n", "12 dB/oct, stereo, all 24 bands dynamic",
                 100.0 * load(dsp::Slope::Db12, 0, dsp::ProcessingMode::ZeroLatency, false, 4.0, true));
+    std::printf("  %-48s %6.2f %% of one core\n", "1 spectral band (Density 100, Medium)",
+                100.0 * load(dsp::Slope::Db12, 0, dsp::ProcessingMode::ZeroLatency, false, 4.0, false, 1));
+    std::printf("  %-48s %6.2f %% of one core\n", "24 spectral bands (Density 100, Medium)",
+                100.0 * load(dsp::Slope::Db12, 0, dsp::ProcessingMode::ZeroLatency, false, 4.0, false, 24));
 }
 
 TEST_CASE("CPU budget: typical 24-band session within 3 % of one core (x2 margin)" * doctest::skip()) {

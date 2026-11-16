@@ -47,7 +47,13 @@
 // band designed at gain + range (area 01 R27). Side Chain Listen plays the filtered side chain on
 // the monitor path (it takes precedence over solo).
 //
-// Not yet (later tasks): spectral bands and Auto Gain.
+// Spectral dynamics (spectral.hpp; area 07): a band with Spectral on runs its dynamics on an STFT
+// after the IIR stages (and the Natural Phase kernel), with Density-controlled analysis bands. A
+// spectral band in use makes the reported latency the FFT-path latency (dsp/latency.hpp), so
+// switching the spectral path on or off restarts the host like a mode change; until the restart,
+// and in Linear Phase, a spectral band runs the IIR dynamic blend.
+//
+// Not yet (later tasks): Auto Gain.
 //
 // Threading: prepare() and release() on the main thread while not processing; process(),
 // snapToTable() and the read accessors on the audio thread. process() never allocates, locks
@@ -65,6 +71,7 @@
 #include "amq/engine/design_worker.hpp"
 #include "amq/engine/linear_phase.hpp"
 #include "amq/engine/natural_phase.hpp"
+#include "amq/engine/spectral.hpp"
 #include "amq/engine/ramp.hpp"
 #include "amq/params/parameter_table.hpp"
 
@@ -150,7 +157,7 @@ public:
     // The latency of the processing that actually runs (area 02 R9, R12): the mode latched at
     // prepare(). Spectral bands do not exist yet, so the spectral flag is false (area 21 R12).
     [[nodiscard]] uint32_t latencySamples() const noexcept {
-        return prepared_ ? dsp::latencySamples(activeMode_, activeResolution_, sampleRate_, false) : 0u;
+        return prepared_ ? dsp::latencySamples(activeMode_, activeResolution_, sampleRate_, activeSpectral_) : 0u;
     }
     // The mode prepare() latched, and the mode the table asks for (Linear Phase maps to Zero
     // Latency until Phase 2).
@@ -159,8 +166,17 @@ public:
     // True while prepared and the table asks for another mode: the host must restart the
     // plugin (deactivate, activate) so the new latency can be reported. Any thread.
     [[nodiscard]] bool restartNeeded() const noexcept {
-        return prepared_ && (requestedMode() != activeMode_ ||
-                             (activeMode_ == dsp::ProcessingMode::LinearPhase && requestedResolution() != activeResolution_));
+        return prepared_ && (requestedMode() != activeMode_ || requestedSpectral() != activeSpectral_ ||
+                             ((activeMode_ == dsp::ProcessingMode::LinearPhase || activeSpectral_) &&
+                              requestedResolution() != activeResolution_));
+    }
+    // True when a band asks for the spectral path (Dynamic and Spectral on, a gain shape, a range)
+    // outside Linear Phase.
+    [[nodiscard]] bool requestedSpectral() const noexcept;
+    [[nodiscard]] bool activeSpectral() const noexcept { return activeSpectral_; }
+    [[nodiscard]] const SpectralStage& spectralStage() const noexcept { return spectral_; }
+    [[nodiscard]] bool spectralBand(int band) const noexcept {
+        return band >= 0 && band < params::kBandCount && spectralCfg_[static_cast<size_t>(band)].on;
     }
     // True once restartNeeded() and the output has faded to silence: the moment to ask the host
     // for the restart (area 02 R13). Any thread.
@@ -177,7 +193,9 @@ public:
     [[nodiscard]] bool soloListening() const noexcept { return soloListen_; }
     // Dynamic EQ: smoothed gain reduction of a band in dB (>= 0) and whether its dynamics run.
     [[nodiscard]] double dynGainReductionDb(int band) const noexcept {
-        return band >= 0 && band < params::kBandCount ? bands_[static_cast<size_t>(band)].dyn.grDb : 0.0;
+        if (band < 0 || band >= params::kBandCount) return 0.0;
+        if (spectralCfg_[static_cast<size_t>(band)].on) return spectral_.grDb(band);
+        return bands_[static_cast<size_t>(band)].dyn.grDb;
     }
     [[nodiscard]] bool dynActive(int band) const noexcept {
         return band >= 0 && band < params::kBandCount && bands_[static_cast<size_t>(band)].dyn.on;
@@ -382,7 +400,13 @@ private:
     dsp::ProcessingMode activeMode_ = dsp::ProcessingMode::ZeroLatency;
     int activeResolution_ = 1;
     LinearPhaseStage lp_;
-    [[nodiscard]] int requestedConfig() const noexcept { return static_cast<int>(requestedMode()) * 8 + requestedResolution(); }
+    bool activeSpectral_ = false;
+    SpectralStage spectral_;
+    std::array<SpectralBandConfig, params::kBandCount> spectralCfg_{};
+    std::vector<double> inCopy_;  // kMaxChannels * maxFrames: this piece's input (spectral side chain)
+    [[nodiscard]] int requestedConfig() const noexcept {
+        return static_cast<int>(requestedMode()) * 16 + (requestedSpectral() ? 8 : 0) + requestedResolution();
+    }
     NaturalPhaseStage np_;
     CorrectionRequest npRequest_;  // audio-thread scratch
     bool npDirty_ = false;

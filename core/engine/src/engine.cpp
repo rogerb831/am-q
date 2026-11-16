@@ -100,6 +100,8 @@ bool Engine::prepare(double sampleRate, uint32_t maxFrames) noexcept {
     // The processing mode is latched here: its latency is what activation reports (area 02 R9).
     activeMode_ = requestedMode();
     activeResolution_ = requestedResolution();
+    activeSpectral_ = requestedSpectral();
+    for (auto& c : spectralCfg_) c.on = false;
     npDirty_ = npPosted_ = false;
     npLastPost_ = 0;
     npChannels_ = kMaxChannels;
@@ -115,7 +117,19 @@ bool Engine::prepare(double sampleRate, uint32_t maxFrames) noexcept {
         npRequest_.id = ++npNextId_;
         if (!lp_.prepare(maxFrames, sampleRate, activeResolution_, npRequest_)) return false;
     }
-    dryLen_ = dsp::latencySamples(activeMode_, activeResolution_, sampleRate, false);
+    dryLen_ = dsp::latencySamples(activeMode_, activeResolution_, sampleRate, activeSpectral_);
+    if (activeSpectral_) {
+        // The STFT adds its frame; a delay pads the processed path to the reported latency.
+        const uint32_t path = activeMode_ == dsp::ProcessingMode::NaturalPhase ? dsp::naturalPhaseLatency() : 0u;
+        const auto frame = static_cast<uint32_t>(spectralFrameSize(activeResolution_, sampleRate));
+        if (dryLen_ < path + frame) return false;
+        try {
+            inCopy_.assign(static_cast<size_t>(kMaxChannels) * maxFrames, 0.0);
+        } catch (...) {
+            return false;
+        }
+        if (!spectral_.prepare(sampleRate, maxFrames, activeResolution_, dryLen_ - path - frame)) return false;
+    }
     dryPos_ = 0;
     try {
         dryLine_.assign(static_cast<size_t>(kMaxChannels) * dryLen_, 0.0f);
@@ -171,6 +185,18 @@ dsp::ProcessingMode Engine::requestedMode() const noexcept {
     if (m == static_cast<int>(dsp::ProcessingMode::NaturalPhase)) return dsp::ProcessingMode::NaturalPhase;
     if (m == static_cast<int>(dsp::ProcessingMode::LinearPhase)) return dsp::ProcessingMode::LinearPhase;
     return dsp::ProcessingMode::ZeroLatency;
+}
+
+bool Engine::requestedSpectral() const noexcept {
+    if (requestedMode() == dsp::ProcessingMode::LinearPhase) return false;
+    for (int b = 0; b < params::kBandCount; ++b) {
+        auto v = [&](BandField f) { return table_.value(params::bandParam(b, f)); };
+        if (v(BandField::Used) >= 0.5 && v(BandField::Enabled) >= 0.5 && v(BandField::DynEnabled) >= 0.5 &&
+            v(BandField::Spectral) >= 0.5 && v(BandField::DynRange) != 0.0 &&
+            dsp::shapeHasGain(static_cast<dsp::Shape>(static_cast<int>(v(BandField::Shape)))))
+            return true;
+    }
+    return false;
 }
 
 int Engine::requestedResolution() const noexcept {
@@ -576,7 +602,7 @@ void Engine::readBands(uint64_t sample, bool pieceStart, uint32_t numOut, bool s
             }
             readDynamics(b, sample, off || snapWet, f, g, q, shape, slope, numOut);
         }
-        if (!active) band.dyn.on = false;
+        if (!active) band.dyn.on = false, spectralCfg_[static_cast<size_t>(b)].on = false;
         // Near-zero bands (R16): a gain shape whose effective gain rounds to 0 dB fades to bypass
         // and is then bit-transparent. The decision uses the gain the design targets. A band whose
         // dynamics run is never near zero.
@@ -766,6 +792,8 @@ void Engine::process(const float* const* in, uint32_t numIn, float* const* out, 
     for (uint32_t c = 0; c < outCh; ++c) {
         const float* x = in[std::min(c, numIn - 1)];
         for (uint32_t i = 0; i < frames; ++i) w[c][i] = x[i];
+        if (activeSpectral_)
+            for (uint32_t i = 0; i < frames; ++i) inCopy_[static_cast<size_t>(c) * maxFrames_ + i] = x[i];
         // The dry path, delayed by the reported latency (area 02 R2). Read before any output
         // is written: in may alias out.
         if (dryLen_ == 0) {
@@ -825,6 +853,11 @@ void Engine::process(const float* const* in, uint32_t numIn, float* const* out, 
     if (activeMode_ == dsp::ProcessingMode::NaturalPhase) np_.process(w, outCh, frames);
     // Linear Phase: every static band in one linear-phase FIR (linear_phase.hpp; area 02 R8).
     if (activeMode_ == dsp::ProcessingMode::LinearPhase) lp_.process(w, outCh, frames);
+    // Spectral dynamics on the FFT path, padded to the reported latency (spectral.hpp; area 07).
+    if (activeSpectral_) {
+        const double* ic[kMaxChannels] = {inCopy_.data(), inCopy_.data() + maxFrames_};
+        spectral_.process(w, ic, sc, pieceNumSc_, outCh, frames, spectralCfg_);
+    }
 
     // Output graph (area 03 R10-R12, area 04 R1-R5, R8): mode encoder, Level / Pan / Invert,
     // mode decoder. Pan is a linear balance that only attenuates: b1 = 1 - p/100 for p > 0,
@@ -898,7 +931,13 @@ void Engine::process(const float* const* in, uint32_t numIn, float* const* out, 
         if (out[c]) std::fill(out[c], out[c] + frames, 0.0f);
     for (int b = 0; b < params::kBandCount; ++b) {  // signed dynamic gain change (area 11 R5, area 14 R12)
         const auto& d = bands_[static_cast<size_t>(b)].dyn;
-        publisher_.setGainChange(b, d.on ? static_cast<float>(d.rangeDb < 0.0 ? -d.grDb : d.grDb) : 0.0f);
+        const auto& sp = spectralCfg_[static_cast<size_t>(b)];
+        if (sp.on) {
+            const double gr = spectral_.grDb(b);
+            publisher_.setGainChange(b, static_cast<float>(sp.rangeDb < 0.0 ? -gr : gr));
+        } else {
+            publisher_.setGainChange(b, d.on ? static_cast<float>(d.rangeDb < 0.0 ? -d.grDb : d.grDb) : 0.0f);
+        }
     }
     publisher_.meterOutput(out, outCh, frames);
     analyzer_.write(analysis::Source::Post, out, outCh, frames);
@@ -940,12 +979,58 @@ void Engine::readDynamics(int b, uint64_t sample, bool reset, double f, double g
     const bool enabled = table_.value(params::bandParam(b, BandField::DynEnabled)) >= 0.5;
     const bool on = enabled && band.runnable && dsp::shapeHasGain(static_cast<dsp::Shape>(shape)) &&
                     std::abs(range) > 1e-6;
+    auto& sc = spectralCfg_[static_cast<size_t>(b)];
+    sc.on = false;
     if (!on) {
         d.on = false;
         return;
     }
     const double hz = std::exp2(f);
     const double qv = params::qFromPosition(q);
+    if (activeSpectral_ && table_.value(params::bandParam(b, BandField::Spectral)) >= 0.5) {
+        // Spectral band (area 07): the stage runs its dynamics; its static shape stays here.
+        d.on = false;
+        const int placement = static_cast<int>(table_.value(params::bandParam(b, BandField::Placement)));
+        sc.on = true;
+        sc.detect = static_cast<uint8_t>(numOut >= 2 ? (placement == 0 ? 0 : placement) : 1);
+        static constexpr uint8_t kApply[5] = {3, 1, 2, 4, 8};
+        sc.apply = numOut >= 2 ? kApply[std::clamp(placement, 0, 4)] : 1;
+        sc.external = table_.value(params::bandParam(b, BandField::ScExternal)) >= 0.5;
+        sc.autoThr = table_.value(params::bandParam(b, BandField::DynAuto)) >= 0.5;
+        sc.tilt = table_.value(params::bandParam(b, BandField::SpectralTilt)) >= 0.5;
+        sc.rangeDb = range;
+        sc.thresholdDb = field(b, rampSlot(BandField::Threshold)).ramp.current();
+        sc.attackKnob = table_.value(params::bandParam(b, BandField::Attack));
+        sc.releaseKnob = table_.value(params::bandParam(b, BandField::Release));
+        sc.density = table_.value(params::bandParam(b, BandField::SpectralDensity));
+        sc.centreHz = hz;
+        // Span (area 07 R1): Free mode follows SC Low / SC High; otherwise the band's region.
+        double lo = dsp::kSpectralSpanMinHz, hi = dsp::kSpectralSpanMaxHz;
+        if (table_.value(params::bandParam(b, BandField::ScMode)) >= 0.5) {
+            lo = std::exp2(table_.value(params::bandParam(b, BandField::ScLow)));
+            hi = std::exp2(table_.value(params::bandParam(b, BandField::ScHigh)));
+        } else {
+            switch (static_cast<dsp::Shape>(shape)) {
+                case dsp::Shape::LowShelf:
+                case dsp::Shape::LowCut: hi = 2.0 * hz; break;
+                case dsp::Shape::HighShelf:
+                case dsp::Shape::HighCut: lo = 0.5 * hz; break;
+                case dsp::Shape::TiltShelf:
+                case dsp::Shape::FlatTilt: break;
+                default: {
+                    const double bw = dsp::bandPassOctaves(std::max(qv, 0.025));
+                    lo = hz * std::exp2(-bw), hi = hz * std::exp2(bw);
+                    break;
+                }
+            }
+        }
+        hi = std::min({hi, dsp::kSpectralSpanMaxHz, 0.45 * sampleRate_});
+        lo = std::clamp(lo, dsp::kSpectralSpanMinHz, hi * 0.5);
+        sc.lo = lo, sc.hi = hi;
+        sc.staticIn = DesignInputs{sampleRate_, f, g, q, shape, slope};
+        sc.dynIn = DesignInputs{sampleRate_, f, std::clamp(g + range, -30.0, 30.0), q, shape, slope};
+        return;
+    }
     if (!d.on || reset) {  // starting: from rest, the reference warms up again (area 07 R9)
         d.core.reset();
         d.ref.reset();
