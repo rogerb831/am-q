@@ -58,7 +58,7 @@ jobs:
         shell: bash
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Configure
         run: >
@@ -93,7 +93,7 @@ jobs:
 
       - name: Upload validator logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: validator-logs-${{ matrix.name }}
           path: validator-logs
@@ -101,7 +101,7 @@ jobs:
 
       - name: Upload plugins
         if: success() && matrix.strict == 'OFF'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: am-q-${{ matrix.name }}
           path: |

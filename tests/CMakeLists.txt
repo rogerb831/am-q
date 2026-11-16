@@ -3,7 +3,7 @@
 # doctest (MIT). Recorded in THIRD_PARTY.md. Test-only; never linked into product code.
 FetchContent_Declare(doctest
     GIT_REPOSITORY https://github.com/doctest/doctest.git
-    GIT_TAG        v2.4.11
+    GIT_TAG        v2.4.12
     GIT_SHALLOW    TRUE)
 set(DOCTEST_NO_INSTALL ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(doctest)

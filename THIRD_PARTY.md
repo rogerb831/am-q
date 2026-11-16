@@ -7,7 +7,7 @@ Counsel must clear an entry before it ships in a product build.
 
 | Name | Version | Licence | Used for | Shipped in product? | Source |
 | --- | --- | --- | --- | --- | --- |
-| doctest | 2.4.11 | MIT | Unit tests (`tests/`), fetched at configure time with CMake FetchContent | No (test only) | https://github.com/doctest/doctest |
+| doctest | 2.4.12 | MIT | Unit tests (`tests/`), fetched at configure time with CMake FetchContent | No (test only) | https://github.com/doctest/doctest |
 | PFFFT | v1.3.0 (`179a48d`) | BSD-style (FFTPACKv5 / UCAR, plus the PFFFT authors' copyright); cleared by Counsel 2026-11-15 ([D2](docs/plan/decisions.md)) | FFT backend behind `amq/dsp/fft.hpp`. Only `src/pffft.c` and `src/pffft_common.c` are compiled; the benchmark copies of other FFT libraries in its repository are not | Yes. The notices and disclaimer must appear in the product's licence notice | https://github.com/marton78/pffft |
 
 ## Framework spike (`spikes/clap-native/`, not product code)

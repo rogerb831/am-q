@@ -27,9 +27,9 @@ case "$platform" in
   *) echo "unknown platform: $platform" >&2; exit 2 ;;
 esac
 
-sha256() {
-  if command -v sha256sum >/dev/null; then sha256sum "$1" | cut -d' ' -f1
-  else shasum -a 256 "$1" | cut -d' ' -f1; fi
+sha256() {  # reads stdin, so a backslash in the path can't prefix the hash (Git Bash does that)
+  if command -v sha256sum >/dev/null; then sha256sum < "$1" | cut -d' ' -f1
+  else shasum -a 256 < "$1" | cut -d' ' -f1; fi
 }
 
 fetch() {  # url zip sha subdir
