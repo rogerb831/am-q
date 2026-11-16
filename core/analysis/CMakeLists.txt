@@ -7,7 +7,9 @@ add_library(amq_analysis STATIC
     src/analyzer.cpp
     src/audio_tap.cpp
     src/display_spectrum.cpp
-    src/publisher.cpp)
+    src/publisher.cpp
+    src/match_capture.cpp
+    src/match_curve.cpp)
 add_library(amq::analysis ALIAS amq_analysis)
 target_include_directories(amq_analysis PUBLIC include)
 target_compile_features(amq_analysis PUBLIC cxx_std_20)
