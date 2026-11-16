@@ -24,8 +24,8 @@ This plan closes three small gaps. The auto-threshold envelope has an instant at
 
 ## Implementation tasks
 
-- [ ] Implement the instant-attack, slow-release reference envelope with a tunable release (DSP lead, Phase 2)
-- [ ] Add a unit test that Attack/Release changes leave reference-envelope state untouched (Build and QA engineer, Phase 2)
+- [x] Implement the instant-attack, slow-release reference envelope with a tunable release (DSP lead, Phase 2). Done on 2026-11-16: `dsp::ReferenceEnvelope` (release `kRefReleaseSeconds`, 10 s, documented in [docs/dsp/dynamics-timing.md](../../dsp/dynamics-timing.md)); see area 07
+- [x] Add a unit test that Attack/Release changes leave reference-envelope state untouched (Build and QA engineer, Phase 2). Done on 2026-11-16 (`tests/engine/test_dynamic_eq.cpp`): Attack and Release swept every piece during a steady tone move the reference by less than 0.01 dB
 - [ ] Implement change detection on the Density slot that triggers the grid rebuild (DSP lead, Phase 2)
 - [ ] Add static shape descriptors to core/params and use them in the GUI and EQ Match (Plugin and host engineer, Phase 1). Progress: the descriptors are in core/params, and a test checks they match core/dsp. Still to do: using them in the GUI and EQ Match
 - [ ] Record the deferred category hint in the post-v1 backlog (Product designer, Phase 4)

@@ -37,9 +37,16 @@
 // they move; once settled, the refined design (R12) comes from DesignWorker and the
 // coefficients glide to it (refineStep, startGlide).
 //
-// Not yet (later tasks): dynamics,
-// spectral bands, the 100 ms section-count crossfade (R17), near-zero bypass (R16), Auto Gain,
-// and SIMD.
+// Dynamic EQ (area 06; area 07 R7-R11; area 03 M/S side chain): each gain band with Dynamic on and
+// a non-zero range runs a detector on its side chain (the plugin input, or the external side-chain
+// bus with SC External), encoded to its placement (Stereo: linked, the louder of L and R; Left,
+// Right; Mid and Side encoded), filtered by the band's region (Band mode, helper filters) or by
+// SC Low / SC High (Free mode). The dynamics core (dsp/dynamics.hpp) turns it into gain reduction
+// capped at |range|, and the band's output blends per sample from its static filter to the same
+// band designed at gain + range (area 01 R27). Side Chain Listen plays the filtered side chain on
+// the monitor path (it takes precedence over solo).
+//
+// Not yet (later tasks): spectral bands and Auto Gain.
 //
 // Threading: prepare() and release() on the main thread while not processing; process(),
 // snapToTable() and the read accessors on the audio thread. process() never allocates, locks
@@ -49,6 +56,7 @@
 #include "amq/analysis/display_spectrum.hpp"
 #include "amq/analysis/publisher.hpp"
 #include "amq/dsp/audition.hpp"
+#include "amq/dsp/dynamics.hpp"
 #include "amq/dsp/latency.hpp"
 #include "amq/dsp/speakers.hpp"
 #include "amq/dsp/mid_side.hpp"
@@ -60,6 +68,7 @@
 
 #include <array>
 #include <atomic>
+#include <memory>
 #include <cstdint>
 #include <vector>
 
@@ -160,6 +169,17 @@ public:
     // Solo audition (area 02 R14): the band being auditioned (-1: none) and the audition mix.
     [[nodiscard]] int soloBand() const noexcept { return soloBand_; }
     [[nodiscard]] double soloMix() const noexcept { return soloMix_.current(); }
+    [[nodiscard]] bool soloListening() const noexcept { return soloListen_; }
+    // Dynamic EQ: smoothed gain reduction of a band in dB (>= 0) and whether its dynamics run.
+    [[nodiscard]] double dynGainReductionDb(int band) const noexcept {
+        return band >= 0 && band < params::kBandCount ? bands_[static_cast<size_t>(band)].dyn.grDb : 0.0;
+    }
+    [[nodiscard]] bool dynActive(int band) const noexcept {
+        return band >= 0 && band < params::kBandCount && bands_[static_cast<size_t>(band)].dyn.on;
+    }
+    [[nodiscard]] double dynReferenceDb(int band) const noexcept {
+        return band >= 0 && band < params::kBandCount ? bands_[static_cast<size_t>(band)].dyn.ref.value() : 0.0;
+    }
     // Structure crossfade of a band (R17): weight of the new filter, 1 when none is running.
     [[nodiscard]] double structureMix(int band) const noexcept {
         return band >= 0 && band < params::kBandCount ? bands_[static_cast<size_t>(band)].xfade.current() : 1.0;
@@ -240,6 +260,34 @@ private:
         uint64_t pendingId = 0;   // outstanding worker request
         uint64_t requestedAt = 0;
         std::array<double, 5> seen{-1, -1, -1, -1, -1};  // used, enabled, placement, shape, slope
+
+        // Dynamic EQ (area 06). The gain + range filter glides between designs like the static one.
+        struct Dyn {
+            bool on = false;          // dynamics run (set at each read)
+            bool autoThr = true, external = false, autoWas = false;
+            uint8_t detect = 0;       // 0 stereo linked, 1 L (or mono), 2 R, 3 Mid, 4 Side
+            double rangeDb = 0.0;     // effective range (after Gain Scale), +-30 dB
+            double thresholdDb = -20.0, kneeDb = 6.0;
+            dsp::BandDynamics core;
+            dsp::ReferenceEnvelope ref;
+            std::array<dsp::SvfCoeffs, 2> sc{};
+            uint8_t scCount = 0;
+            bool scBandPass = false;  // the side-chain filter is one band-pass: quadrature envelope
+            std::array<double, 3> timingKey{-1, -1, -1};      // attack knob, release knob, band Hz
+            std::array<double, 3> kneeKey{-1, -1, -1};        // Q, range, shape
+            std::array<dsp::PeakDetector, kMaxChannels> peak{};
+            std::array<std::array<dsp::SvfState, 2>, kMaxChannels> scState{};
+            std::array<double, 6> scKey{-1, -1, -1, -1, -1, -1};  // hz, q, shape, mode, low, high
+            dsp::SvfCascade cur, step, goal;
+            dsp::FixedVector<dsp::SvfCoeffs, dsp::kMaxDigitalSections> coeffs;
+            std::array<std::array<dsp::SvfState, dsp::kMaxDigitalSections>, kMaxChannels> state{};
+            uint32_t glideLeft = 0;
+            bool designed = false;
+            double dFreq = 0.0, dGain = 0.0, dQ = 0.0;
+            int dShape = -1, dSlope = -1;
+            uint64_t lastDesignAt = 0;
+            double grDb = 0.0;        // smoothed gain reduction now (>= 0)
+        } dyn;
     };
 
     static int rampSlot(params::BandField f) noexcept;
@@ -260,6 +308,12 @@ private:
     void updateSolo(uint32_t outCh, bool snap) noexcept;
     void runSolo(const double* const* dry, uint32_t outCh, uint32_t off, uint32_t n) noexcept;
     void scheduleKernel(uint64_t sample, uint32_t channels) noexcept;
+    void readDynamics(int b, uint64_t sample, bool reset, double f, double g, double q, int shape, int slope,
+                      uint32_t numOut) noexcept;
+    void runDynamics(const double* const* w, const float* const* sc, uint32_t numSc, uint32_t outCh, uint32_t off,
+                     uint32_t n) noexcept;
+    [[nodiscard]] static int sideChainSections(const params::ParameterTable& t, int b, double hz, double q, int shape,
+                                               double fs, std::array<dsp::SvfCoeffs, 2>& out) noexcept;
 
     const params::ParameterTable& table_;
     analysis::SnapshotPublisher publisher_;
@@ -283,8 +337,14 @@ private:
     uint32_t refineGlideSamples_ = 960;
 
     std::array<Field, params::kBandCount * kRampedBandFields.size()> fields_{};
-    std::array<Band, params::kBandCount> bands_{};
+    // The bands are large (cascades, states, dynamics), so they live on the heap: an Engine on a
+    // thread's stack stays small. Allocated once in the constructor.
+    std::unique_ptr<std::array<Band, params::kBandCount>> bandsPtr_ = std::make_unique<std::array<Band, params::kBandCount>>();
+    std::array<Band, params::kBandCount>& bands_ = *bandsPtr_;
     std::vector<double> work_;  // kMaxChannels * maxFrames, allocated in prepare()
+    std::vector<double> dynW_;  // kBandCount * maxFrames: per band, the dynamic blend per sample
+    const float* const* pieceSc_ = nullptr;  // this piece's side-chain input (process scope)
+    uint32_t pieceNumSc_ = 0;
 
     // Solo audition (area 02 R14, area 04 R7). The audition filters the latency-matched dry
     // input (the bypass dry path), decodes M/S-placed bands to L/R on its own, and replaces the
@@ -293,11 +353,15 @@ private:
     std::vector<double> soloMixBuf_;  // maxFrames: the audition mix per sample of this piece
     bool soloInPiece_ = false;        // the audition ran in this piece
     int soloBand_ = -1;               // band auditioned now
+    bool soloListen_ = false;         // the monitor plays soloBand_'s side chain (SC Listen)
+    bool soloExternal_ = false;       // ... from the external side-chain bus
     uint8_t soloPlacement_ = 0;
-    dsp::SvfCoeffs soloCoeffs_;
-    std::array<dsp::SvfState, kMaxChannels> soloState_{};
+    std::array<dsp::SvfCoeffs, 2> soloCoeffs_{};
+    uint8_t soloCount_ = 1;
+    std::array<std::array<dsp::SvfState, 2>, kMaxChannels> soloState_{};
     double soloHz_ = -1.0, soloQ_ = -1.0;  // inputs of the current audition design
     int soloShape_ = -1;
+    std::array<double, 3> soloScKey_{-1, -1, -1};  // listen: mode, low, high
     LinearRamp soloMix_;     // 0 = normal output, 1 = audition
     RampPolicy soloPolicy_;
     LinearRamp soloLevel_;   // audition gain: Solo Gain and the band's boost

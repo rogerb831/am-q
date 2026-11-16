@@ -109,6 +109,19 @@ struct SvfState {
     return c.m0 * v0 + c.m1 * v1 + c.m2 * v2;
 }
 
+// Envelope of a band-pass section (helper band-pass: m0 = m2 = 0, m1 = k). The SVF's band output
+// v1 and low output v2 are in quadrature (v2 / v1 = g / sigma, purely imaginary on the unit
+// circle) and equal in size at the centre frequency, so k * sqrt(v1^2 + v2^2) is the amplitude of
+// a sine at the centre with no ripple, and nearly so close to it: a detector with no lag.
+[[nodiscard]] inline double svfBandEnvelope(const SvfCoeffs& c, SvfState& s, double v0) noexcept {
+    const double v3 = v0 - s.ic2;
+    const double v1 = c.a1 * s.ic1 + c.a2 * v3;
+    const double v2 = s.ic2 + c.a2 * s.ic1 + c.a3 * v3;
+    s.ic1 = 2.0 * v1 - s.ic1;
+    s.ic2 = 2.0 * v2 - s.ic2;
+    return c.m1 * std::sqrt(v1 * v1 + v2 * v2);
+}
+
 // Block runs of one section in place (R18 kernel variants). Results are bit-identical to calling
 // svfTick per sample: a section's recurrence does not depend on the order sections are run in, and
 // the SIMD form keeps the scalar operation order.

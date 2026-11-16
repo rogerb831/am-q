@@ -33,7 +33,7 @@ Am-Q binds every control by parameter id and keeps styling separate. Analyzer, m
 - [ ] Implement menus that read labels and order from the table (GUI engineer, Phase 1)
 - [ ] Confirm the band field list and spare allocation in the table spec (Plugin and host engineer, Phase 0)
 - [x] Implement the lock-free snapshot queue with peak accumulation and stamps (DSP lead, Phase 1). `core/analysis`: one SPSC triple buffer per data type, stamps from 1, peaks of unread frames max-merged into the next one. Publishing at 60 Hz (PROVISIONAL); RMS 300 ms and hold 1.5 s are PROVISIONAL
-- [ ] Publish per-band gain change and meter data from the processor (DSP lead, Phase 2). Progress: the engine meters input and output (peak, RMS, hold per channel) and publishes them; gain change is published as 0 dB until the dynamics exist (area 06)
+- [x] Publish per-band gain change and meter data from the processor (DSP lead, Phase 2). The engine meters input, output and side chain (peak, RMS, hold per channel) and, since 2026-11-16, publishes each band's signed dynamic gain change (negative for a cut) in the gain-change snapshot
 - [x] Implement editor pulling at about 30 Hz with stamp checks (GUI engineer, Phase 2). Done early: `ui::SnapshotPoller` on a 33 ms Visage timer; frames with an old stamp are skipped, and a redraw is reported only for a visible change (0.1 dB)
 - [ ] Specify the Output Level segments and fade curve (Product designer, DSP lead, Phase 0)
 - [x] Implement the Output Level forward and inverse mappings and the dB helpers (Plugin and host engineer, Phase 1). The fade start (0.1) and the fade law are PROVISIONAL, for the Product designer

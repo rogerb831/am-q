@@ -73,6 +73,7 @@ bool Engine::prepare(double sampleRate, uint32_t maxFrames) noexcept {
     analyzer_.stop();  // it writes publisher_'s spectra; nothing may run while we prepare
     try {
         work_.assign(static_cast<size_t>(kMaxChannels) * maxFrames, 0.0);
+        dynW_.assign(static_cast<size_t>(params::kBandCount) * maxFrames, 0.0);
         solo_.assign(static_cast<size_t>(kMaxChannels) * maxFrames, 0.0);
         soloMixBuf_.assign(maxFrames, 0.0);
         if (!analyzerSubscribed_) {
@@ -115,6 +116,13 @@ bool Engine::prepare(double sampleRate, uint32_t maxFrames) noexcept {
         dry_.assign(static_cast<size_t>(kMaxChannels) * maxFrames, 0.0);
     } catch (...) {
         return false;
+    }
+    for (auto& b : bands_) {  // dynamics start from rest; the reference envelope warms up again
+        b.dyn.core.prepare(sampleRate);
+        b.dyn.ref.prepare(sampleRate);
+        b.dyn.on = false;
+        b.dyn.designed = false;
+        b.dyn.grDb = 0.0;
     }
     // The audition starts clean; a band soloed already is heard at once (snap in the first piece).
     soloBand_ = -1;
@@ -546,11 +554,14 @@ void Engine::readBands(uint64_t sample, bool pieceStart, uint32_t numOut, bool s
             } else {
                 refineStep(b, sample);
             }
+            readDynamics(b, sample, off || snapWet, f, g, q, shape, slope, numOut);
         }
+        if (!active) band.dyn.on = false;
         // Near-zero bands (R16): a gain shape whose effective gain rounds to 0 dB fades to bypass
-        // and is then bit-transparent. The decision uses the gain the design targets.
+        // and is then bit-transparent. The decision uses the gain the design targets. A band whose
+        // dynamics run is never near zero.
         bool nearZero = false;
-        if (active && band.designed && dsp::shapeHasGain(static_cast<dsp::Shape>(band.dShape)))
+        if (active && band.designed && !band.dyn.on && dsp::shapeHasGain(static_cast<dsp::Shape>(band.dShape)))
             nearZero = std::abs(band.dGain) < kNearZeroGainDb;
         const double target = (active && band.runnable && !nearZero) ? 1.0 : 0.0;
         if (snapWet) band.wet.snap(target);
@@ -564,12 +575,14 @@ void Engine::readBands(uint64_t sample, bool pieceStart, uint32_t numOut, bool s
 }
 
 void Engine::runStage(uint8_t stage, double* const* w, uint32_t outCh, uint32_t off, uint32_t n) noexcept {
-    for (auto& band : bands_) {
+    for (int bi = 0; bi < params::kBandCount; ++bi) {
+        auto& band = bands_[static_cast<size_t>(bi)];
         if (band.stage != stage) continue;
         if (!band.wet.active() && band.wet.current() == 0.0) continue;  // off: bit-transparent
         // Steady state (no glide, crossfade or enable fade): run section by section over the
         // sub-block, both channels of a stereo band together (R18 kernel variants, SIMD).
-        if (!band.glideLeft && !band.xfade.active() && !band.wet.active() && band.wet.current() == 1.0) {
+        const bool dynamic = band.dyn.on;
+        if (!dynamic && !band.glideLeft && !band.xfade.active() && !band.wet.active() && band.wet.current() == 1.0) {
             const size_t ns = band.coeffs.size();
             if (outCh >= 2 && band.mask == 3) {
                 for (size_t k = 0; k < ns; ++k)
@@ -585,7 +598,7 @@ void Engine::runStage(uint8_t stage, double* const* w, uint32_t outCh, uint32_t 
         // section's coefficients stepped per sample. Equal to the per-sample loop below: the glide
         // lands every section on its goal at the same sample, and identity sections dropped at
         // the end pass audio unchanged.
-        if (band.glideLeft && !band.xfade.active() && !band.wet.active() && band.wet.current() == 1.0) {
+        if (!dynamic && band.glideLeft && !band.xfade.active() && !band.wet.active() && band.wet.current() == 1.0) {
             const size_t ns = band.coeffs.size();
             const uint32_t gl0 = band.glideLeft;
             const bool stereoLinked = outCh >= 2 && band.mask == 3;
@@ -634,6 +647,33 @@ void Engine::runStage(uint8_t stage, double* const* w, uint32_t outCh, uint32_t 
             const double wet = band.wet.next();
             const bool fading = band.xfade.active();
             const double a = fading ? band.xfade.next() : 1.0;
+            // Dynamic EQ: the gain + range filter, gliding like the static one, blended in by wd.
+            auto& dy = band.dyn;
+            double wd = 0.0;
+            if (dynamic) {
+                wd = dynW_[static_cast<size_t>(bi) * maxFrames_ + off + i];
+                if (dy.glideLeft) {
+                    if (--dy.glideLeft == 0) dy.cur = dy.goal;
+                    for (size_t k = 0; k < dy.coeffs.size(); ++k) {
+                        auto& c = dy.cur.sections[k];
+                        if (dy.glideLeft) {
+                            const auto& d = dy.step.sections[k];
+                            c.g += d.g, c.k += d.k, c.m0 += d.m0, c.m1 += d.m1, c.m2 += d.m2;
+                        }
+                        dy.coeffs[k] = dsp::svfCoeffs(c);
+                    }
+                }
+            }
+            // Dynamic, stereo linked, no fade: both cascades in SIMD lanes (bit-identical to the loop).
+            if (dynamic && !fading && wet == 1.0 && outCh >= 2 && band.mask == 3) {
+                double l = w[0][off + i], r = w[1][off + i], dl = l, dr = r;
+                for (size_t k = 0; k < ns; ++k) dsp::svfTickStereo(band.coeffs[k], band.state[0][k], band.state[1][k], l, r);
+                for (size_t k = 0; k < dy.coeffs.size(); ++k)
+                    dsp::svfTickStereo(dy.coeffs[k], dy.state[0][k], dy.state[1][k], dl, dr);
+                w[0][off + i] = l + wd * (dl - l);
+                w[1][off + i] = r + wd * (dr - r);
+                continue;
+            }
             for (uint32_t c = 0; c < outCh; ++c) {
                 if (!(band.mask & (1u << c))) continue;
                 const double x = w[c][off + i];
@@ -645,6 +685,12 @@ void Engine::runStage(uint8_t stage, double* const* w, uint32_t outCh, uint32_t 
                     auto& so = band.oldState[c];
                     for (size_t k = 0; k < band.oldCoeffs.size(); ++k) yo = dsp::svfTick(band.oldCoeffs[k], so[k], yo);
                     y = yo + a * (y - yo);
+                }
+                if (dynamic) {
+                    double yd = x;
+                    auto& sd = dy.state[c];
+                    for (size_t k = 0; k < dy.coeffs.size(); ++k) yd = dsp::svfTick(dy.coeffs[k], sd[k], yd);
+                    y += wd * (yd - y);
                 }
                 w[c][off + i] = wet == 1.0 ? y : x + wet * (y - x);
             }
@@ -718,6 +764,8 @@ void Engine::process(const float* const* in, uint32_t numIn, float* const* out, 
     const bool snap = pendingSnap_;
     pendingSnap_ = false;
     soloInPiece_ = false;
+    pieceSc_ = sc;
+    pieceNumSc_ = sc ? std::min(numSc, kMaxChannels) : 0;
     while (s < end) {
         if (first || s % readInterval_ == 0) {
             readBands(s, first, numOut, first && snap);
@@ -729,6 +777,7 @@ void Engine::process(const float* const* in, uint32_t numIn, float* const* out, 
         const uint32_t off = static_cast<uint32_t>(s - pos_);
         const uint32_t n = static_cast<uint32_t>(subEnd - s);
         runSolo(dry, outCh, off, n);
+        runDynamics(w, sc, pieceNumSc_, outCh, off, n);  // w is still the input here
         runStage(0, w, outCh, off, n);
         // The M/S stage, with encode and decode inserted only while a Mid or Side band is
         // audible (area 03 R3). The round trip is exact to rounding, so insertion cannot click.
@@ -820,17 +869,208 @@ void Engine::process(const float* const* in, uint32_t numIn, float* const* out, 
     }
     for (uint32_t c = kMaxChannels; c < numOut; ++c)
         if (out[c]) std::fill(out[c], out[c] + frames, 0.0f);
+    for (int b = 0; b < params::kBandCount; ++b) {  // signed dynamic gain change (area 11 R5, area 14 R12)
+        const auto& d = bands_[static_cast<size_t>(b)].dyn;
+        publisher_.setGainChange(b, d.on ? static_cast<float>(d.rangeDb < 0.0 ? -d.grDb : d.grDb) : 0.0f);
+    }
     publisher_.meterOutput(out, outCh, frames);
     analyzer_.write(analysis::Source::Post, out, outCh, frames);
     publisher_.advance(frames, end);
     pos_ = end;
 }
 
-// Solo audition (area 02 R14, R15; area 04 R7). Called at every parameter read. The lowest
-// soloed band that is in use is auditioned (PROVISIONAL: one band at a time). Moving the solo to
-// another band fades the audition out, switches while silent, and fades back in.
+// Side-chain filter of band b (area 06 design, area 07 R1): Band mode follows the band's region
+// (the audition mapping: band-pass with the band's Q, low-pass or high-pass at the band frequency,
+// nothing for tilts); Free mode is a high-pass at SC Low and a low-pass at SC High. Helper filters
+// (area 02 R15). Returns the section count (0 to 2).
+int Engine::sideChainSections(const params::ParameterTable& t, int b, double hz, double q, int shape, double fs,
+                              std::array<dsp::SvfCoeffs, 2>& out) noexcept {
+    const bool free = t.value(params::bandParam(b, BandField::ScMode)) >= 0.5;
+    if (free) {
+        const double lo = std::exp2(t.value(params::bandParam(b, BandField::ScLow)));
+        const double hi = std::exp2(t.value(params::bandParam(b, BandField::ScHigh)));
+        out[0] = dsp::svfCoeffs(dsp::helperHighPass(lo, fs));
+        out[1] = dsp::svfCoeffs(dsp::helperLowPass(std::max(hi, lo), fs));
+        return 2;
+    }
+    switch (dsp::auditionKind(static_cast<dsp::Shape>(shape))) {
+        case dsp::AuditionKind::BandPass: out[0] = dsp::svfCoeffs(dsp::helperBandPass(hz, std::max(q, 0.1), fs)); return 1;
+        case dsp::AuditionKind::LowPass: out[0] = dsp::svfCoeffs(dsp::helperLowPass(hz, fs)); return 1;
+        case dsp::AuditionKind::HighPass: out[0] = dsp::svfCoeffs(dsp::helperHighPass(hz, fs)); return 1;
+        case dsp::AuditionKind::Pass: break;
+    }
+    return 0;
+}
+
+// Dynamics of band b at a parameter read (area 06). f, g, q are the static design's inputs (g after
+// Gain Scale). Called for active bands only.
+void Engine::readDynamics(int b, uint64_t sample, bool reset, double f, double g, double q, int shape, int slope,
+                          uint32_t numOut) noexcept {
+    Band& band = bands_[static_cast<size_t>(b)];
+    auto& d = band.dyn;
+    const double scale = gainScale_.current() / 100.0;
+    const double range = std::clamp(field(b, rampSlot(BandField::DynRange)).ramp.current() * scale, -30.0, 30.0);
+    const bool enabled = table_.value(params::bandParam(b, BandField::DynEnabled)) >= 0.5;
+    const bool on = enabled && band.runnable && dsp::shapeHasGain(static_cast<dsp::Shape>(shape)) &&
+                    std::abs(range) > 1e-6;
+    if (!on) {
+        d.on = false;
+        return;
+    }
+    const double hz = std::exp2(f);
+    const double qv = params::qFromPosition(q);
+    if (!d.on || reset) {  // starting: from rest, the reference warms up again (area 07 R9)
+        d.core.reset();
+        d.ref.reset();
+        for (auto& ch : d.scState) ch.fill({});
+        for (auto& ch : d.state) ch.fill({});
+        for (auto& p : d.peak) p.reset();
+        d.timingKey.fill(-1.0);
+        d.kneeKey.fill(-1.0);
+        d.designed = false;
+        d.scKey.fill(-1.0);
+        d.grDb = 0.0;
+    }
+    d.on = true;
+    // Timing: Dyn Auto uses the knob-50 timing; the stored knobs are untouched (R6).
+    const bool autoThr = table_.value(params::bandParam(b, BandField::DynAuto)) >= 0.5;
+    const double ka = autoThr ? dsp::kDefaultTimingKnob : table_.value(params::bandParam(b, BandField::Attack));
+    const double kr = autoThr ? dsp::kDefaultTimingKnob : table_.value(params::bandParam(b, BandField::Release));
+    if (const std::array<double, 3> tk{ka, kr, hz}; tk != d.timingKey) {  // pow() only on change
+        d.timingKey = tk;
+        d.core.setTimes(dsp::attackSeconds(ka, hz), dsp::releaseSeconds(kr));
+    }
+    if (autoThr && !d.autoWas) d.ref.reset();  // Auto switched on: warm up (area 07 R9)
+    d.autoWas = autoThr;
+    d.autoThr = autoThr;
+    d.thresholdDb = field(b, rampSlot(BandField::Threshold)).ramp.current();
+    d.rangeDb = range;
+    const auto sh = static_cast<dsp::Shape>(shape);
+    const bool bandwise = sh == dsp::Shape::Bell || sh == dsp::Shape::Notch || sh == dsp::Shape::BandPass;
+    if (const std::array<double, 3> kk{qv, range, static_cast<double>(shape)}; kk != d.kneeKey) {
+        d.kneeKey = kk;
+        d.kneeDb = dsp::kneeWidthDb(bandwise ? dsp::bandPassOctaves(std::max(qv, 0.025)) : dsp::kShelfBandwidthOctaves,
+                                    range);
+    }
+    d.external = table_.value(params::bandParam(b, BandField::ScExternal)) >= 0.5;
+    const int placement = static_cast<int>(table_.value(params::bandParam(b, BandField::Placement)));
+    d.detect = static_cast<uint8_t>(numOut >= 2 ? (placement == 0 ? 0 : placement) : 1);
+
+    // Side-chain filter: follows the design cadence of the static band.
+    const std::array<double, 6> key = {band.dFreq, band.dQ, static_cast<double>(shape),
+                                       table_.value(params::bandParam(b, BandField::ScMode)),
+                                       table_.value(params::bandParam(b, BandField::ScLow)),
+                                       table_.value(params::bandParam(b, BandField::ScHigh))};
+    if (key != d.scKey) {
+        d.scKey = key;
+        d.scCount = static_cast<uint8_t>(
+            sideChainSections(table_, b, std::exp2(band.dFreq), params::qFromPosition(band.dQ), shape, sampleRate_, d.sc));
+        d.scBandPass = d.scCount == 1 && d.sc[0].m0 == 0.0 && d.sc[0].m2 == 0.0;
+        for (auto& p : d.peak) p.setRelease(dsp::detectorReleaseSeconds(std::exp2(band.dFreq)), sampleRate_);
+    }
+
+    // The gain + range filter, on the same cadence as the static one.
+    const double gd = std::clamp(g + range, -30.0, 30.0);
+    const bool structure = shape != d.dShape || slope != d.dSlope;
+    const bool changed = !d.designed || f != d.dFreq || gd != d.dGain || q != d.dQ || structure;
+    if (!changed) return;
+    if (d.designed && !structure && sample - d.lastDesignAt < redesignInterval_) return;
+    dsp::SvfCascade next;
+    if (dsp::designBandRealtime(bandSpecFrom({sampleRate_, f, gd, q, shape, slope}), sampleRate_, next) ==
+        dsp::RealtimeDesignResult::Unsupported) {
+        d.on = false;
+        return;
+    }
+    d.dFreq = f, d.dGain = gd, d.dQ = q, d.dShape = shape, d.dSlope = slope;
+    d.lastDesignAt = sample;
+    const size_t m = next.sections.size();
+    if (d.designed && !structure && m == d.cur.sections.size()) {  // glide over one redesign interval
+        d.goal = next;
+        d.step.sections.resize(m);
+        const double inv = 1.0 / static_cast<double>(redesignInterval_);
+        for (size_t k = 0; k < m; ++k) {
+            const auto& a = d.cur.sections[k];
+            const auto& z = next.sections[k];
+            d.step.sections[k] = {(z.g - a.g) * inv, (z.k - a.k) * inv, (z.m0 - a.m0) * inv, (z.m1 - a.m1) * inv,
+                                  (z.m2 - a.m2) * inv};
+        }
+        d.glideLeft = redesignInterval_;
+    } else {  // first design or a structure change: switch (the static band crossfades; R17)
+        // PROVISIONAL: the gain + range filter itself switches at once on a shape or slope change.
+        d.cur = d.goal = next;
+        d.glideLeft = 0;
+        d.coeffs.resize(m);
+        for (size_t k = 0; k < m; ++k) d.coeffs[k] = dsp::svfCoeffs(next.sections[k]);
+        for (auto& ch : d.state) ch.fill({});
+        d.designed = true;
+    }
+}
+
+// Detectors of every dynamic band over samples [off, off + n): side-chain level, threshold, gain
+// computer, smoothing, and the blend weight per sample (area 06, area 07 R7-R10).
+void Engine::runDynamics(const double* const* w, const float* const* sc, uint32_t numSc, uint32_t outCh,
+                         uint32_t off, uint32_t n) noexcept {
+    for (int b = 0; b < params::kBandCount; ++b) {
+        auto& d = bands_[static_cast<size_t>(b)].dyn;
+        if (!d.on) continue;
+        double* wt = dynW_.data() + static_cast<size_t>(b) * maxFrames_ + off;
+        const double cap = std::abs(d.rangeDb);
+        const double inv = 1.0 / cap;
+        const bool ext = d.external;
+        const bool haveExt = ext && sc && numSc > 0 && sc[0];
+        double gr = d.grDb;
+        for (uint32_t i = 0; i < n; ++i) {
+            double l = 0.0, r = 0.0;
+            if (!ext) {
+                l = w[0][off + i];
+                r = outCh >= 2 ? w[1][off + i] : l;
+            } else if (haveExt) {
+                l = sc[0][off + i];
+                r = numSc >= 2 && sc[1] ? sc[1][off + i] : l;
+            }
+            double a = 0.0, c = 0.0;
+            bool two = false;
+            switch (d.detect) {
+                case 0: a = l, c = r, two = true; break;  // Stereo: linked (R10)
+                case 1: a = l; break;
+                case 2: a = r; break;
+                case 3: a = 0.5 * (l + r); break;  // Mid (area 03: M/S side-chain encoder)
+                case 4: a = 0.5 * (l - r); break;  // Side
+                default: break;
+            }
+            double ea, ec = 0.0;  // side-chain envelopes
+            if (d.scBandPass) {
+                ea = dsp::svfBandEnvelope(d.sc[0], d.scState[0][0], a);
+                if (two) ec = dsp::svfBandEnvelope(d.sc[0], d.scState[1][0], c);
+            } else {
+                for (uint8_t k = 0; k < d.scCount; ++k) {
+                    a = dsp::svfTick(d.sc[k], d.scState[0][k], a);
+                    if (two) c = dsp::svfTick(d.sc[k], d.scState[1][k], c);
+                }
+                ea = std::abs(a), ec = std::abs(c);
+            }
+            double env = d.peak[0].process(ea);
+            if (two) env = std::max(env, d.peak[1].process(ec));  // linked: the louder channel (R10)
+            const double level = dsp::detectorLevelDb(env);
+            const double thr = d.autoThr ? dsp::autoThresholdDb(d.ref.process(level), d.rangeDb) : d.thresholdDb;
+            gr = d.core.process(dsp::gainComputerDb(level - thr, d.kneeDb, cap));
+            wt[i] = std::min(gr * inv, 1.0);
+        }
+        d.grDb = gr;
+    }
+}
+
+// Solo audition and Side Chain Listen (area 02 R14, R15; area 04 R7; area 06). Called at every
+// parameter read. A band with Side Chain Listen on is heard first; otherwise the lowest soloed
+// band in use is auditioned (PROVISIONAL: one band at a time). Moving the monitor to another band,
+// or between listen and solo, fades out, switches while silent, and fades back in.
 void Engine::updateSolo(uint32_t outCh, bool snap) noexcept {
     int target = -1;
+    bool listen = false;
+    for (int b = 0; b < params::kBandCount && target < 0; ++b)
+        if (table_.value(params::bandParam(b, BandField::ScListen)) >= 0.5 &&
+            table_.value(params::bandParam(b, BandField::Used)) >= 0.5)
+            target = b, listen = true;
     for (int b = 0; b < params::kBandCount && target < 0; ++b)
         if (table_.value(params::bandParam(b, BandField::Solo)) >= 0.5 &&
             table_.value(params::bandParam(b, BandField::Used)) >= 0.5)
@@ -838,11 +1078,13 @@ void Engine::updateSolo(uint32_t outCh, bool snap) noexcept {
 
     const bool silent = soloMix_.current() == 0.0 && !soloMix_.active();
     bool fresh = false;
-    if (target != soloBand_) {
+    if (target != soloBand_ || (target >= 0 && listen != soloListen_)) {
         if (silent || snap) {
             soloBand_ = target;
-            soloState_ = {};
+            soloListen_ = listen;
+            for (auto& ch : soloState_) ch.fill({});
             soloShape_ = -1;
+            soloScKey_.fill(-1.0);
             fresh = true;
             if (target < 0) soloMix_.snap(0.0);
             else if (snap) soloMix_.snap(1.0);
@@ -851,34 +1093,52 @@ void Engine::updateSolo(uint32_t outCh, bool snap) noexcept {
             soloMix_.retarget(0.0, rampSamples(soloPolicy_, 1.0, sampleRate_));
         }
     } else if (target >= 0 && soloMix_.target() != 1.0) {
-        soloMix_.retarget(1.0, rampSamples(soloPolicy_, 1.0, sampleRate_));  // soloed again while fading out
+        soloMix_.retarget(1.0, rampSamples(soloPolicy_, 1.0, sampleRate_));  // asked again while fading out
     }
     if (soloBand_ < 0) return;
 
-    // The audition design follows the band's ramped frequency and Q.
+    // The filter follows the band's ramped frequency and Q.
     const int b = soloBand_;
-    const auto shape = static_cast<dsp::Shape>(static_cast<int>(table_.value(params::bandParam(b, BandField::Shape))));
+    const int shapeI = static_cast<int>(table_.value(params::bandParam(b, BandField::Shape)));
+    const auto shape = static_cast<dsp::Shape>(shapeI);
     const double hz = std::exp2(field(b, rampSlot(BandField::Freq)).ramp.current());
-    const double q = dsp::auditionQ(params::qFromPosition(field(b, rampSlot(BandField::Q)).ramp.current()));
-    if (hz != soloHz_ || q != soloQ_ || static_cast<int>(shape) != soloShape_) {
-        soloHz_ = hz, soloQ_ = q, soloShape_ = static_cast<int>(shape);
-        soloCoeffs_ = dsp::svfCoeffs(dsp::auditionDesign(dsp::auditionKind(shape), hz, q, sampleRate_));
-    }
+    const double bandQ = params::qFromPosition(field(b, rampSlot(BandField::Q)).ramp.current());
     const int placement = static_cast<int>(table_.value(params::bandParam(b, BandField::Placement)));
     soloPlacement_ = static_cast<uint8_t>(outCh >= 2 ? placement : 0);  // mono: the one channel
-
-    // Level: Solo Gain, plus the band's boost for a boosted Bell or shelf (R14). The level moves
-    // linearly to each read's value over one read interval, so it never steps.
-    double db = soloGainDb_.current();
-    if (dsp::auditionIncludesBoost(shape))
-        db += std::max(0.0, field(b, rampSlot(BandField::Gain)).ramp.current() * gainScale_.current() / 100.0);
-    const double g = std::pow(10.0, db / 20.0);
+    double g = 1.0;
+    if (soloListen_) {
+        // Side Chain Listen: the band's side-chain filter on its side chain, at unity level.
+        soloExternal_ = table_.value(params::bandParam(b, BandField::ScExternal)) >= 0.5;
+        const std::array<double, 3> key = {table_.value(params::bandParam(b, BandField::ScMode)),
+                                           table_.value(params::bandParam(b, BandField::ScLow)),
+                                           table_.value(params::bandParam(b, BandField::ScHigh))};
+        if (hz != soloHz_ || bandQ != soloQ_ || shapeI != soloShape_ || key != soloScKey_) {
+            soloHz_ = hz, soloQ_ = bandQ, soloShape_ = shapeI, soloScKey_ = key;
+            soloCount_ = static_cast<uint8_t>(sideChainSections(table_, b, hz, bandQ, shapeI, sampleRate_, soloCoeffs_));
+        }
+    } else {
+        soloExternal_ = false;
+        const double q = dsp::auditionQ(bandQ);
+        if (hz != soloHz_ || q != soloQ_ || shapeI != soloShape_) {
+            soloHz_ = hz, soloQ_ = q, soloShape_ = shapeI;
+            soloCoeffs_[0] = dsp::svfCoeffs(dsp::auditionDesign(dsp::auditionKind(shape), hz, q, sampleRate_));
+            soloCount_ = 1;
+        }
+        // Level: Solo Gain, plus the band's boost for a boosted Bell or shelf (R14).
+        double db = soloGainDb_.current();
+        if (dsp::auditionIncludesBoost(shape))
+            db += std::max(0.0, field(b, rampSlot(BandField::Gain)).ramp.current() * gainScale_.current() / 100.0);
+        g = std::pow(10.0, db / 20.0);
+    }
+    // The level moves linearly to each read's value over one read interval, so it never steps.
     if (fresh || snap) soloLevel_.snap(g);
     else if (g != soloLevel_.target()) soloLevel_.retarget(g, readInterval_);
 }
 
-// Filters the dry input of samples [off, off + n) into the audition buffer and records the
-// mix per sample. Decodes M/S placements to L/R: Mid plays on both sides, Side as +S and -S.
+// Filters the monitor source of samples [off, off + n) into the audition buffer and records the
+// mix per sample. The source is the latency-matched dry input, or the external side chain for
+// Side Chain Listen with SC External. Decodes M/S placements to L/R: Mid plays on both sides, Side
+// as +S and -S.
 void Engine::runSolo(const double* const* dry, uint32_t outCh, uint32_t off, uint32_t n) noexcept {
     double* mix = soloMixBuf_.data() + off;
     soloGainDb_.advance(n);
@@ -889,22 +1149,34 @@ void Engine::runSolo(const double* const* dry, uint32_t outCh, uint32_t off, uin
     soloInPiece_ = true;
     double* s0 = solo_.data() + off;
     double* s1 = solo_.data() + maxFrames_ + off;
-    const double* d0 = dry[0] + off;
-    const double* d1 = dry[outCh >= 2 ? 1 : 0] + off;
+    const float* const* sc = pieceSc_;
+    const bool ext = soloExternal_ && sc && pieceNumSc_ > 0 && sc[0];
+    auto tick = [&](uint32_t ch, double v) {
+        for (uint8_t k = 0; k < soloCount_; ++k) v = dsp::svfTick(soloCoeffs_[k], soloState_[ch][k], v);
+        return v;
+    };
     for (uint32_t i = 0; i < n; ++i) {
         mix[i] = soloMix_.next();
         const double lv = soloLevel_.next();
+        double x0, x1;
+        if (soloExternal_) {
+            x0 = ext ? sc[0][off + i] : 0.0;
+            x1 = ext && pieceNumSc_ >= 2 && sc[1] ? sc[1][off + i] : x0;
+        } else {
+            x0 = dry[0][off + i];
+            x1 = dry[outCh >= 2 ? 1 : 0][off + i];
+        }
         double a = 0.0, c = 0.0;
         switch (soloPlacement_) {
             case 0:  // Stereo (and mono)
-                a = dsp::svfTick(soloCoeffs_, soloState_[0], d0[i]);
-                if (outCh >= 2) c = dsp::svfTick(soloCoeffs_, soloState_[1], d1[i]);
+                a = tick(0, x0);
+                if (outCh >= 2) c = tick(1, x1);
                 break;
-            case 1: a = dsp::svfTick(soloCoeffs_, soloState_[0], d0[i]); break;  // Left
-            case 2: c = dsp::svfTick(soloCoeffs_, soloState_[1], d1[i]); break;  // Right
-            case 3: a = c = dsp::svfTick(soloCoeffs_, soloState_[0], 0.5 * (d0[i] + d1[i])); break;  // Mid
+            case 1: a = tick(0, x0); break;  // Left
+            case 2: c = tick(1, x1); break;  // Right
+            case 3: a = c = tick(0, 0.5 * (x0 + x1)); break;  // Mid
             case 4:  // Side
-                a = dsp::svfTick(soloCoeffs_, soloState_[1], 0.5 * (d0[i] - d1[i]));
+                a = tick(1, 0.5 * (x0 - x1));
                 c = -a;
                 break;
             default: break;

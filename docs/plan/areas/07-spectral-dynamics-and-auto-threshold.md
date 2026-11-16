@@ -44,8 +44,8 @@ Am-Q's spectral dynamics runs an STFT side chain over log-spaced analysis bands 
 - [ ] Implement the preallocated log-band grid with bin weights and a frame-boundary swap (DSP lead, Phase 2)
 - [ ] Implement per-band gain computer and smoothers at frame rate, reusing the Tab 06 smoother (DSP lead, Phase 2)
 - [ ] Implement bin-gain interpolation and apply on the FFT path; report latency (DSP lead, Plugin and host engineer, Phase 2)
-- [ ] Implement the auto-threshold reference envelope with warm-up and floor, shared by both dynamics paths (DSP lead, Phase 2)
-- [ ] Implement the knee mapping from bandwidth and range (DSP lead, Phase 2)
+- [x] Implement the auto-threshold reference envelope with warm-up and floor, shared by both dynamics paths (DSP lead, Phase 2). Done on 2026-11-16 (`dsp::ReferenceEnvelope`): instant attack, 10 s release (90 % time, PROVISIONAL), a 0.25 s release for the first 0.5 s after a reset, activation or Auto switched on, a -100 dBFS floor; the threshold is the reference minus |range|, offset capped at 30 dB (`autoThresholdDb`). Tested: one-sample attack, 10 s release within ±5 %, settles within 0.5 s, holds the floor on silence and -120 dBFS noise, no gain change and finite output on silence in the engine, offset capped with Gain Scale at 200 %. The spectral path will reuse it
+- [x] Implement the knee mapping from bandwidth and range (DSP lead, Phase 2). Done on 2026-11-16 (`dsp::kneeWidthDb`): 3 dB + 1.5 dB per octave of band width + 0.2 × |range| (PROVISIONAL coefficients, tuned by listening); band width from the Q for Bell, Notch and Band Pass, 2 octaves for shelves and tilts
 - [ ] Implement the Spectral Tilt toggle and tune its slope (DSP lead, Product designer, Phase 3)
 - [ ] Add CPU benchmarks at maximum Density, full span and 24 spectral bands (Build and QA engineer, Phase 2)
 

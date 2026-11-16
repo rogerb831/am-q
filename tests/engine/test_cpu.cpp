@@ -35,9 +35,15 @@ void fill(params::ParameterTable& t, dsp::Slope slope, int placementMix) {
 }
 
 // Fraction of one core used to process `seconds` of stereo audio in 64-sample blocks.
-double load(dsp::Slope slope, int placementMix, dsp::ProcessingMode mode, bool automate, double seconds = 4.0) {
+double load(dsp::Slope slope, int placementMix, dsp::ProcessingMode mode, bool automate, double seconds = 4.0,
+            bool dynamic = false) {
     params::ParameterTable t;
     fill(t, slope, placementMix);
+    if (dynamic)
+        for (int b = 0; b < params::kBandCount; ++b) {
+            t.set(params::bandParam(b, BandField::DynEnabled), 1, ParamSource::Preset);
+            t.set(params::bandParam(b, BandField::DynRange), -6.0, ParamSource::Preset);
+        }
     t.set(params::globalParam(params::GlobalParam::Mode), static_cast<int>(mode), ParamSource::Preset);
     engine::Engine e(t);
     e.prepare(kFs, 64);
@@ -88,6 +94,8 @@ TEST_CASE("CPU report: 24 bands, 48 kHz, 64-sample blocks" * doctest::skip()) {
         {"12 dB/oct, stereo, Natural Phase, automated", dsp::Slope::Db12, 0, dsp::ProcessingMode::NaturalPhase, true},
     };
     for (const auto& r : rows) std::printf("  %-48s %6.2f %% of one core\n", r.name, 100.0 * load(r.slope, r.mix, r.mode, r.automate));
+    std::printf("  %-48s %6.2f %% of one core\n", "12 dB/oct, stereo, all 24 bands dynamic",
+                100.0 * load(dsp::Slope::Db12, 0, dsp::ProcessingMode::ZeroLatency, false, 4.0, true));
 }
 
 TEST_CASE("CPU budget: typical 24-band session within 3 % of one core (x2 margin)" * doctest::skip()) {

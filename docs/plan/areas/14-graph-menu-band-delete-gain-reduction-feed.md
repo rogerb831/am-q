@@ -38,7 +38,7 @@ Gain reduction is measured on the audio thread per band, after the dynamics dete
 - [ ] Add band panel delete and clear-dynamics controls wired to the same service (GUI engineer, Phase 2)
 - [ ] Implement clipboard copy, cut and paste of bands as JSON, with a full-set check (Plugin and host engineer, Phase 3)
 - [ ] Implement band split (Product designer to define the behaviour; DSP lead to implement) (DSP lead, Phase 3)
-- [ ] Add per-band gain-reduction measurement and snapshot publishing (DSP lead, Phase 2)
+- [x] Add per-band gain-reduction measurement and snapshot publishing (DSP lead, Phase 2). Done on 2026-11-16: every block the engine writes each band's smoothed, signed gain change (0 dB when its dynamics are off) to the gain-change snapshot (current and peak since the last read)
 - [ ] Draw gain reduction on the node and the band panel indicator (GUI engineer, Phase 2)
 - [x] Make snapshot publishing allocation-free with drop-when-full (Plugin and host engineer, Phase 1). Fixed memory; an unread frame is replaced by the next. Tested: 10 s of publishing with no reader allocates nothing
 - [ ] Evaluate the optional host gain-reduction and track-context extensions (Plugin and host engineer, Phase 3)
