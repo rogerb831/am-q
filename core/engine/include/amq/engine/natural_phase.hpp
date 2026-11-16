@@ -16,9 +16,14 @@
 // Latency is the kernel centre plus the partition: 256 + 64 = 320 samples (area 05 R2), the
 // value of dsp::latencySamples(NaturalPhase, ...).
 //
-// PROVISIONAL guard, not the area 03 R15 regularisation (Phase 2): each digital response is
-// floored relative to its own analog target before inversion, so no single ratio exceeds
-// +24 dB, and every correction entry is capped at +24 dB. No Nyquist phase taper yet. Brickwall bands (unsupported prototypes) are left out of the
+// Regularisation (area 03 R15, chosen by measurement; see the area 03 task note):
+//   1. Removable-singularity limit: where a band's digital response is below -120 dB on a bin
+//      (a zero on the bin: target and digital response are both rounding noise), the
+//      correction is the mean of the correction just either side, the limit of the ratio.
+//   2. Capped ratio: each digital response is floored relative to its own analog target before
+//      inversion, and every correction entry is capped at +24 dB (PROVISIONAL).
+//   3. Nyquist phase taper: above 0.97 Nyquist the unwrapped phase fades to 0 with a raised
+//      cosine, so the real Nyquist bin is reached without a jump (PROVISIONAL position). Brickwall bands (unsupported prototypes) are left out of the
 // correction (area 03 R16).
 //
 // Scheduling (area 04 R13). The audio thread posts a CorrectionRequest (a copy of the active
@@ -67,9 +72,18 @@ struct CorrectionKernels {
     std::array<std::array<float, kTaps>, 4> taps{};
 };
 
+// Regularisation choices (area 03 R15). The defaults are what the engine runs; the other
+// settings exist for the evaluation report in tests/engine/test_natural_phase.cpp.
+struct CorrectionOptions {
+    bool singularityLimit = true;  // take the limit where a band's zero sits on a bin
+    double taperStart = 0.97;      // Nyquist phase taper from this fraction of Nyquist; >= 1: off (PROVISIONAL, by measurement)
+};
+// A digital band response below this (-120 dB) on a bin is rounding noise: take the limit.
+inline constexpr double kSingularResponse = 1e-6;
+
 // Builds the kernels for a request. Uses the builder's FFT; one builder per thread.
 void buildCorrectionKernels(const CorrectionRequest& r, dsp::NaturalPhaseKernelBuilder& builder,
-                            CorrectionKernels& out) noexcept;
+                            CorrectionKernels& out, const CorrectionOptions& opt = {}) noexcept;
 
 class NaturalPhaseStage {
 public:

@@ -3,6 +3,26 @@
 Engineering decisions that close an open question in this plan. Newest first. Each entry
 states the decision, who made it, the evidence and what it changes.
 
+## D3 · Natural Phase kernel window: none (rectangular) (2026-11-16)
+
+**Decision (product owner, 2026-11-16):** the Natural Phase kernel uses no window (rectangular).
+Area 05 R7 gains "no window" as a candidate. Chosen from: no window (recommended), Kaiser β=2
+(the best of R7's original candidates), or keeping Hann.
+
+**Evidence:** `amq_engine_tests -tc="Natural Phase window evaluation*" --no-skip`, with the
+area 03 regularisation, over 28 bands (the 16 accuracy bands and 12 stress cases: notches on and
+off bins, deep cuts, bands near Nyquist, an all-pass, a +18 dB Q16 bell at 20.5 kHz and a +12 dB
+Q10 bell at 40 Hz) at 44.1, 48 and 96 kHz, against the analog target to 0.95 Nyquist.
+- No window: worst 0.0088 dB and 0.072 degrees; above 0.95 Nyquist within 0.024 dB.
+- Kaiser β=2: 0.054 dB; Hann 0.18 dB; Blackman-Harris 0.35 dB. Every window misses only on the
+  20.5 kHz Q16 bell at 44.1 kHz, where tapering smears a sharp correction; without that band all
+  candidates pass.
+- Once the regularisation removes the 0/0 bins, the correction is smooth: frequency sampling
+  with no window is exact at the bins and the most accurate between them.
+
+**What it changes:** `NaturalPhaseKernelBuilder::kDefaultWindow` is `Rectangular`. Area 05's
+window task is closed. The other windows stay available for later evaluations.
+
 ## D1 · Framework: CLAP-native core + clap-wrapper + Visage (2026-11-14)
 
 **Decision (product owner, 2026-11-14):** Am-Q is a CLAP-native plugin. VST3 is built from

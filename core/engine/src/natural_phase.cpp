@@ -14,6 +14,7 @@ namespace {
 
 using cd = std::complex<double>;
 using K = dsp::NaturalPhaseKernelBuilder;
+constexpr double kPi = 3.14159265358979323846;
 
 struct M2 {
     cd a, b, c, d;  // [[a, b], [c, d]]
@@ -51,7 +52,7 @@ cd cap(cd c) noexcept {
 }  // namespace
 
 void buildCorrectionKernels(const CorrectionRequest& r, dsp::NaturalPhaseKernelBuilder& builder,
-                            CorrectionKernels& out) noexcept {
+                            CorrectionKernels& out, const CorrectionOptions& opt) noexcept {
     out.id = r.id;
     const bool stereo = r.channels >= 2;
     std::array<dsp::AnalogPrototype, params::kBandCount> proto;
@@ -76,31 +77,49 @@ void buildCorrectionKernels(const CorrectionRequest& r, dsp::NaturalPhaseKernelB
         return;
     }
 
-    std::array<std::array<cd, K::kBins>, 4> corr;
-    for (int k = 0; k < K::kBins; ++k) {
-        const double hz = std::max(K::binHz(k, r.sampleRate), 1e-3);  // DC: the limit of the ratio
+    // The 2x2 correction at one frequency, and the smallest digital band response there.
+    auto correctionAt = [&](double hz, double& minD) {
         cd lrA[2] = {1.0, 1.0}, lrD[2] = {1.0, 1.0}, msA[2] = {1.0, 1.0}, msD[2] = {1.0, 1.0};
+        minD = 1e300;
         for (size_t b = 0; b < r.bands.size(); ++b) {
             if (!use[b]) continue;
             const auto& band = r.bands[b];
             const cd a = proto[b].evaluateHz(hz);
             const cd d = dsp::svfCascadeResponseHz(band.cascade, hz, r.sampleRate);
+            minD = std::min(minD, std::abs(d));
             for (int c = 0; c < 2; ++c) {
                 if (!(band.mask & (1u << c))) continue;
                 if (band.stage == 0) lrA[c] *= a, lrD[c] *= d;
                 else msA[c] *= a, msD[c] *= d;
             }
         }
-        M2 cm;
-        if (!anyMs) {
-            cm = diag(lrA[0] * inverse(lrD[0], lrA[0]), lrA[1] * inverse(lrD[1], lrA[1]));
-        } else {
-            // C = T * H^-1, H^-1 = diag(1/LRd) * Dec * diag(1/MSd) * Enc.
-            const M2 t = mul(mul(mul(kDec, diag(msA[0], msA[1])), kEnc), diag(lrA[0], lrA[1]));
-            const M2 hInv = mul(mul(mul(diag(inverse(lrD[0], lrA[0]), inverse(lrD[1], lrA[1])), kDec),
-                                    diag(inverse(msD[0], msA[0]), inverse(msD[1], msA[1]))),
-                                kEnc);
-            cm = mul(t, hInv);
+        if (!anyMs) return diag(lrA[0] * inverse(lrD[0], lrA[0]), lrA[1] * inverse(lrD[1], lrA[1]));
+        // C = T * H^-1, H^-1 = diag(1/LRd) * Dec * diag(1/MSd) * Enc.
+        const M2 t = mul(mul(mul(kDec, diag(msA[0], msA[1])), kEnc), diag(lrA[0], lrA[1]));
+        const M2 hInv = mul(mul(mul(diag(inverse(lrD[0], lrA[0]), inverse(lrD[1], lrA[1])), kDec),
+                                diag(inverse(msD[0], msA[0]), inverse(msD[1], msA[1]))),
+                            kEnc);
+        return mul(t, hInv);
+    };
+
+    std::array<std::array<cd, K::kBins>, 4> corr;
+    for (int k = 0; k < K::kBins; ++k) {
+        const double hz = std::max(K::binHz(k, r.sampleRate), 1e-3);  // DC: the limit of the ratio
+        double minD = 0.0;
+        M2 cm = correctionAt(hz, minD);
+        if (opt.singularityLimit && minD < kSingularResponse) {
+            // A band's zero sits on this bin: target and digital response are both rounding noise
+            // here, but their ratio is smooth through it (a removable singularity: matched designs
+            // put the digital zero on the analog one). Take the limit as the mean of the
+            // correction just either side, widening the step until both sides are resolvable.
+            for (double delta = 1e-4; delta <= 1.6e-2; delta *= 2.0) {
+                double lo = 0.0, hi = 0.0;
+                const M2 a = correctionAt(hz * (1.0 - delta), lo), b = correctionAt(hz * (1.0 + delta), hi);
+                if (lo >= kSingularResponse && hi >= kSingularResponse) {
+                    cm = {0.5 * (a.a + b.a), 0.5 * (a.b + b.b), 0.5 * (a.c + b.c), 0.5 * (a.d + b.d)};
+                    break;
+                }
+            }
         }
         const size_t kk = static_cast<size_t>(k);
         corr[0][kk] = cap(cm.a);
@@ -108,6 +127,38 @@ void buildCorrectionKernels(const CorrectionRequest& r, dsp::NaturalPhaseKernelB
         corr[2][kk] = anyMs ? cap(cm.c) : 0.0;
         corr[3][kk] = stereo ? cap(cm.d) : corr[0][kk];
     }
+
+    // Nyquist phase taper (area 03 R15). The digital response is real at Nyquist, the analog
+    // target is not, so the correction's phase there is arbitrary, and the builder keeps only
+    // the real part of the Nyquist bin. Above taperStart x Nyquist the unwrapped phase is scaled
+    // down to zero with a raised cosine, so the kernel sees no jump; the magnitude is kept.
+    const double nyq = 0.5 * r.sampleRate;
+    if (opt.taperStart < 1.0) {
+        const double f0 = opt.taperStart * nyq;
+        for (auto& c : corr) {
+            double prev = 0.0, unwrapped = 0.0;
+            bool started = false;
+            for (int k = 0; k < K::kBins; ++k) {
+                const double hz = K::binHz(k, r.sampleRate);
+                if (hz < f0) continue;
+                auto& v = c[static_cast<size_t>(k)];
+                const double ph = std::arg(v);
+                if (!started) {
+                    unwrapped = ph;
+                    started = true;
+                } else {
+                    double d = ph - prev;
+                    while (d > kPi) d -= 2.0 * kPi;
+                    while (d < -kPi) d += 2.0 * kPi;
+                    unwrapped += d;
+                }
+                prev = ph;
+                const double w = 0.5 * (1.0 + std::cos(kPi * (hz - f0) / (nyq - f0)));
+                v = std::polar(std::abs(v), w * unwrapped);
+            }
+        }
+    }
+
     for (int i = 0; i < 4; ++i) {
         if ((i == 1 || i == 2) && !anyMs) {
             out.taps[static_cast<size_t>(i)].fill(0.0f);

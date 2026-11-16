@@ -29,9 +29,13 @@ public:
     static constexpr int kBins = kTaps / 2 + 1;    // 257
     static constexpr int kCentre = kTaps / 2;      // analytic delay in taps (R2)
 
-    // R7 candidates. The default is chosen by measurement (area 05 window evaluation).
+    // R7 candidates. The default is chosen by measurement (area 05 window evaluation, 2026-11-16):
+    // with the area 03 regularisation the correction is smooth, so frequency sampling with no
+    // window is exact at the bins and the most accurate between them; every taper smears
+    // sharp near-Nyquist corrections (a +18 dB Q16 bell at 20.5 kHz, 44.1 kHz: 0.0024 dB with
+    // no window, 0.054 dB Kaiser b=2, 0.18 dB Hann).
     enum class Window { Rectangular, Hann, BlackmanHarris, Kaiser };
-    static constexpr Window kDefaultWindow = Window::Hann;  // PROVISIONAL until the evaluation closes
+    static constexpr Window kDefaultWindow = Window::Rectangular;
     static constexpr double kDefaultKaiserBeta = 6.0;       // PROVISIONAL
 
     explicit NaturalPhaseKernelBuilder(Window w = kDefaultWindow, double kaiserBeta = kDefaultKaiserBeta);
