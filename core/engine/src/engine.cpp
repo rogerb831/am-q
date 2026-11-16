@@ -618,6 +618,10 @@ void Engine::readBands(uint64_t sample, bool pieceStart, uint32_t numOut, bool s
                 for (auto& ch : band.state) ch.fill({});
                 band.mask = mask;
                 band.stage = stage;
+                // Reseed (area 10 ramp bank): a band coming on starts at its values, not from
+                // wherever its ramps were heading while it was silent.
+                for (int k = 0; k < static_cast<int>(kRampedBandFields.size()); ++k)
+                    field(b, k).ramp.snap(table_.value(field(b, k).index));
             } else if (stage != band.stage) {
                 // PROVISIONAL: moving a sounding band between the L/R and M/S stages restarts its
                 // state (no crossfade yet).
@@ -628,6 +632,11 @@ void Engine::readBands(uint64_t sample, bool pieceStart, uint32_t numOut, bool s
                 for (uint32_t c = 0; c < kMaxChannels; ++c)
                     if ((mask & (1u << c)) && !(band.mask & (1u << c))) band.state[c].fill({});
                 band.mask = mask;
+            }
+            if (band.designed && shape != band.dShape) {
+                // Reseed on a shape change: frequency, gain and Q mean different things per shape, so
+                // the new shape starts at its values (the structure crossfade hides the jump, R17).
+                for (int k = 0; k <= kSlotQ; ++k) field(b, k).ramp.snap(table_.value(field(b, k).index));
             }
             const double f = field(b, kSlotFreq).ramp.valueAhead(ahead);
             const double g = std::clamp(field(b, kSlotGain).ramp.valueAhead(ahead) * scale, -30.0, 30.0);  // R13

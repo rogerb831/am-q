@@ -190,3 +190,22 @@ TEST_CASE("Brickwall in Natural Phase: left out of the correction, so it is its 
     for (size_t i = 0; i + 320 < x.l.size(); ++i) worst = std::max(worst, std::abs(double(np.l[i + 320]) - zl.l[i]));
     CHECK(worst < 1e-6);
 }
+
+TEST_CASE("Ramp reseed: a band switched on starts at its values, not mid-ramp (area 10 ramp bank)") {
+    params::ParameterTable t;
+    band(t, 0, dsp::Shape::Bell, 1000, 6, 1.0, dsp::Slope::Db12);
+    t.set(params::bandParam(0, BandField::Enabled), 0, ParamSource::Preset);
+    engine::Engine e(t);
+    REQUIRE(e.prepare(kFs, 512));
+    const auto x = sine(4096, 440.0, 0.1);
+    render(e, x);
+    // While the band is off, its frequency moves; switching it on must not glide from 1 kHz.
+    t.set(params::bandParam(0, BandField::Freq), std::log2(8000.0), ParamSource::Host);
+    std::vector<float> l(64, 0.0f), r(64, 0.0f), ol(64), orr(64);
+    const float* ip[2] = {l.data(), r.data()};
+    float* op[2] = {ol.data(), orr.data()};
+    e.process(ip, 2, op, 2, 64);
+    t.set(params::bandParam(0, BandField::Enabled), 1, ParamSource::Host);
+    e.process(ip, 2, op, 2, 64);
+    CHECK(std::exp2(e.bandValue(0, BandField::Freq)) == doctest::Approx(8000.0).epsilon(1e-9));
+}
