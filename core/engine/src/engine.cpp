@@ -504,6 +504,12 @@ void Engine::readBands(uint64_t sample, bool pieceStart, uint32_t numOut, bool s
             case 4: mask = numOut >= 2 ? 2 : 0, stage = 1; break;  // Side
             default: break;
         }
+        // Speaker group (area 01 R33, area 02 R7): the band runs only on matching channels. An
+        // M/S band needs both channels of the pair.
+        const uint8_t spk = dsp::speakerMask(band.speakers, numOut >= 2 ? dsp::ChannelLayout::Stereo
+                                                                          : dsp::ChannelLayout::Mono);
+        if (stage == 1) mask = spk == 3 ? mask : 0;
+        else mask = static_cast<uint8_t>(mask & spk);
         const bool active = used && enabled && mask != 0;
 
         if (active) {

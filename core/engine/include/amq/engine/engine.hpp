@@ -50,6 +50,7 @@
 #include "amq/analysis/publisher.hpp"
 #include "amq/dsp/audition.hpp"
 #include "amq/dsp/latency.hpp"
+#include "amq/dsp/speakers.hpp"
 #include "amq/dsp/mid_side.hpp"
 #include "amq/dsp/realtime_design.hpp"
 #include "amq/engine/design_worker.hpp"
@@ -229,6 +230,8 @@ private:
         bool event = false;       // targets changed at this piece start
         uint8_t mask = 0;         // channels the band runs on (in its stage's domain)
         uint8_t stage = 0;        // 0 = L/R stage, 1 = M/S stage (area 03 R4)
+        // Speaker group (area 01 R33): All in v1; the bandNN.speakers id stays reserved.
+        dsp::SpeakerGroup speakers = dsp::SpeakerGroup::All;
         double dFreq = 0.0, dGain = 0.0, dQ = 0.0;  // inputs of the current design
         int dShape = -1, dSlope = -1;
         uint64_t lastDesignAt = 0;
