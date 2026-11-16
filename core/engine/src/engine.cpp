@@ -50,6 +50,8 @@ Engine::Engine(const params::ParameterTable& table) noexcept : table_(table) {
     wetPolicy_ = {kEnableFadeMs, kEnableFadeMs, 2.0, true};
     bypassPolicy_ = {kBypassFadeMs, kBypassFadeMs, 2.0, true};
     fadePolicy_ = {kModeFadeMs, kModeFadeMs, 2.0, true};
+    soloPolicy_ = {kSoloFadeMs, kSoloFadeMs, 2.0, true};
+    soloGainPolicy_ = {20.0, 5.0, 40.0};  // dB
     fade_.snap(1.0);
     snapToTable();
     pendingSnap_ = false;
@@ -70,6 +72,8 @@ bool Engine::prepare(double sampleRate, uint32_t maxFrames) noexcept {
     analyzer_.stop();  // it writes publisher_'s spectra; nothing may run while we prepare
     try {
         work_.assign(static_cast<size_t>(kMaxChannels) * maxFrames, 0.0);
+        solo_.assign(static_cast<size_t>(kMaxChannels) * maxFrames, 0.0);
+        soloMixBuf_.assign(maxFrames, 0.0);
         if (!analyzerSubscribed_) {
             analyzer_.subscribe(&display_, analysis::kAllSources, analysis::SizeChoice::Display);
             analyzerSubscribed_ = true;
@@ -111,6 +115,11 @@ bool Engine::prepare(double sampleRate, uint32_t maxFrames) noexcept {
     } catch (...) {
         return false;
     }
+    // The audition starts clean; a band soloed already is heard at once (snap in the first piece).
+    soloBand_ = -1;
+    soloMix_.snap(0.0);
+    soloState_ = {};
+    soloShape_ = -1;
     // After a fade-out for a mode change, fade back in; any other activation starts at full level.
     silentSamples_ = 0;
     gaveUpMode_ = -1;
@@ -191,6 +200,7 @@ void Engine::snapToTable() noexcept {
     pan_.snap(table_.value(params::globalParam(GlobalParam::OutputPan)));
     panMode_.snap(table_.value(params::globalParam(GlobalParam::PanMode)) >= 0.5 ? 1.0 : 0.0);
     polarity_.snap(table_.value(params::globalParam(GlobalParam::Invert)) >= 0.5 ? -1.0 : 1.0);
+    soloGainDb_.snap(table_.value(params::globalParam(GlobalParam::SoloGain)));
     bypass_.snap(table_.value(params::globalParam(GlobalParam::Bypass)) >= 0.5 ? 1.0 : 0.0);
     for (auto& b : bands_) b.event = true;
     pendingSnap_ = true;
@@ -256,6 +266,10 @@ void Engine::retargetAll() noexcept {
         const double len = std::abs(pm - panMode_.current()) * kPanModeFadeMs * 1e-3 * sampleRate_;
         panMode_.retarget(pm, static_cast<uint32_t>(std::lround(len)));
     }
+
+    const double sg = table_.value(params::globalParam(GlobalParam::SoloGain));
+    if (sg != soloGainDb_.target())
+        soloGainDb_.retarget(sg, rampSamples(soloGainPolicy_, sg - soloGainDb_.current(), sampleRate_));
 
     const double pol = table_.value(params::globalParam(GlobalParam::Invert)) >= 0.5 ? -1.0 : 1.0;
     const double byp = table_.value(params::globalParam(GlobalParam::Bypass)) >= 0.5 ? 1.0 : 0.0;
@@ -623,15 +637,18 @@ void Engine::process(const float* const* in, uint32_t numIn, float* const* out, 
     bool first = true;
     const bool snap = pendingSnap_;
     pendingSnap_ = false;
+    soloInPiece_ = false;
     while (s < end) {
         if (first || s % readInterval_ == 0) {
             readBands(s, first, numOut, first && snap);
             if (activeMode_ == dsp::ProcessingMode::NaturalPhase) scheduleKernel(s, outCh);
+            updateSolo(outCh, first && snap);
         }
         first = false;
         const uint64_t subEnd = std::min(end, (s / readInterval_ + 1) * readInterval_);
         const uint32_t off = static_cast<uint32_t>(s - pos_);
         const uint32_t n = static_cast<uint32_t>(subEnd - s);
+        runSolo(dry, outCh, off, n);
         runStage(0, w, outCh, off, n);
         // The M/S stage, with encode and decode inserted only while a Mid or Side band is
         // audible (area 03 R3). The round trip is exact to rounding, so insertion cannot click.
@@ -677,14 +694,27 @@ void Engine::process(const float* const* in, uint32_t numIn, float* const* out, 
                 gl *= b1 + h, gr *= b2 - h, x = -g * h;
             }
         }
+        // Solo audition: crossfade to the audition signal, which has its own level and decode
+        // and skips the Level / Pan / Invert node (area 02 R14, area 04 R7).
         // Global bypass: crossfade to the delayed dry input; fully bypassed it is the dry input
-        // exactly (area 01 R6, area 02 R2). Then the mode-change fade (area 02 R13).
+        // exactly (area 01 R6, area 02 R2); bypass wins over solo. Then the mode-change fade
+        // (area 02 R13).
         const double m = bypass_.next();
         const double fz = fade_.next();
         double yl = w[0][i] * gl, yr = stereo ? w[1][i] * gr : 0.0;
         if (x != 0.0) {
             const double l = w[0][i], r = w[1][i];
             yl += x * r, yr += x * l;
+        }
+        if (soloInPiece_) {
+            const double sm = soloMixBuf_[i];
+            if (sm == 1.0) {
+                yl = solo_[i];
+                if (stereo) yr = solo_[maxFrames_ + i];
+            } else if (sm != 0.0) {
+                yl += sm * (solo_[i] - yl);
+                if (stereo) yr += sm * (solo_[maxFrames_ + i] - yr);
+            }
         }
         if (m == 1.0) {
             yl = dry[0][i];
@@ -714,6 +744,94 @@ void Engine::process(const float* const* in, uint32_t numIn, float* const* out, 
     analyzer_.write(analysis::Source::Post, out, outCh, frames);
     publisher_.advance(frames, end);
     pos_ = end;
+}
+
+// Solo audition (area 02 R14, R15; area 04 R7). Called at every parameter read. The lowest
+// soloed band that is in use is auditioned (PROVISIONAL: one band at a time). Moving the solo to
+// another band fades the audition out, switches while silent, and fades back in.
+void Engine::updateSolo(uint32_t outCh, bool snap) noexcept {
+    int target = -1;
+    for (int b = 0; b < params::kBandCount && target < 0; ++b)
+        if (table_.value(params::bandParam(b, BandField::Solo)) >= 0.5 &&
+            table_.value(params::bandParam(b, BandField::Used)) >= 0.5)
+            target = b;
+
+    const bool silent = soloMix_.current() == 0.0 && !soloMix_.active();
+    bool fresh = false;
+    if (target != soloBand_) {
+        if (silent || snap) {
+            soloBand_ = target;
+            soloState_ = {};
+            soloShape_ = -1;
+            fresh = true;
+            if (target < 0) soloMix_.snap(0.0);
+            else if (snap) soloMix_.snap(1.0);
+            else soloMix_.retarget(1.0, rampSamples(soloPolicy_, 1.0, sampleRate_));
+        } else if (soloMix_.target() != 0.0) {
+            soloMix_.retarget(0.0, rampSamples(soloPolicy_, 1.0, sampleRate_));
+        }
+    } else if (target >= 0 && soloMix_.target() != 1.0) {
+        soloMix_.retarget(1.0, rampSamples(soloPolicy_, 1.0, sampleRate_));  // soloed again while fading out
+    }
+    if (soloBand_ < 0) return;
+
+    // The audition design follows the band's ramped frequency and Q.
+    const int b = soloBand_;
+    const auto shape = static_cast<dsp::Shape>(static_cast<int>(table_.value(params::bandParam(b, BandField::Shape))));
+    const double hz = std::exp2(field(b, rampSlot(BandField::Freq)).ramp.current());
+    const double q = dsp::auditionQ(params::qFromPosition(field(b, rampSlot(BandField::Q)).ramp.current()));
+    if (hz != soloHz_ || q != soloQ_ || static_cast<int>(shape) != soloShape_) {
+        soloHz_ = hz, soloQ_ = q, soloShape_ = static_cast<int>(shape);
+        soloCoeffs_ = dsp::svfCoeffs(dsp::auditionDesign(dsp::auditionKind(shape), hz, q, sampleRate_));
+    }
+    const int placement = static_cast<int>(table_.value(params::bandParam(b, BandField::Placement)));
+    soloPlacement_ = static_cast<uint8_t>(outCh >= 2 ? placement : 0);  // mono: the one channel
+
+    // Level: Solo Gain, plus the band's boost for a boosted Bell or shelf (R14). The level moves
+    // linearly to each read's value over one read interval, so it never steps.
+    double db = soloGainDb_.current();
+    if (dsp::auditionIncludesBoost(shape))
+        db += std::max(0.0, field(b, rampSlot(BandField::Gain)).ramp.current() * gainScale_.current() / 100.0);
+    const double g = std::pow(10.0, db / 20.0);
+    if (fresh || snap) soloLevel_.snap(g);
+    else if (g != soloLevel_.target()) soloLevel_.retarget(g, readInterval_);
+}
+
+// Filters the dry input of samples [off, off + n) into the audition buffer and records the
+// mix per sample. Decodes M/S placements to L/R: Mid plays on both sides, Side as +S and -S.
+void Engine::runSolo(const double* const* dry, uint32_t outCh, uint32_t off, uint32_t n) noexcept {
+    double* mix = soloMixBuf_.data() + off;
+    soloGainDb_.advance(n);
+    if (soloBand_ < 0) {
+        std::fill(mix, mix + n, 0.0);
+        return;
+    }
+    soloInPiece_ = true;
+    double* s0 = solo_.data() + off;
+    double* s1 = solo_.data() + maxFrames_ + off;
+    const double* d0 = dry[0] + off;
+    const double* d1 = dry[outCh >= 2 ? 1 : 0] + off;
+    for (uint32_t i = 0; i < n; ++i) {
+        mix[i] = soloMix_.next();
+        const double lv = soloLevel_.next();
+        double a = 0.0, c = 0.0;
+        switch (soloPlacement_) {
+            case 0:  // Stereo (and mono)
+                a = dsp::svfTick(soloCoeffs_, soloState_[0], d0[i]);
+                if (outCh >= 2) c = dsp::svfTick(soloCoeffs_, soloState_[1], d1[i]);
+                break;
+            case 1: a = dsp::svfTick(soloCoeffs_, soloState_[0], d0[i]); break;  // Left
+            case 2: c = dsp::svfTick(soloCoeffs_, soloState_[1], d1[i]); break;  // Right
+            case 3: a = c = dsp::svfTick(soloCoeffs_, soloState_[0], 0.5 * (d0[i] + d1[i])); break;  // Mid
+            case 4:  // Side
+                a = dsp::svfTick(soloCoeffs_, soloState_[1], 0.5 * (d0[i] - d1[i]));
+                c = -a;
+                break;
+            default: break;
+        }
+        s0[i] = a * lv;
+        s1[i] = c * lv;
+    }
 }
 
 double Engine::bandValue(int band, BandField f) const noexcept {

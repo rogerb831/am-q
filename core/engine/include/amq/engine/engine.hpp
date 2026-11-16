@@ -48,6 +48,7 @@
 #include "amq/analysis/analyzer.hpp"
 #include "amq/analysis/display_spectrum.hpp"
 #include "amq/analysis/publisher.hpp"
+#include "amq/dsp/audition.hpp"
 #include "amq/dsp/latency.hpp"
 #include "amq/dsp/mid_side.hpp"
 #include "amq/dsp/realtime_design.hpp"
@@ -74,6 +75,7 @@ inline constexpr double kRefineSwapDelayMs = 50.0; // PROVISIONAL: swap a refine
 inline constexpr double kRefineGlideMs = 20.0;     // PROVISIONAL: glide from the fast to the refined design
 inline constexpr double kBypassFadeMs = 20.0;      // PROVISIONAL: global bypass crossfade (90 % time)
 inline constexpr double kPanModeFadeMs = 20.0;     // area 04 R4 initial value: Pan Mode crossfade (whole length)
+inline constexpr double kSoloFadeMs = 20.0;        // PROVISIONAL: crossfade into and out of the solo audition (90 % time)
 inline constexpr double kModeFadeMs = 10.0;        // PROVISIONAL: fade out / in around a mode change (area 02 open question)
 inline constexpr double kRestartWaitMs = 1000.0;   // PROVISIONAL: silent wait for the host's restart before fading back in
 
@@ -151,6 +153,9 @@ public:
     [[nodiscard]] double bypassMix() const noexcept { return bypass_.current(); }
     // Output Pan Mode mix: 0 = L/R graph, 1 = M/S graph, in between while crossfading.
     [[nodiscard]] double panModeMix() const noexcept { return panMode_.current(); }
+    // Solo audition (area 02 R14): the band being auditioned (-1: none) and the audition mix.
+    [[nodiscard]] int soloBand() const noexcept { return soloBand_; }
+    [[nodiscard]] double soloMix() const noexcept { return soloMix_.current(); }
     [[nodiscard]] double modeFadeGain() const noexcept { return fade_.current(); }
     // Natural Phase kernel sets handed to the convolvers since prepare (tests).
     [[nodiscard]] uint64_t kernelSwaps() const noexcept { return np_.swaps(); }
@@ -237,6 +242,8 @@ private:
     static void dropIdentitySections(Band& band) noexcept;
     void refineStep(int b, uint64_t sample) noexcept;
     void fillCorrectionRequest(uint32_t channels) noexcept;
+    void updateSolo(uint32_t outCh, bool snap) noexcept;
+    void runSolo(const double* const* dry, uint32_t outCh, uint32_t off, uint32_t n) noexcept;
     void scheduleKernel(uint64_t sample, uint32_t channels) noexcept;
 
     const params::ParameterTable& table_;
@@ -263,6 +270,24 @@ private:
     std::array<Field, params::kBandCount * kRampedBandFields.size()> fields_{};
     std::array<Band, params::kBandCount> bands_{};
     std::vector<double> work_;  // kMaxChannels * maxFrames, allocated in prepare()
+
+    // Solo audition (area 02 R14, area 04 R7). The audition filters the latency-matched dry
+    // input (the bypass dry path), decodes M/S-placed bands to L/R on its own, and replaces the
+    // output through soloMix_. Switching to another band fades out, switches, and fades in.
+    std::vector<double> solo_;        // kMaxChannels * maxFrames: audition signal of this piece
+    std::vector<double> soloMixBuf_;  // maxFrames: the audition mix per sample of this piece
+    bool soloInPiece_ = false;        // the audition ran in this piece
+    int soloBand_ = -1;               // band auditioned now
+    uint8_t soloPlacement_ = 0;
+    dsp::SvfCoeffs soloCoeffs_;
+    std::array<dsp::SvfState, kMaxChannels> soloState_{};
+    double soloHz_ = -1.0, soloQ_ = -1.0;  // inputs of the current audition design
+    int soloShape_ = -1;
+    LinearRamp soloMix_;     // 0 = normal output, 1 = audition
+    RampPolicy soloPolicy_;
+    LinearRamp soloLevel_;   // audition gain: Solo Gain and the band's boost
+    LinearRamp soloGainDb_;  // Solo Gain, dB
+    RampPolicy soloGainPolicy_;
 
     // Natural Phase (natural_phase.hpp). npDirty_ is set whenever a band's running design or
     // audibility changes; scheduleKernel() posts at most every npInterval_ samples.
