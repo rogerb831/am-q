@@ -53,6 +53,7 @@ Engine::Engine(const params::ParameterTable& table) noexcept : table_(table) {
     soloPolicy_ = {kSoloFadeMs, kSoloFadeMs, 2.0, true};
     soloGainPolicy_ = {20.0, 5.0, 40.0};  // dB
     fade_.snap(1.0);
+    autoGain_.snap(1.0);
     for (auto& b : bands_) b.xfade.snap(1.0);
     snapToTable();
     pendingSnap_ = false;
@@ -144,6 +145,13 @@ bool Engine::prepare(double sampleRate, uint32_t maxFrames) noexcept {
         b.dyn.designed = false;
         b.dyn.grDb = 0.0;
     }
+    // Auto Gain starts from unity; the first piece computes it (offline at once, else on the worker).
+    ag_.prepare();
+    autoGain_.snap(1.0);
+    agSeen_ = 0;
+    agDirty_ = true;
+    agPosted_ = false;
+    agWasOn_ = false;
     // The audition starts clean; a band soloed already is heard at once (snap in the first piece).
     soloBand_ = -1;
     soloMix_.snap(0.0);
@@ -163,6 +171,7 @@ bool Engine::prepare(double sampleRate, uint32_t maxFrames) noexcept {
         analyzer_.start();
         if (activeMode_ == dsp::ProcessingMode::NaturalPhase) np_.startWorker();
         if (activeMode_ == dsp::ProcessingMode::LinearPhase) lp_.startWorker();
+        ag_.startWorker();
     }
     rampClock_ = 0;  // ramps are snapped, so nothing moved; sample 0 is read again in process()
     // The channel layout is known only in process(): its first read snaps each band on or off
@@ -178,6 +187,7 @@ void Engine::release() noexcept {
     analyzer_.stop();
     np_.stopWorker();
     lp_.stopWorker();
+    ag_.stopWorker();
 }
 
 dsp::ProcessingMode Engine::requestedMode() const noexcept {
@@ -221,7 +231,7 @@ void Engine::fillCorrectionRequest(uint32_t channels) noexcept {
 void Engine::scheduleKernel(uint64_t sample, uint32_t channels) noexcept {
     if (channels != npChannels_) {
         npChannels_ = channels;
-        npDirty_ = true;
+        npDirty_ = agDirty_ = true;
     }
     if (!npDirty_) return;
     if (npPosted_ && sample < npLastPost_ + npInterval_) return;  // rate limit (area 04 R13)
@@ -240,6 +250,28 @@ void Engine::scheduleKernel(uint64_t sample, uint32_t channels) noexcept {
     npPosted_ = true;
     npLastPost_ = sample;
     ++stats_.kernelRequests;
+}
+
+// Auto Gain requests (area 03 R8): like the Natural Phase kernels, posted when a band's design or
+// audibility changes, at most every npInterval_ samples, only while Auto Gain is on.
+void Engine::scheduleAutoGain(uint64_t sample, uint32_t channels) noexcept {
+    const bool on = table_.value(params::globalParam(GlobalParam::AutoGain)) >= 0.5;
+    if (on && !agWasOn_) agDirty_ = true;
+    agWasOn_ = on;
+    if (!on) return;
+    if (channels != agChannels_) {
+        agChannels_ = channels;
+        agDirty_ = true;
+    }
+    if (!agDirty_) return;
+    if (agPosted_ && sample < agLastPost_ + npInterval_) return;
+    fillCorrectionRequest(channels);
+    npRequest_.id = ++agNextId_;
+    if (offline_.load(std::memory_order_relaxed)) ag_.computeNow(npRequest_);
+    else ag_.post(npRequest_);
+    agDirty_ = false;
+    agPosted_ = true;
+    agLastPost_ = sample;
 }
 
 void Engine::resetBandStates() noexcept {
@@ -322,6 +354,19 @@ void Engine::retargetAll() noexcept {
         panMode_.retarget(pm, static_cast<uint32_t>(std::lround(len)));
     }
 
+    // Auto Gain: ramp to the latest make-up gain; off, back to exactly 1 (area 03 R7, R8).
+    {
+        double agDb = 0.0;
+        const bool on = table_.value(params::globalParam(GlobalParam::AutoGain)) >= 0.5;
+        uint64_t seen = agSeen_;
+        if (ag_.result(seen, agDb)) {
+            agSeen_ = seen;
+            agTargetDb_ = agDb;
+        }
+        const double target = on ? std::pow(10.0, agTargetDb_ / 20.0) : 1.0;
+        if (target != autoGain_.target())
+            autoGain_.retarget(target, static_cast<uint32_t>(std::lround(kAutoGainRampMs * 1e-3 * sampleRate_)));
+    }
     const double sg = table_.value(params::globalParam(GlobalParam::SoloGain));
     if (sg != soloGainDb_.target())
         soloGainDb_.retarget(sg, rampSamples(soloGainPolicy_, sg - soloGainDb_.current(), sampleRate_));
@@ -343,7 +388,7 @@ void Engine::designBand(int b, uint64_t sample, double freqLog2, double gainDb, 
                         int slope, bool hardSwitch) noexcept {
     Band& band = bands_[static_cast<size_t>(b)];
     const int oldShape = band.dShape, oldSlope = band.dSlope;
-    npDirty_ = true;  // the Natural Phase correction follows every design
+    npDirty_ = agDirty_ = true;  // the Natural Phase correction follows every design
     dsp::SvfCascade next;
     const auto res = dsp::designBandRealtime(bandSpecFrom({sampleRate_, freqLog2, gainDb, qPos, shape, slope}),
                                              sampleRate_, next);
@@ -403,7 +448,7 @@ double sectionDistance(const dsp::SvfParams& a, const dsp::SvfParams& b) noexcep
 }  // namespace
 
 void Engine::startGlide(Band& band, const dsp::SvfCascade& next, uint32_t samples, bool byProximity) noexcept {
-    npDirty_ = true;
+    npDirty_ = agDirty_ = true;
     const size_t nc = band.cur.sections.size(), nn = next.sections.size();
     const size_t m = std::max(nc, nn);
     dsp::SvfCascade target;
@@ -615,7 +660,7 @@ void Engine::readBands(uint64_t sample, bool pieceStart, uint32_t numOut, bool s
         const auto seen = static_cast<uint8_t>((target == 1.0 ? 1u : 0u) | (band.mask << 1) | (band.stage << 3));
         if (seen != npSeen_[static_cast<size_t>(b)]) {
             npSeen_[static_cast<size_t>(b)] = seen;
-            npDirty_ = true;
+            npDirty_ = agDirty_ = true;
         }
     }
 }
@@ -824,6 +869,7 @@ void Engine::process(const float* const* in, uint32_t numIn, float* const* out, 
             readBands(s, first, numOut, first && snap);
             if (activeMode_ != dsp::ProcessingMode::ZeroLatency) scheduleKernel(s, outCh);
             updateSolo(outCh, first && snap);
+            scheduleAutoGain(s, outCh);
         }
         first = false;
         const uint64_t subEnd = std::min(end, (s / readInterval_ + 1) * readInterval_);
@@ -869,7 +915,7 @@ void Engine::process(const float* const* in, uint32_t numIn, float* const* out, 
     // scale both components alike, so they are the same in both modes (R5). Mono: no pan (R8).
     const bool stereo = outCh >= 2;
     for (uint32_t i = 0; i < frames; ++i) {
-        const double g = levelGain_.next() * polarity_.next();
+        const double g = levelGain_.next() * polarity_.next() * autoGain_.next();
         const double p = pan_.next();
         const double a = panMode_.next();
         double gl = g, gr = g, x = 0.0;  // x: cross term L -> R and R -> L

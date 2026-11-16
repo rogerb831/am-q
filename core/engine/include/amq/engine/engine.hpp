@@ -53,7 +53,9 @@
 // switching the spectral path on or off restarts the host like a mode change; until the restart,
 // and in Linear Phase, a spectral band runs the IIR dynamic blend.
 //
-// Not yet (later tasks): Auto Gain.
+// Auto Gain (auto_gain.hpp; area 03 R7-R9, area 05 R9-R13): with global.autoGain on, a worker
+// derives a make-up gain from the active bands' combined static response; the output node ramps to
+// it over kAutoGainRampMs before Level. Off, the gain is exactly 1.
 //
 // Threading: prepare() and release() on the main thread while not processing; process(),
 // snapToTable() and the read accessors on the audio thread. process() never allocates, locks
@@ -69,6 +71,7 @@
 #include "amq/dsp/mid_side.hpp"
 #include "amq/dsp/realtime_design.hpp"
 #include "amq/engine/design_worker.hpp"
+#include "amq/engine/auto_gain.hpp"
 #include "amq/engine/linear_phase.hpp"
 #include "amq/engine/natural_phase.hpp"
 #include "amq/engine/spectral.hpp"
@@ -145,7 +148,10 @@ public:
     // Manual mode: run the analyzer over the audio tapped so far (test thread).
     uint64_t runAnalyzerForTests() noexcept { return analyzer_.runPending(); }
     // Manual mode: build the outstanding Natural Phase kernel request (test thread).
-    int runKernelJobsForTests() { return np_.runPending() + lp_.runPending(); }
+    int runKernelJobsForTests() { return np_.runPending() + lp_.runPending() + ag_.runPending(); }
+    // Auto Gain: the make-up gain applied now, in dB (0 when off and settled).
+    [[nodiscard]] double autoGainDb() const noexcept { return 20.0 * std::log10(autoGain_.current()); }
+    [[nodiscard]] uint64_t autoGainRecomputes() const noexcept { return ag_.recomputes(); }
 
     // Allocates the work buffers (main thread). Returns false, and the engine outputs silence,
     // for an unsupported sample rate. Ramps and filters are seeded from the current table
@@ -335,6 +341,7 @@ private:
     void updateSolo(uint32_t outCh, bool snap) noexcept;
     void runSolo(const double* const* dry, uint32_t outCh, uint32_t off, uint32_t n) noexcept;
     void scheduleKernel(uint64_t sample, uint32_t channels) noexcept;
+    void scheduleAutoGain(uint64_t sample, uint32_t channels) noexcept;
     void readDynamics(int b, uint64_t sample, bool reset, double f, double g, double q, int shape, int slope,
                       uint32_t numOut) noexcept;
     void runDynamics(const double* const* w, const float* const* sc, uint32_t numSc, uint32_t outCh, uint32_t off,
@@ -400,6 +407,12 @@ private:
     dsp::ProcessingMode activeMode_ = dsp::ProcessingMode::ZeroLatency;
     int activeResolution_ = 1;
     LinearPhaseStage lp_;
+    AutoGainStage ag_;
+    LinearRamp autoGain_;       // linear make-up gain
+    uint64_t agSeen_ = 0, agLastPost_ = 0, agNextId_ = 0;
+    bool agDirty_ = true, agPosted_ = false, agWasOn_ = false;
+    double agTargetDb_ = 0.0;
+    uint32_t agChannels_ = kMaxChannels;
     bool activeSpectral_ = false;
     SpectralStage spectral_;
     std::array<SpectralBandConfig, params::kBandCount> spectralCfg_{};
