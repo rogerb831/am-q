@@ -3,11 +3,12 @@
 // (docs/plan/decisions.md D1). The plugin creates it on gui.create, attaches it on
 // gui.set_parent and destroys it on gui.destroy, all on the main thread.
 //
-// Phase 1 content: the response graph (cached ground, combined curve from the parameter
-// table, band nodes) driven by GraphInteraction, and a readout of the selected band. Every
-// edit goes through the EditController (set(id, plain, GUI) with host gestures). The band panel,
-// header, footer and analyzer come with their tasks. The layout is provisional until the
-// Product designer's region map and the Legal UI review (before Phase 2).
+// Content: the response graph (cached ground, the analyzer spectra, the combined curve, band nodes
+// with selection, range handles and gain-reduction rings) driven by GraphInteraction; keys through
+// KeyDispatcher (focus first, then host fall-through); right-click band and graph menus; and the
+// band panel (BandPanel model) with output meters and analyzer toggles. Every edit goes through the
+// UndoController (set(id, plain, GUI) with host gestures; GUI edits are undoable). The layout is
+// PROVISIONAL until the Product designer's region map and the Legal UI review.
 //
 // Sizing (area 12 R16). Layout is in logical pixels. The host talks in "host units": physical
 // pixels on Windows and Linux, points on macOS (clap/ext/gui.h), so the host-unit scale is the
@@ -18,7 +19,7 @@
 // keeps its logical size and asks the host to resize it to match.
 
 #include "amq/ui/accessible.h"
-#include "amq/ui/edit_controller.hpp"
+#include "amq/ui/undo_controller.hpp"
 
 #include <cstdint>
 #include <functional>
@@ -44,7 +45,7 @@ public:
     static void constrainHostSize(uint32_t* w, uint32_t* h, double scale) noexcept;
 
     // logicalWidth/Height: the size to open at (the plugin remembers it across close/reopen).
-    explicit Editor(EditController& controller, uint32_t logicalWidth = kDefaultWidth,
+    explicit Editor(UndoController& controller, uint32_t logicalWidth = kDefaultWidth,
                     uint32_t logicalHeight = kDefaultHeight);
     ~Editor();
     Editor(const Editor&) = delete;

@@ -12,6 +12,7 @@
 #include <windows.h>
 #include <psapi.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -64,13 +65,15 @@ struct Events {
     }
 };
 
-// Graph geometry of the editor (ui/include/amq/ui/graph_model.hpp, default size, +/-12 dB).
+// Graph geometry of the editor (ui/include/amq/ui/graph_model.hpp, default size, +/-12 dB). The
+// graph fills the window above the band panel (ui/src/editor.cpp kPanelHeight).
 double kW = 1180, kH = 672;  // logical editor size; changed by the resize test
-constexpr double kLeft = 16, kRight = 56, kTop = 16, kBottom = 32, kRange = 12;
+constexpr double kLeft = 16, kRight = 56, kTop = 16, kBottom = 32, kRange = 12, kPanel = 176;
+double graphH() { return std::max(120.0, kH - kPanel); }
 double xOfHz(double hz) { return kLeft + std::log(hz / 20.0) / std::log(1000.0) * (kW - kLeft - kRight); }
 double yOfDb(double db) {
-    const double mid = kTop + 0.5 * (kH - kTop - kBottom);
-    return mid - db / kRange * 0.5 * (kH - kTop - kBottom);
+    const double mid = kTop + 0.5 * (graphH() - kTop - kBottom);
+    return mid - db / kRange * 0.5 * (graphH() - kTop - kBottom);
 }
 
 size_t privateBytes() {
