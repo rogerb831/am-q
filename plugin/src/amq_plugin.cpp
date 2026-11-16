@@ -125,11 +125,20 @@ bool AmqPlugin::activate(double sampleRate, uint32_t, uint32_t maxFrames) noexce
     }
     engine_.prepare(sampleRate, maxFrames);  // unsupported rates give safe silence (area 02 R3)
     snapPending_.store(false);
-    // Latency may only change during activate (CLAP latency extension). The engine reports the
-    // latency of what it runs, from the latency function (area 02 R9, R12).
+    restartRequested_.store(false);
+    // Latency may only change during activate (CLAP latency extension). The engine latches the
+    // processing mode in prepare() and reports the latency of what it runs (area 02 R9, R12).
     const uint32_t wanted = engine_.latencySamples();
     if (latency_.exchange(wanted) != wanted && _host.canUseLatency()) _host.latencyChanged();
     return true;
+}
+
+// A processing-mode change changes the latency, which may only be reported during activate:
+// ask the host to deactivate and reactivate the plugin (area 02 R13). clap-wrapper turns this
+// into restartComponent(kLatencyChanged) for VST3. request_restart is thread-safe.
+// PROVISIONAL: no fade out before the restart yet (area 02 R13 fades).
+void AmqPlugin::requestRestartIfNeeded() noexcept {
+    if (engine_.restartNeeded() && !restartRequested_.exchange(true)) _host.requestRestart();
 }
 
 void AmqPlugin::deactivate() noexcept { engine_.release(); }
@@ -224,6 +233,7 @@ clap_process_status AmqPlugin::process(const clap_process* p) noexcept {
     }
     while (ei < ne) applyEvent(evs->get(evs, ei++));  // events at or after the block end
     if (ne) requestGuiRefresh();
+    requestRestartIfNeeded();
 
     if (out64) {
         for (uint32_t c = 0; c < numOut; ++c)
@@ -307,6 +317,7 @@ void AmqPlugin::paramsFlush(const clap_input_events* in, const clap_output_event
     const uint32_t n = in->size(in);
     for (uint32_t i = 0; i < n; ++i) applyEvent(in->get(in, i));
     if (n) requestGuiRefresh();
+    requestRestartIfNeeded();
 }
 
 // ---------------------------------------------------------------------------
@@ -448,6 +459,7 @@ bool AmqPlugin::stateLoad(const clap_istream* stream) noexcept {
     // block (area 09 R15, area 21 R14) is the batch-load task.
     for (params::ParamIndex i = 0; i < params::kParamCount; ++i) table_.set(i, next[i], params::ParamSource::Preset);
     snapPending_.store(true);  // the audio thread jumps its ramps to the restored values
+    requestRestartIfNeeded();  // a restored state may hold another processing mode
     if (onMainThreadNow()) {
         if (_host.canUseParams()) _host.paramsRescan(CLAP_PARAM_RESCAN_VALUES);
         table_.dispatchNotifications();

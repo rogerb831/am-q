@@ -17,7 +17,13 @@
 //      runs on a channel only when used, enabled and its placement matches; turning it on or
 //      off crossfades over 10 ms (area 02 R6). A band that is fully off is skipped, so it is
 //      bit-transparent.
-//   4. The output Level / Pan / Invert node (area 03 R10-R12).
+//   4. In Natural Phase, the combined 2x2 correction FIR (natural_phase.hpp; area 03 R14).
+//   5. The output Level / Pan / Invert node (area 03 R10-R12).
+//
+// Processing mode (area 02 R9, R13). The mode is latched in prepare(), because the latency
+// it implies is reported to the host at activation. Zero Latency and Natural Phase run; Linear
+// Phase is Phase 2 and runs as Zero Latency (latency 0) until then. When global.mode asks for a
+// different mode, restartNeeded() turns true and the wrapper asks the host to restart.
 //
 // Design tiers: bands are designed on the audio thread with the fast three-point design while
 // they move; once settled, the refined design (R12) comes from DesignWorker and the
@@ -38,6 +44,7 @@
 #include "amq/dsp/mid_side.hpp"
 #include "amq/dsp/realtime_design.hpp"
 #include "amq/engine/design_worker.hpp"
+#include "amq/engine/natural_phase.hpp"
 #include "amq/engine/ramp.hpp"
 #include "amq/params/parameter_table.hpp"
 
@@ -76,6 +83,7 @@ struct EngineStats {
     uint64_t refineRequests = 0;     // refined designs requested from the worker
     uint64_t refinedSwaps = 0;       // refined designs swapped in
     uint64_t refineFailures = 0;     // refined designs that could not be used
+    uint64_t kernelRequests = 0;     // Natural Phase kernel requests posted (or built offline)
 };
 
 class Engine {
@@ -84,6 +92,7 @@ public:
     ~Engine() {
         analyzer_.stop();
         worker_.stop();
+        np_.stopWorker();
     }
     Engine(const Engine&) = delete;
     Engine& operator=(const Engine&) = delete;
@@ -99,6 +108,8 @@ public:
     int runDesignJobsForTests() { return worker_.runPending(); }
     // Manual mode: run the analyzer over the audio tapped so far (test thread).
     uint64_t runAnalyzerForTests() noexcept { return analyzer_.runPending(); }
+    // Manual mode: build the outstanding Natural Phase kernel request (test thread).
+    int runKernelJobsForTests() { return np_.runPending(); }
 
     // Allocates the work buffers (main thread). Returns false, and the engine outputs silence,
     // for an unsupported sample rate. Ramps and filters are seeded from the current table
@@ -107,12 +118,20 @@ public:
     void release() noexcept;
     [[nodiscard]] bool prepared() const noexcept { return prepared_; }
     [[nodiscard]] double sampleRate() const noexcept { return sampleRate_; }
-    // The latency of the processing that actually runs (area 02 R9, R12). Only Zero Latency
-    // with no spectral band is implemented in Phase 1, so this is 0 whatever global.mode says;
-    // Phase 2 passes the active mode, resolution and spectral flag (area 21 R12).
+    // The latency of the processing that actually runs (area 02 R9, R12): the mode latched at
+    // prepare(). Spectral bands do not exist yet, so the spectral flag is false (area 21 R12).
     [[nodiscard]] uint32_t latencySamples() const noexcept {
-        return prepared_ ? dsp::latencySamples(dsp::ProcessingMode::ZeroLatency, 0, sampleRate_, false) : 0u;
+        return prepared_ ? dsp::latencySamples(activeMode_, 0, sampleRate_, false) : 0u;
     }
+    // The mode prepare() latched, and the mode the table asks for (Linear Phase maps to Zero
+    // Latency until Phase 2).
+    [[nodiscard]] dsp::ProcessingMode activeMode() const noexcept { return activeMode_; }
+    [[nodiscard]] dsp::ProcessingMode requestedMode() const noexcept;
+    // True while prepared and the table asks for another mode: the host must restart the
+    // plugin (deactivate, activate) so the new latency can be reported. Any thread.
+    [[nodiscard]] bool restartNeeded() const noexcept { return prepared_ && requestedMode() != activeMode_; }
+    // Natural Phase kernel sets handed to the convolvers since prepare (tests).
+    [[nodiscard]] uint64_t kernelSwaps() const noexcept { return np_.swaps(); }
 
     // Jump every ramp to the table value: state and preset restores apply without ramps
     // (area 09 R15). Audio thread, at a piece boundary.
@@ -193,6 +212,8 @@ private:
     void startGlide(Band& band, const dsp::SvfCascade& next, uint32_t samples, bool byProximity) noexcept;
     static void dropIdentitySections(Band& band) noexcept;
     void refineStep(int b, uint64_t sample) noexcept;
+    void fillCorrectionRequest(uint32_t channels) noexcept;
+    void scheduleKernel(uint64_t sample, uint32_t channels) noexcept;
 
     const params::ParameterTable& table_;
     analysis::SnapshotPublisher publisher_;
@@ -218,6 +239,19 @@ private:
     std::array<Field, params::kBandCount * kRampedBandFields.size()> fields_{};
     std::array<Band, params::kBandCount> bands_{};
     std::vector<double> work_;  // kMaxChannels * maxFrames, allocated in prepare()
+
+    // Natural Phase (natural_phase.hpp). npDirty_ is set whenever a band's running design or
+    // audibility changes; scheduleKernel() posts at most every npInterval_ samples.
+    dsp::ProcessingMode activeMode_ = dsp::ProcessingMode::ZeroLatency;
+    NaturalPhaseStage np_;
+    CorrectionRequest npRequest_;  // audio-thread scratch
+    bool npDirty_ = false;
+    bool npPosted_ = false;        // a request was posted since prepare
+    uint64_t npLastPost_ = 0;
+    uint64_t npInterval_ = 480;
+    uint64_t npNextId_ = 0;
+    uint32_t npChannels_ = kMaxChannels;
+    std::array<uint8_t, params::kBandCount> npSeen_{};  // per band: active | mask << 1 | stage << 3
 
     LinearRamp gainScale_;
     RampPolicy gainScalePolicy_;

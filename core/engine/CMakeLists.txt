@@ -4,7 +4,8 @@
 add_library(amq_engine STATIC
     src/band_response.cpp
     src/design_worker.cpp
-    src/engine.cpp)
+    src/engine.cpp
+    src/natural_phase.cpp)
 add_library(amq::engine ALIAS amq_engine)
 target_include_directories(amq_engine PUBLIC include)
 target_link_libraries(amq_engine PUBLIC amq::params amq::dsp amq::analysis)

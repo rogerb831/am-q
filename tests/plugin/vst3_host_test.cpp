@@ -17,8 +17,9 @@
 //     state, editor size) return correct values and leave the state intact (area 01 task:
 //     "Audit every VST3-reachable callback for any-thread safety").
 //
-// Not covered yet: the latency-change notification (restartComponent(kLatencyChanged)). Am-Q
-// reports a fixed latency of 0 in Phase 1; add the check when a processing mode can change it.
+//  8. Processing mode: automating Natural Phase reaches the host as restartComponent with
+//     kLatencyChanged; after the host restarts the component the latency is 320 and a flat
+//     impulse comes out 320 samples late (area 02 R9, R12, R13).
 //
 // Usage: amq_vst3_host_test <path to Am-Q.vst3>. Windows only for now.
 #include "pluginterfaces/gui/iplugview.h"
@@ -62,12 +63,13 @@ constexpr int32 kParamCount = 573;
 
 class Handler : public IComponentHandler {
 public:
-    int restarts = 0;
+    int restarts = 0, latencyRestarts = 0;
     tresult PLUGIN_API beginEdit(ParamID) override { return kResultOk; }
     tresult PLUGIN_API performEdit(ParamID, ParamValue) override { return kResultOk; }
     tresult PLUGIN_API endEdit(ParamID) override { return kResultOk; }
-    tresult PLUGIN_API restartComponent(int32) override {
+    tresult PLUGIN_API restartComponent(int32 flags) override {
         ++restarts;
+        if (flags & kLatencyChanged) ++latencyRestarts;
         return kResultOk;
     }
     tresult PLUGIN_API queryInterface(const TUID queried, void** obj) override {
@@ -411,6 +413,39 @@ int main(int argc, char** argv) {
         check(sizeOff && rect.getWidth() > 0 && rect.getHeight() > 0, "off-main-thread editor getSize");
         check(gainIs75(p), "off-thread setState kept Band 1 Gain at +7.50 dB");
         p.stop();
+    }
+
+    // 8. Processing mode and the latency notification.
+    {
+        Plugin q;
+        q.open(factory);
+        const ParamID modeId = q.find("Processing Mode");
+        const ParamValue np = q.norm(modeId, u"Natural Phase");
+        q.start(512);
+        const uint32 before = q.proc->getLatencySamples();
+        ParameterChanges ch;
+        addPoint(ch, modeId, 0, np);
+        q.run(noise(512, 5), noise(512, 6), &ch);
+        q.run(std::vector<float>(512, 0.0f), std::vector<float>(512, 0.0f), nullptr);
+        pump(300);  // clap-wrapper sends restartComponent from its idle timer
+        const int latencyRestarts = q.handler.latencyRestarts;
+        q.stop();   // the host's answer: restart the component
+        q.start(512);
+        const uint32 after = q.proc->getLatencySamples();
+        q.run(std::vector<float>(512, 0.0f), std::vector<float>(512, 0.0f), nullptr);
+        std::vector<float> imp(512, 0.0f);
+        imp[0] = 1.0f;
+        const auto y = q.run(imp, std::vector<float>(512, 0.0f), nullptr);
+        int peak = 0;
+        for (int i = 1; i < 512; ++i)
+            if (std::abs(y[static_cast<size_t>(i)]) > std::abs(y[static_cast<size_t>(peak)])) peak = i;
+        if (before != 0 || latencyRestarts < 1 || after != 320 || peak != 320)
+            std::printf("  latency before %u, kLatencyChanged restarts %d, after %u, impulse peak at %d\n", before,
+                        latencyRestarts, after, peak);
+        check(before == 0 && latencyRestarts >= 1, "Natural Phase automation reaches the host as restartComponent(kLatencyChanged)");
+        check(after == 320 && peak == 320 && std::abs(y[320] - 1.0f) <= 1e-6f,
+              "after the restart: latency 320, flat impulse exactly 320 samples late");
+        q.stop();
     }
 
     // Release everything that points into the module before unloading it.

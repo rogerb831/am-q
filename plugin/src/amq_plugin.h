@@ -112,6 +112,7 @@ private:
     void drainGuiEvents(const clap_output_events* out) noexcept;  // process() / flush()
     void requestGuiRefresh() noexcept;                             // audio thread
     void requestHostFlush() noexcept;                              // main thread
+    void requestRestartIfNeeded() noexcept;                        // any thread
 
     params::ParameterTable table_;
     engine::Engine engine_{table_};
@@ -123,6 +124,7 @@ private:
     std::atomic<bool> editorOpen_{false};
     std::atomic<bool> refreshRequested_{false};
     std::atomic<uint32_t> latency_{0};        // written on the main thread in activate()
+    std::atomic<bool> restartRequested_{false};  // one request_restart per mode change
     std::unique_ptr<ui::Editor> editor_;
     // Editor size, for size queries off the main thread and for reopening at the same size.
     // Written on the main thread after every editor layout.

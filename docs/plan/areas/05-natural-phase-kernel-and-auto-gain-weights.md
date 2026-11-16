@@ -66,6 +66,6 @@ Latency comes from the analytic delay of 256 taps plus the convolver partition, 
 ## Open questions
 
 - Should the Natural Phase kernel length scale with sample rate, to keep correction resolution near Nyquist at high rates? Evidence: the notch error grows from 0.43 dB at 48 kHz to 1.27 dB at 96 kHz, because the bins are 187.5 Hz apart there.
-- The all-flat null through the float convolver is −127.6 dBFS, short of the −140 dBFS baseline. When every band is flat the engine should run an exact 320-sample delay instead of the convolver (area 02 wiring, Phase 2).
+- The all-flat null through the float convolver is −127.6 dBFS when the kernel comes from `build()`, short of the −140 dBFS baseline. Partly settled (2026-11-16): with every band flat the engine loads `NaturalPhaseKernelBuilder::identity()`, and an impulse through the engine then comes out exactly (deviation 0) 320 samples late. Programme material through the float convolver has not been measured against −140 dBFS yet.
 - Is a 64-sample partition the right CPU/latency trade-off, or should we use 32?
 - Should the Auto Gain weighting treat the lowest band differently for cut filters, to avoid big boosts on high-pass curves?

@@ -88,9 +88,21 @@ bool Engine::prepare(double sampleRate, uint32_t maxFrames) noexcept {
     }
     snapToTable();  // seed from current values, never from defaults
     readBands(0, true, kMaxChannels, true);
+    // The processing mode is latched here: its latency is what activation reports (area 02 R9).
+    activeMode_ = requestedMode();
+    npDirty_ = npPosted_ = false;
+    npLastPost_ = 0;
+    npChannels_ = kMaxChannels;
+    npInterval_ = std::max<uint64_t>(1, static_cast<uint64_t>(std::llround(kKernelIntervalMs * 1e-3 * sampleRate)));
+    if (activeMode_ == dsp::ProcessingMode::NaturalPhase) {
+        fillCorrectionRequest(kMaxChannels);
+        npRequest_.id = ++npNextId_;
+        if (!np_.prepare(maxFrames, npRequest_)) return false;
+    }
     if (mode_ == DesignMode::Thread) {
         worker_.start();
         analyzer_.start();
+        if (activeMode_ == dsp::ProcessingMode::NaturalPhase) np_.startWorker();
     }
     rampClock_ = 0;  // ramps are snapped, so nothing moved; sample 0 is read again in process()
     // The channel layout is known only in process(): its first read snaps each band on or off
@@ -104,6 +116,45 @@ void Engine::release() noexcept {
     prepared_ = false;
     worker_.stop();
     analyzer_.stop();
+    np_.stopWorker();
+}
+
+dsp::ProcessingMode Engine::requestedMode() const noexcept {
+    // Linear Phase is Phase 2: until then it runs, and reports, as Zero Latency.
+    const int m = static_cast<int>(table_.value(params::globalParam(GlobalParam::Mode)));
+    return m == static_cast<int>(dsp::ProcessingMode::NaturalPhase) ? dsp::ProcessingMode::NaturalPhase
+                                                                     : dsp::ProcessingMode::ZeroLatency;
+}
+
+void Engine::fillCorrectionRequest(uint32_t channels) noexcept {
+    npRequest_.sampleRate = sampleRate_;
+    npRequest_.channels = channels;
+    for (size_t b = 0; b < bands_.size(); ++b) {
+        const Band& band = bands_[b];
+        auto& cb = npRequest_.bands[b];
+        cb.active = band.runnable && band.mask != 0 && band.wet.target() == 1.0;
+        cb.stage = band.stage;
+        cb.mask = band.mask;
+        cb.in = DesignInputs{sampleRate_, band.dFreq, band.dGain, band.dQ, band.dShape, band.dSlope};
+        cb.cascade = band.goal;  // where the running glide lands: the exact sections (area 04 R10)
+    }
+}
+
+void Engine::scheduleKernel(uint64_t sample, uint32_t channels) noexcept {
+    if (channels != npChannels_) {
+        npChannels_ = channels;
+        npDirty_ = true;
+    }
+    if (!npDirty_) return;
+    if (npPosted_ && sample < npLastPost_ + npInterval_) return;  // rate limit (area 04 R13)
+    fillCorrectionRequest(channels);
+    npRequest_.id = ++npNextId_;
+    if (offline_.load(std::memory_order_relaxed)) np_.buildNow(npRequest_);
+    else np_.post(npRequest_);
+    npDirty_ = false;
+    npPosted_ = true;
+    npLastPost_ = sample;
+    ++stats_.kernelRequests;
 }
 
 void Engine::resetBandStates() noexcept {
@@ -184,6 +235,7 @@ void Engine::designBand(int b, uint64_t sample, double freqLog2, double gainDb, 
                         int slope, bool hardSwitch) noexcept {
     Band& band = bands_[static_cast<size_t>(b)];
     const int oldShape = band.dShape, oldSlope = band.dSlope;
+    npDirty_ = true;  // the Natural Phase correction follows every design
     dsp::SvfCascade next;
     const auto res = dsp::designBandRealtime(bandSpecFrom({sampleRate_, freqLog2, gainDb, qPos, shape, slope}),
                                              sampleRate_, next);
@@ -235,6 +287,7 @@ double sectionDistance(const dsp::SvfParams& a, const dsp::SvfParams& b) noexcep
 }  // namespace
 
 void Engine::startGlide(Band& band, const dsp::SvfCascade& next, uint32_t samples, bool byProximity) noexcept {
+    npDirty_ = true;
     const size_t nc = band.cur.sections.size(), nn = next.sections.size();
     const size_t m = std::max(nc, nn);
     dsp::SvfCascade target;
@@ -426,6 +479,11 @@ void Engine::readBands(uint64_t sample, bool pieceStart, uint32_t numOut, bool s
         const double target = (active && band.runnable) ? 1.0 : 0.0;
         if (snapWet) band.wet.snap(target);
         else if (target != band.wet.target()) band.wet.retarget(target, rampSamples(wetPolicy_, 1.0, sampleRate_));
+        const auto seen = static_cast<uint8_t>((target == 1.0 ? 1u : 0u) | (band.mask << 1) | (band.stage << 3));
+        if (seen != npSeen_[static_cast<size_t>(b)]) {
+            npSeen_[static_cast<size_t>(b)] = seen;
+            npDirty_ = true;
+        }
     }
 }
 
@@ -512,7 +570,10 @@ void Engine::process(const float* const* in, uint32_t numIn, float* const* out, 
     const bool snap = pendingSnap_;
     pendingSnap_ = false;
     while (s < end) {
-        if (first || s % readInterval_ == 0) readBands(s, first, numOut, first && snap);
+        if (first || s % readInterval_ == 0) {
+            readBands(s, first, numOut, first && snap);
+            if (activeMode_ == dsp::ProcessingMode::NaturalPhase) scheduleKernel(s, outCh);
+        }
         first = false;
         const uint64_t subEnd = std::min(end, (s / readInterval_ + 1) * readInterval_);
         const uint32_t off = static_cast<uint32_t>(s - pos_);
@@ -534,6 +595,9 @@ void Engine::process(const float* const* in, uint32_t numIn, float* const* out, 
         }
         s = subEnd;
     }
+
+    // Natural Phase: the combined correction after every IIR stage (area 03 R14).
+    if (activeMode_ == dsp::ProcessingMode::NaturalPhase) np_.process(w, outCh, frames);
 
     // Level / Pan / Invert node (area 03 R10-R12). Pan is a linear balance that only
     // attenuates, in stereo L/R only; the M/S pan mode arrives with area 04.

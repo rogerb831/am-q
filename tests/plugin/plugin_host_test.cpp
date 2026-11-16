@@ -8,6 +8,9 @@
 //     shape ids pinned by a frozen state chunk (area 15 R7).
 //  6. Off-main-thread calls a wrapped VST3 host may make (latency, audio ports, params, state,
 //     GUI size) do not abort and return correct values (area 01, docs/plan/decisions.md D1).
+//  7. Processing mode: switching to Natural Phase requests one restart; after it the latency
+//     is 320, latency.changed() was called in activate, and a flat impulse comes out 320 samples
+//     late; switching back restores 0 (area 02 R9, R12, R13).
 //
 // Usage: amq_plugin_host_test <Am-Q.clap>. Windows only for now (the macOS .clap is a bundle).
 #include <clap/clap.h>
@@ -42,6 +45,7 @@ struct TestHost {
     clap_host_latency latencyExt{};
     std::thread::id mainThread = std::this_thread::get_id();
     int latencyChanged = 0;
+    int restartRequests = 0;
 
     TestHost() {
         host.clap_version = CLAP_VERSION;
@@ -56,7 +60,7 @@ struct TestHost {
             if (!std::strcmp(id, CLAP_EXT_LATENCY)) return &self->latencyExt;
             return nullptr;
         };
-        host.request_restart = [](const clap_host*) {};
+        host.request_restart = [](const clap_host* h) { ++static_cast<TestHost*>(h->host_data)->restartRequests; };
         host.request_process = [](const clap_host*) {};
         host.request_callback = [](const clap_host*) {};
         threadExt.is_main_thread = [](const clap_host* h) {
@@ -446,6 +450,92 @@ int main(int argc, char** argv) {
     p->stop_processing(p);
     p->deactivate(p);
     p->destroy(p);
+
+    // 7. Processing mode and latency (area 02 R9, R12, R13).
+    {
+        TestHost mh;
+        const clap_plugin* q = f->create_plugin(f, &mh.host, d->id);
+        q->init(q);
+        const auto* qlat = ext<clap_plugin_latency>(q, CLAP_EXT_LATENCY);
+        const auto* qparams = ext<clap_plugin_params>(q, CLAP_EXT_PARAMS);
+        clap_id modeId = 0;
+        for (uint32_t i = 0; i < qparams->count(q); ++i) {
+            clap_param_info info{};
+            qparams->get_info(q, i, &info);
+            if (!std::strcmp(info.name, "Processing Mode")) modeId = info.id;
+        }
+        double npValue = -1;
+        check(modeId && qparams->text_to_value(q, modeId, "Natural Phase", &npValue), "Processing Mode found; \"Natural Phase\" parses");
+        q->activate(q, 48000.0, 1, 4096);
+        q->start_processing(q);
+        // Runs one 1024-sample block with an optional mode event, returns the left output.
+        auto block = [&](const clap_event_param_value* ev, bool impulse) {
+            std::vector<float> l(1024, 0.0f), r(1024, 0.0f), ol(1024), orr(1024);
+            if (impulse) l[0] = 1.0f;
+            float* qi[2] = {l.data(), r.data()};
+            float* qo[2] = {ol.data(), orr.data()};
+            clap_audio_buffer qib{}, qob{};
+            qib.data32 = qi;
+            qib.channel_count = 2;
+            qob.data32 = qo;
+            qob.channel_count = 2;
+            One e1{ev ? &ev->header : nullptr};
+            clap_input_events evIn{&e1, [](const clap_input_events* l2) -> uint32_t { return static_cast<const One*>(l2->ctx)->e ? 1u : 0u; },
+                                   [](const clap_input_events* l2, uint32_t) { return static_cast<const One*>(l2->ctx)->e; }};
+            clap_process qp{};
+            qp.steady_time = -1;
+            qp.frames_count = 1024;
+            qp.audio_inputs = &qib;
+            qp.audio_outputs = &qob;
+            qp.audio_inputs_count = 1;
+            qp.audio_outputs_count = 1;
+            qp.in_events = &evIn;
+            qp.out_events = &outEv;
+            q->process(q, &qp);
+            return ol;
+        };
+        auto modeEvent = [&](double value) {
+            clap_event_param_value mv{};
+            mv.header = {sizeof(mv), 0, CLAP_CORE_EVENT_SPACE_ID, CLAP_EVENT_PARAM_VALUE, 0};
+            mv.param_id = modeId;
+            mv.note_id = -1;
+            mv.port_index = mv.channel = mv.key = -1;
+            mv.value = value;
+            return mv;
+        };
+        auto restart = [&] {
+            q->stop_processing(q);
+            q->deactivate(q);
+            q->activate(q, 48000.0, 1, 4096);
+            q->start_processing(q);
+        };
+        check(qlat->get(q) == 0, "Zero Latency: latency 0");
+        const auto toNp = modeEvent(npValue);
+        block(&toNp, false);
+        block(nullptr, false);
+        check(mh.restartRequests == 1, "switching to Natural Phase requests exactly one restart");
+        const int changedBefore = mh.latencyChanged;
+        restart();
+        check(qlat->get(q) == 320 && mh.latencyChanged == changedBefore + 1,
+              "after the restart: latency 320, latency.changed() called in activate");
+        block(nullptr, false);
+        const auto y = block(nullptr, true);
+        int peak = 0;
+        for (int i = 1; i < 1024; ++i)
+            if (std::abs(y[static_cast<size_t>(i)]) > std::abs(y[static_cast<size_t>(peak)])) peak = i;
+        if (peak != 320 || std::abs(y[320] - 1.0f) > 1e-6f) std::printf("  impulse peak at %d, value %g\n", peak, y[static_cast<size_t>(peak)]);
+        check(peak == 320 && std::abs(y[320] - 1.0f) <= 1e-6f, "Natural Phase, bands flat: impulse exactly 320 samples late");
+        block(nullptr, false);
+        check(mh.restartRequests == 1, "no further restart requests while the mode is unchanged");
+        const auto toZl = modeEvent(0.0);
+        block(&toZl, false);
+        restart();
+        check(mh.restartRequests == 2 && qlat->get(q) == 0, "switching back: one more restart, latency 0");
+        q->stop_processing(q);
+        q->deactivate(q);
+        q->destroy(q);
+    }
+
     entry->deinit();
     FreeLibrary(mod);
     std::printf("%s (%d failure%s)\n", gFailures ? "FAILED" : "ALL PASSED", gFailures, gFailures == 1 ? "" : "s");
