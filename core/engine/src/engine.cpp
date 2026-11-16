@@ -53,6 +53,7 @@ Engine::Engine(const params::ParameterTable& table) noexcept : table_(table) {
     soloPolicy_ = {kSoloFadeMs, kSoloFadeMs, 2.0, true};
     soloGainPolicy_ = {20.0, 5.0, 40.0};  // dB
     fade_.snap(1.0);
+    for (auto& b : bands_) b.xfade.snap(1.0);
     snapToTable();
     pendingSnap_ = false;
 }
@@ -312,12 +313,20 @@ void Engine::designBand(int b, uint64_t sample, double freqLog2, double gainDb, 
         // correction section) pairs sections by proximity and pads with identity sections.
         startGlide(band, next, redesignInterval_, band.refined || band.cur.sections.size() != next.sections.size());
     } else {
-        // Switch at once (activation, restore, shape or slope change).
-        // PROVISIONAL: a shape or slope change is not crossfaded yet (area 01 R17, Phase 2).
+        // A shape or slope change on a sounding band crossfades the old and new cascades over
+        // kStructureFadeMs (R17): the old one keeps its coefficients and state and fades out,
+        // the new one starts from rest and fades in. Activation and restore switch at once.
         const size_t n = next.sections.size();
-        const size_t old = band.runnable ? band.cur.sections.size() : 0;
-        for (auto& ch : band.state)
-            for (size_t i = hardSwitch ? 0 : old; i < ch.size(); ++i) ch[i] = {};
+        if (band.runnable && !hardSwitch) {
+            band.oldCoeffs = band.coeffs;
+            band.oldState = band.state;
+            band.xfade.snap(0.0);
+            band.xfade.retarget(1.0, static_cast<uint32_t>(std::lround(kStructureFadeMs * 1e-3 * sampleRate_)));
+            ++stats_.structureFades;
+        } else {
+            band.xfade.snap(1.0);
+        }
+        for (auto& ch : band.state) ch.fill({});
         band.cur = band.goal = next;
         band.glideLeft = 0;
         band.coeffs.resize(n);
@@ -517,9 +526,11 @@ void Engine::readBands(uint64_t sample, bool pieceStart, uint32_t numOut, bool s
             const double f = field(b, kSlotFreq).ramp.valueAhead(ahead);
             const double g = std::clamp(field(b, kSlotGain).ramp.valueAhead(ahead) * scale, -30.0, 30.0);  // R13
             const double q = field(b, kSlotQ).ramp.valueAhead(ahead);
-            const bool changed = !band.designed || f != band.dFreq || g != band.dGain || q != band.dQ ||
-                                 shape != band.dShape || slope != band.dSlope;
-            if (changed) {
+            const bool structure = shape != band.dShape || slope != band.dSlope;
+            const bool changed = !band.designed || f != band.dFreq || g != band.dGain || q != band.dQ || structure;
+            // A further shape or slope change waits for a running structure crossfade to end.
+            const bool waiting = structure && band.designed && !off && !snapWet && band.xfade.active();
+            if (changed && !waiting) {
                 const bool allowed = !band.designed || off || eventNow || snapWet ||
                                      sample - band.lastDesignAt >= redesignInterval_ ||
                                      std::abs(f - band.dFreq) >= kJumpOctaves || shape != band.dShape ||
@@ -529,7 +540,12 @@ void Engine::readBands(uint64_t sample, bool pieceStart, uint32_t numOut, bool s
                 refineStep(b, sample);
             }
         }
-        const double target = (active && band.runnable) ? 1.0 : 0.0;
+        // Near-zero bands (R16): a gain shape whose effective gain rounds to 0 dB fades to bypass
+        // and is then bit-transparent. The decision uses the gain the design targets.
+        bool nearZero = false;
+        if (active && band.designed && dsp::shapeHasGain(static_cast<dsp::Shape>(band.dShape)))
+            nearZero = std::abs(band.dGain) < kNearZeroGainDb;
+        const double target = (active && band.runnable && !nearZero) ? 1.0 : 0.0;
         if (snapWet) band.wet.snap(target);
         else if (target != band.wet.target()) band.wet.retarget(target, rampSamples(wetPolicy_, 1.0, sampleRate_));
         const auto seen = static_cast<uint8_t>((target == 1.0 ? 1u : 0u) | (band.mask << 1) | (band.stage << 3));
@@ -560,12 +576,20 @@ void Engine::runStage(uint8_t stage, double* const* w, uint32_t outCh, uint32_t 
             }
             const size_t ns = band.coeffs.size();
             const double wet = band.wet.next();
+            const bool fading = band.xfade.active();
+            const double a = fading ? band.xfade.next() : 1.0;
             for (uint32_t c = 0; c < outCh; ++c) {
                 if (!(band.mask & (1u << c))) continue;
                 const double x = w[c][off + i];
                 double y = x;
                 auto& st = band.state[c];
                 for (size_t k = 0; k < ns; ++k) y = dsp::svfTick(band.coeffs[k], st[k], y);
+                if (fading) {
+                    double yo = x;
+                    auto& so = band.oldState[c];
+                    for (size_t k = 0; k < band.oldCoeffs.size(); ++k) yo = dsp::svfTick(band.oldCoeffs[k], so[k], yo);
+                    y = yo + a * (y - yo);
+                }
                 w[c][off + i] = wet == 1.0 ? y : x + wet * (y - x);
             }
         }

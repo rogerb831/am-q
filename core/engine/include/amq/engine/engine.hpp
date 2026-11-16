@@ -73,6 +73,8 @@ inline constexpr double kJumpOctaves = 0.5;        // PROVISIONAL: redesign at o
 inline constexpr double kEnableFadeMs = 10.0;      // area 02 R6 initial value
 inline constexpr double kRefineSwapDelayMs = 50.0; // PROVISIONAL: swap a refined design this long after the request
 inline constexpr double kRefineGlideMs = 20.0;     // PROVISIONAL: glide from the fast to the refined design
+inline constexpr double kStructureFadeMs = 100.0;  // area 01 R17: section-count crossfade (whole length)
+inline constexpr double kNearZeroGainDb = 0.001;   // PROVISIONAL: |effective gain| below this fades a gain shape to bypass (R16)
 inline constexpr double kBypassFadeMs = 20.0;      // PROVISIONAL: global bypass crossfade (90 % time)
 inline constexpr double kPanModeFadeMs = 20.0;     // area 04 R4 initial value: Pan Mode crossfade (whole length)
 inline constexpr double kSoloFadeMs = 20.0;        // PROVISIONAL: crossfade into and out of the solo audition (90 % time)
@@ -98,6 +100,7 @@ struct EngineStats {
     uint64_t refinedSwaps = 0;       // refined designs swapped in
     uint64_t refineFailures = 0;     // refined designs that could not be used
     uint64_t kernelRequests = 0;     // Natural Phase kernel requests posted (or built offline)
+    uint64_t structureFades = 0;     // shape or slope changes crossfaded (R17)
 };
 
 class Engine {
@@ -156,6 +159,10 @@ public:
     // Solo audition (area 02 R14): the band being auditioned (-1: none) and the audition mix.
     [[nodiscard]] int soloBand() const noexcept { return soloBand_; }
     [[nodiscard]] double soloMix() const noexcept { return soloMix_.current(); }
+    // Structure crossfade of a band (R17): weight of the new filter, 1 when none is running.
+    [[nodiscard]] double structureMix(int band) const noexcept {
+        return band >= 0 && band < params::kBandCount ? bands_[static_cast<size_t>(band)].xfade.current() : 1.0;
+    }
     [[nodiscard]] double modeFadeGain() const noexcept { return fade_.current(); }
     // Natural Phase kernel sets handed to the convolvers since prepare (tests).
     [[nodiscard]] uint64_t kernelSwaps() const noexcept { return np_.swaps(); }
@@ -212,6 +219,11 @@ private:
         uint32_t glideLeft = 0;
         std::array<std::array<dsp::SvfState, dsp::kMaxDigitalSections>, kMaxChannels> state{};
         LinearRamp wet;           // 0 = off, 1 = on (enable crossfade)
+        // Structure crossfade (R17): after a shape or slope change the old cascade keeps running
+        // on its own state, frozen, and fades out while the new one fades in (xfade 0 -> 1).
+        dsp::FixedVector<dsp::SvfCoeffs, dsp::kMaxDigitalSections> oldCoeffs;
+        std::array<std::array<dsp::SvfState, dsp::kMaxDigitalSections>, kMaxChannels> oldState{};
+        LinearRamp xfade;
         bool designed = false;
         bool runnable = false;    // last design succeeded
         bool event = false;       // targets changed at this piece start
