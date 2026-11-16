@@ -40,6 +40,28 @@ Record here any time a code author saw material outside the sanitized spec.
   design canvas is not opened from this repository's work.
 - The plan still requires Legal to review the UI design before Phase 2 starts
   (`docs/plan/README.md`, "Clean-room rules", item 3).
+- **2026-11-16 (design canvas hand-over):**
+  - **What was supplied.** The analyst side supplied the full Am-Q design canvas as
+    `docs/design/reference/`:
+    - five 1280×760 boards: Main, Processing, Analyzer, Interactions and Match;
+    - `canvas.json`;
+    - `ds/am-q/tokens.json`;
+    - `ds/am-q/components/bundle.css`.
+  - **Latency figures removed.** The Linear Phase latency figures were taken out before the
+    hand-over and replaced with placeholders ("[latency]", "[from area 02 latency
+    function]"). The Natural Phase figure on the boards (320 samples) is the plan's own
+    value (area 05 R2).
+  - **Cleared.** The project owner cleared the design for use. The coordinating session relayed
+    this to the AI coding session.
+  - **Replaces the spike reference.** These files replace `docs/design/spike-reference/` as
+    the design source. The spike copy stays for history.
+  - **Spec written from them.** The AI coding session wrote `docs/design/editor-spec*.md` from
+    these files, `docs/plan/` and code only. Every latency figure in the spec comes from
+    `core/dsp/include/amq/dsp/latency.hpp`, never from the boards.
+  - **What the files contain.** Only layout, tokens and Am-Q's own labels. No addresses,
+    decompiled code or other-product internals were seen.
+  - **Provenance still under review.** `tokens.json` still says its provenance is "under
+    counsel review". The Legal UI review above still applies.
 
 ## Provisional items pending counsel review
 
