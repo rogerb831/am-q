@@ -99,6 +99,7 @@ bool Engine::prepare(double sampleRate, uint32_t maxFrames) noexcept {
     readBands(0, true, kMaxChannels, true);
     // The processing mode is latched here: its latency is what activation reports (area 02 R9).
     activeMode_ = requestedMode();
+    activeResolution_ = requestedResolution();
     npDirty_ = npPosted_ = false;
     npLastPost_ = 0;
     npChannels_ = kMaxChannels;
@@ -109,7 +110,12 @@ bool Engine::prepare(double sampleRate, uint32_t maxFrames) noexcept {
         if (!np_.prepare(maxFrames, npRequest_)) return false;
     }
     // The bypass dry path is delayed by exactly the latency this activation reports (area 02 R2).
-    dryLen_ = dsp::latencySamples(activeMode_, 0, sampleRate, false);
+    if (activeMode_ == dsp::ProcessingMode::LinearPhase) {
+        fillCorrectionRequest(kMaxChannels);
+        npRequest_.id = ++npNextId_;
+        if (!lp_.prepare(maxFrames, sampleRate, activeResolution_, npRequest_)) return false;
+    }
+    dryLen_ = dsp::latencySamples(activeMode_, activeResolution_, sampleRate, false);
     dryPos_ = 0;
     try {
         dryLine_.assign(static_cast<size_t>(kMaxChannels) * dryLen_, 0.0f);
@@ -142,6 +148,7 @@ bool Engine::prepare(double sampleRate, uint32_t maxFrames) noexcept {
         worker_.start();
         analyzer_.start();
         if (activeMode_ == dsp::ProcessingMode::NaturalPhase) np_.startWorker();
+        if (activeMode_ == dsp::ProcessingMode::LinearPhase) lp_.startWorker();
     }
     rampClock_ = 0;  // ramps are snapped, so nothing moved; sample 0 is read again in process()
     // The channel layout is known only in process(): its first read snaps each band on or off
@@ -156,13 +163,19 @@ void Engine::release() noexcept {
     worker_.stop();
     analyzer_.stop();
     np_.stopWorker();
+    lp_.stopWorker();
 }
 
 dsp::ProcessingMode Engine::requestedMode() const noexcept {
-    // Linear Phase is Phase 2: until then it runs, and reports, as Zero Latency.
     const int m = static_cast<int>(table_.value(params::globalParam(GlobalParam::Mode)));
-    return m == static_cast<int>(dsp::ProcessingMode::NaturalPhase) ? dsp::ProcessingMode::NaturalPhase
-                                                                     : dsp::ProcessingMode::ZeroLatency;
+    if (m == static_cast<int>(dsp::ProcessingMode::NaturalPhase)) return dsp::ProcessingMode::NaturalPhase;
+    if (m == static_cast<int>(dsp::ProcessingMode::LinearPhase)) return dsp::ProcessingMode::LinearPhase;
+    return dsp::ProcessingMode::ZeroLatency;
+}
+
+int Engine::requestedResolution() const noexcept {
+    return std::clamp(static_cast<int>(table_.value(params::globalParam(GlobalParam::Resolution))), 0,
+                      dsp::kLatencyResolutionCount - 1);
 }
 
 void Engine::fillCorrectionRequest(uint32_t channels) noexcept {
@@ -188,8 +201,15 @@ void Engine::scheduleKernel(uint64_t sample, uint32_t channels) noexcept {
     if (npPosted_ && sample < npLastPost_ + npInterval_) return;  // rate limit (area 04 R13)
     fillCorrectionRequest(channels);
     npRequest_.id = ++npNextId_;
-    if (offline_.load(std::memory_order_relaxed)) np_.buildNow(npRequest_);
-    else np_.post(npRequest_);
+    const bool lp = activeMode_ == dsp::ProcessingMode::LinearPhase;
+    if (offline_.load(std::memory_order_relaxed)) {
+        if (lp) lp_.buildNow(npRequest_);
+        else np_.buildNow(npRequest_);
+    } else if (lp) {
+        lp_.post(npRequest_);
+    } else {
+        np_.post(npRequest_);
+    }
     npDirty_ = false;
     npPosted_ = true;
     npLastPost_ = sample;
@@ -285,7 +305,7 @@ void Engine::retargetAll() noexcept {
     if (byp != bypass_.target()) bypass_.retarget(byp, rampSamples(bypassPolicy_, 1.0, sampleRate_));
 
     // Fade out while the table asks for another mode, back in if it stops asking (area 02 R13).
-    const bool waiting = restartNeeded() && static_cast<int>(requestedMode()) != gaveUpMode_;
+    const bool waiting = restartNeeded() && requestedConfig() != gaveUpMode_;
     const double fadeTarget = waiting ? 0.0 : 1.0;
     if (fadeTarget != fade_.target()) fade_.retarget(fadeTarget, rampSamples(fadePolicy_, 1.0, sampleRate_));
 
@@ -582,6 +602,11 @@ void Engine::runStage(uint8_t stage, double* const* w, uint32_t outCh, uint32_t 
         // Steady state (no glide, crossfade or enable fade): run section by section over the
         // sub-block, both channels of a stereo band together (R18 kernel variants, SIMD).
         const bool dynamic = band.dyn.on;
+        // Linear Phase: static bands are in the FIR. A dynamic band runs here only for its dynamic
+        // part (the band at the relative range, blended in by the gain reduction), minimum phase
+        // (PROVISIONAL, area 02: the FFT path for dynamics is the spectral task).
+        const bool linear = activeMode_ == dsp::ProcessingMode::LinearPhase;
+        if (linear && !dynamic) continue;
         if (!dynamic && !band.glideLeft && !band.xfade.active() && !band.wet.active() && band.wet.current() == 1.0) {
             const size_t ns = band.coeffs.size();
             if (outCh >= 2 && band.mask == 3) {
@@ -643,9 +668,9 @@ void Engine::runStage(uint8_t stage, double* const* w, uint32_t outCh, uint32_t 
                 }
                 if (band.glideLeft == 0) dropIdentitySections(band);
             }
-            const size_t ns = band.coeffs.size();
+            const size_t ns = linear ? 0 : band.coeffs.size();
             const double wet = band.wet.next();
-            const bool fading = band.xfade.active();
+            const bool fading = !linear && band.xfade.active();
             const double a = fading ? band.xfade.next() : 1.0;
             // Dynamic EQ: the gain + range filter, gliding like the static one, blended in by wd.
             auto& dy = band.dyn;
@@ -769,7 +794,7 @@ void Engine::process(const float* const* in, uint32_t numIn, float* const* out, 
     while (s < end) {
         if (first || s % readInterval_ == 0) {
             readBands(s, first, numOut, first && snap);
-            if (activeMode_ == dsp::ProcessingMode::NaturalPhase) scheduleKernel(s, outCh);
+            if (activeMode_ != dsp::ProcessingMode::ZeroLatency) scheduleKernel(s, outCh);
             updateSolo(outCh, first && snap);
         }
         first = false;
@@ -798,6 +823,8 @@ void Engine::process(const float* const* in, uint32_t numIn, float* const* out, 
 
     // Natural Phase: the combined correction after every IIR stage (area 03 R14).
     if (activeMode_ == dsp::ProcessingMode::NaturalPhase) np_.process(w, outCh, frames);
+    // Linear Phase: every static band in one linear-phase FIR (linear_phase.hpp; area 02 R8).
+    if (activeMode_ == dsp::ProcessingMode::LinearPhase) lp_.process(w, outCh, frames);
 
     // Output graph (area 03 R10-R12, area 04 R1-R5, R8): mode encoder, Level / Pan / Invert,
     // mode decoder. Pan is a linear balance that only attenuates: b1 = 1 - p/100 for p > 0,
@@ -861,7 +888,7 @@ void Engine::process(const float* const* in, uint32_t numIn, float* const* out, 
     if (silent) {
         silentSamples_ += frames;
         if (static_cast<double>(silentSamples_) >= kRestartWaitMs * 1e-3 * sampleRate_) {
-            gaveUpMode_ = static_cast<int>(requestedMode());  // the next piece fades back in
+            gaveUpMode_ = requestedConfig();  // the next piece fades back in
             silentSamples_ = 0;
         }
     } else {
@@ -970,7 +997,8 @@ void Engine::readDynamics(int b, uint64_t sample, bool reset, double f, double g
     }
 
     // The gain + range filter, on the same cadence as the static one.
-    const double gd = std::clamp(g + range, -30.0, 30.0);
+    // The gain + range filter; in Linear Phase only the range, relative to the FIR's static band.
+    const double gd = activeMode_ == dsp::ProcessingMode::LinearPhase ? range : std::clamp(g + range, -30.0, 30.0);
     const bool structure = shape != d.dShape || slope != d.dSlope;
     const bool changed = !d.designed || f != d.dFreq || gd != d.dGain || q != d.dQ || structure;
     if (!changed) return;

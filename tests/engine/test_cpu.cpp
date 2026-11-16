@@ -92,6 +92,8 @@ TEST_CASE("CPU report: 24 bands, 48 kHz, 64-sample blocks" * doctest::skip()) {
         {"96 dB/oct, stereo, Zero Latency", dsp::Slope::Db96, 0, dsp::ProcessingMode::ZeroLatency, false},
         {"12 dB/oct, stereo, Natural Phase", dsp::Slope::Db12, 0, dsp::ProcessingMode::NaturalPhase, false},
         {"12 dB/oct, stereo, Natural Phase, automated", dsp::Slope::Db12, 0, dsp::ProcessingMode::NaturalPhase, true},
+        {"12 dB/oct, stereo, Linear Phase (Medium)", dsp::Slope::Db12, 0, dsp::ProcessingMode::LinearPhase, false},
+        {"12 dB/oct, L/R/M/S mix, Linear Phase (Medium)", dsp::Slope::Db12, 1, dsp::ProcessingMode::LinearPhase, false},
     };
     for (const auto& r : rows) std::printf("  %-48s %6.2f %% of one core\n", r.name, 100.0 * load(r.slope, r.mix, r.mode, r.automate));
     std::printf("  %-48s %6.2f %% of one core\n", "12 dB/oct, stereo, all 24 bands dynamic",

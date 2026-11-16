@@ -115,11 +115,14 @@ TEST_CASE("Natural Phase: the mode is latched at prepare and sets the latency (a
     CHECK(e.latencySamples() == dsp::latencySamples(dsp::ProcessingMode::NaturalPhase, 1, kFs, false));
     CHECK_FALSE(e.restartNeeded());
 
-    setMode(t, dsp::ProcessingMode::LinearPhase);  // Phase 2: runs as Zero Latency for now
-    CHECK(e.requestedMode() == dsp::ProcessingMode::ZeroLatency);
+    setMode(t, dsp::ProcessingMode::LinearPhase);
+    CHECK(e.requestedMode() == dsp::ProcessingMode::LinearPhase);
     CHECK(e.restartNeeded());
     REQUIRE(e.prepare(96000.0, kMaxFrames));
-    CHECK(e.latencySamples() == 0);
+    CHECK(e.activeMode() == dsp::ProcessingMode::LinearPhase);
+    // Medium at 96 kHz: 8192 x 2 taps, partition 64 x 2: 8192 + 128.
+    CHECK(e.latencySamples() == dsp::latencySamples(dsp::ProcessingMode::LinearPhase, 1, 96000.0, false));
+    CHECK(e.latencySamples() == 8320);
     e.release();
     CHECK_FALSE(e.restartNeeded());
 }

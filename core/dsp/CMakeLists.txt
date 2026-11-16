@@ -7,6 +7,7 @@ add_library(amq_dsp STATIC
     src/joint_fit.cpp
     src/natural_phase_kernel.cpp
     src/partitioned_convolver.cpp
+    src/nonuniform_convolver.cpp
     src/realtime_design.cpp
 )
 add_library(amq::dsp ALIAS amq_dsp)

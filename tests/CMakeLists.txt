@@ -23,6 +23,7 @@ add_executable(amq_dsp_tests
     test_svf_variants.cpp
     test_brickwall.cpp
     test_dynamics.cpp
+    test_nonuniform_convolver.cpp
 )
 target_link_libraries(amq_dsp_tests PRIVATE amq::dsp amq::accuracy doctest::doctest)
 amq_set_warnings(amq_dsp_tests)
@@ -41,7 +42,7 @@ target_link_libraries(amq_analysis_tests PRIVATE amq::analysis amq::engine docte
 amq_set_warnings(amq_analysis_tests)
 add_test(NAME amq_analysis_tests COMMAND amq_analysis_tests)
 
-add_executable(amq_engine_tests test_main.cpp engine/test_engine.cpp engine/test_bands.cpp engine/test_refine.cpp engine/test_midside.cpp engine/test_response.cpp engine/test_natural_phase.cpp engine/test_natural_phase_mode.cpp engine/test_bypass.cpp engine/test_output_pan_mode.cpp engine/test_solo.cpp engine/test_structure.cpp engine/test_cpu.cpp engine/test_rt_safety.cpp engine/alloc_counter.cpp engine/test_dynamic_eq.cpp)
+add_executable(amq_engine_tests test_main.cpp engine/test_engine.cpp engine/test_bands.cpp engine/test_refine.cpp engine/test_midside.cpp engine/test_response.cpp engine/test_natural_phase.cpp engine/test_natural_phase_mode.cpp engine/test_bypass.cpp engine/test_output_pan_mode.cpp engine/test_solo.cpp engine/test_structure.cpp engine/test_cpu.cpp engine/test_rt_safety.cpp engine/alloc_counter.cpp engine/test_dynamic_eq.cpp engine/test_linear_phase.cpp)
 target_link_libraries(amq_engine_tests PRIVATE amq::engine doctest::doctest)
 amq_set_warnings(amq_engine_tests)
 add_test(NAME amq_engine_tests COMMAND amq_engine_tests)

@@ -24,10 +24,11 @@
 //      input bit for bit; the wet path keeps running so un-bypassing crossfades cleanly.
 //   7. The mode-change fade (area 02 R13).
 //
-// Processing mode (area 02 R9, R13). The mode is latched in prepare(), because the latency
-// it implies is reported to the host at activation. Zero Latency and Natural Phase run; Linear
-// Phase is Phase 2 and runs as Zero Latency (latency 0) until then. When global.mode asks for a
-// different mode, restartNeeded() turns true and the output fades out; restartReady() turns
+// Processing mode (area 02 R9, R13). The mode and, in Linear Phase, the resolution are latched in
+// prepare(), because the latency they imply is reported to the host at activation. Linear Phase
+// (linear_phase.hpp) runs every static band as one linear-phase FIR; its latency is FIR / 2 +
+// partition. When global.mode (or, in Linear Phase, global.resolution) asks for a different
+// configuration, restartNeeded() turns true and the output fades out; restartReady() turns
 // true once it is silent, and the wrapper then asks the host to restart. The next prepare()
 // fades the output back in. Other activations start at full level. A host that never restarts
 // would leave the plugin silent, so after kRestartWaitMs of silence the output fades back in on
@@ -62,6 +63,7 @@
 #include "amq/dsp/mid_side.hpp"
 #include "amq/dsp/realtime_design.hpp"
 #include "amq/engine/design_worker.hpp"
+#include "amq/engine/linear_phase.hpp"
 #include "amq/engine/natural_phase.hpp"
 #include "amq/engine/ramp.hpp"
 #include "amq/params/parameter_table.hpp"
@@ -136,7 +138,7 @@ public:
     // Manual mode: run the analyzer over the audio tapped so far (test thread).
     uint64_t runAnalyzerForTests() noexcept { return analyzer_.runPending(); }
     // Manual mode: build the outstanding Natural Phase kernel request (test thread).
-    int runKernelJobsForTests() { return np_.runPending(); }
+    int runKernelJobsForTests() { return np_.runPending() + lp_.runPending(); }
 
     // Allocates the work buffers (main thread). Returns false, and the engine outputs silence,
     // for an unsupported sample rate. Ramps and filters are seeded from the current table
@@ -148,7 +150,7 @@ public:
     // The latency of the processing that actually runs (area 02 R9, R12): the mode latched at
     // prepare(). Spectral bands do not exist yet, so the spectral flag is false (area 21 R12).
     [[nodiscard]] uint32_t latencySamples() const noexcept {
-        return prepared_ ? dsp::latencySamples(activeMode_, 0, sampleRate_, false) : 0u;
+        return prepared_ ? dsp::latencySamples(activeMode_, activeResolution_, sampleRate_, false) : 0u;
     }
     // The mode prepare() latched, and the mode the table asks for (Linear Phase maps to Zero
     // Latency until Phase 2).
@@ -156,7 +158,10 @@ public:
     [[nodiscard]] dsp::ProcessingMode requestedMode() const noexcept;
     // True while prepared and the table asks for another mode: the host must restart the
     // plugin (deactivate, activate) so the new latency can be reported. Any thread.
-    [[nodiscard]] bool restartNeeded() const noexcept { return prepared_ && requestedMode() != activeMode_; }
+    [[nodiscard]] bool restartNeeded() const noexcept {
+        return prepared_ && (requestedMode() != activeMode_ ||
+                             (activeMode_ == dsp::ProcessingMode::LinearPhase && requestedResolution() != activeResolution_));
+    }
     // True once restartNeeded() and the output has faded to silence: the moment to ask the host
     // for the restart (area 02 R13). Any thread.
     [[nodiscard]] bool restartReady() const noexcept {
@@ -186,7 +191,11 @@ public:
     }
     [[nodiscard]] double modeFadeGain() const noexcept { return fade_.current(); }
     // Natural Phase kernel sets handed to the convolvers since prepare (tests).
-    [[nodiscard]] uint64_t kernelSwaps() const noexcept { return np_.swaps(); }
+    [[nodiscard]] uint64_t kernelSwaps() const noexcept {
+        return activeMode_ == dsp::ProcessingMode::LinearPhase ? lp_.swaps() : np_.swaps();
+    }
+    [[nodiscard]] int activeResolution() const noexcept { return activeResolution_; }
+    [[nodiscard]] int requestedResolution() const noexcept;
     // Band responses the kernel worker's cache recomputed since prepare (tests, Manual mode).
     [[nodiscard]] uint64_t kernelCacheRecomputes() const noexcept { return np_.cacheRecomputes(); }
 
@@ -371,6 +380,9 @@ private:
     // Natural Phase (natural_phase.hpp). npDirty_ is set whenever a band's running design or
     // audibility changes; scheduleKernel() posts at most every npInterval_ samples.
     dsp::ProcessingMode activeMode_ = dsp::ProcessingMode::ZeroLatency;
+    int activeResolution_ = 1;
+    LinearPhaseStage lp_;
+    [[nodiscard]] int requestedConfig() const noexcept { return static_cast<int>(requestedMode()) * 8 + requestedResolution(); }
     NaturalPhaseStage np_;
     CorrectionRequest npRequest_;  // audio-thread scratch
     bool npDirty_ = false;
@@ -405,7 +417,7 @@ private:
     RampPolicy fadePolicy_;
     std::atomic<bool> fadedOut_{false};
     uint64_t silentSamples_ = 0;  // samples spent faded out, waiting for the host's restart
-    int gaveUpMode_ = -1;         // requested mode whose restart never came: play the old mode
+    int gaveUpMode_ = -1;         // requested configuration whose restart never came: play the old one
 };
 
 }  // namespace amq::engine

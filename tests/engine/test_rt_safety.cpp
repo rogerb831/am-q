@@ -60,7 +60,7 @@ TEST_CASE("Real-time safety: Engine::process allocates nothing in any mode or fe
         delete p;
         CHECK(amq_test::allocs.load() == 2);
     }
-    for (auto mode : {dsp::ProcessingMode::ZeroLatency, dsp::ProcessingMode::NaturalPhase}) {
+    for (auto mode : {dsp::ProcessingMode::ZeroLatency, dsp::ProcessingMode::NaturalPhase, dsp::ProcessingMode::LinearPhase}) {
         params::ParameterTable t;
         std::mt19937 rng(11 + static_cast<int>(mode));
         for (int b = 0; b < params::kBandCount; ++b) randomBand(t, b, rng, ParamSource::Preset);
