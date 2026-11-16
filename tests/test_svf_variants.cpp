@@ -46,3 +46,29 @@ TEST_CASE("svfRun, svfRunStereo and svfTickStereo equal svfTick bit for bit") {
         CHECK(kr == er);
     }
 }
+
+#include "amq/dsp/mid_side.hpp"
+
+TEST_CASE("M/S converter: the SSE2 form equals the scalar formula bit for bit, odd lengths included") {
+    std::mt19937 rng(9);
+    std::uniform_real_distribution<double> u(-1.0, 1.0);
+    for (uint32_t n : {1u, 2u, 7u, 64u, 513u}) {
+        std::vector<double> a(n), b(n);
+        for (uint32_t i = 0; i < n; ++i) a[i] = u(rng), b[i] = u(rng);
+        auto ea = a, eb = b;
+        for (uint32_t i = 0; i < n; ++i) {
+            const double l = ea[i], r = eb[i];
+            ea[i] = 0.5 * (l + r), eb[i] = 0.5 * (l - r);
+        }
+        midSide(MidSideMode::Encode, a.data(), b.data(), n);
+        CHECK(a == ea);
+        CHECK(b == eb);
+        for (uint32_t i = 0; i < n; ++i) {
+            const double m = ea[i], s = eb[i];
+            ea[i] = m + s, eb[i] = m - s;
+        }
+        midSide(MidSideMode::Decode, a.data(), b.data(), n);
+        CHECK(a == ea);
+        CHECK(b == eb);
+    }
+}

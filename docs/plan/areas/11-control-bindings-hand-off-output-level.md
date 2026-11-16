@@ -31,7 +31,7 @@ Am-Q binds every control by parameter id and keeps styling separate. Analyzer, m
 ## Implementation tasks
 
 - [x] Implement menus that read labels and order from the table (GUI engineer, Phase 1). Done on 2026-11-16: the band menu and the panel choices take Shape, Slope and Placement labels and order from the parameter table (`choiceItems`, Shape names from ShapeInfo); tested against the table's choices
-- [ ] Confirm the band field list and spare allocation in the table spec (Plugin and host engineer, Phase 0)
+- [x] Confirm the band field list and spare allocation in the table spec (Plugin and host engineer, Phase 0). Confirmed 2026-11-16: 23 band fields per band (`docs/params/parameter-table.md`), every one used by the engine or the editor now (the coverage check in CI flags unused interface functions); spares need no reserved slots because host ids are hashes of string ids, so new fields never move existing ids
 - [x] Implement the lock-free snapshot queue with peak accumulation and stamps (DSP lead, Phase 1). `core/analysis`: one SPSC triple buffer per data type, stamps from 1, peaks of unread frames max-merged into the next one. Publishing at 60 Hz (PROVISIONAL); RMS 300 ms and hold 1.5 s are PROVISIONAL
 - [x] Publish per-band gain change and meter data from the processor (DSP lead, Phase 2). The engine meters input, output and side chain (peak, RMS, hold per channel) and, since 2026-11-16, publishes each band's signed dynamic gain change (negative for a cut) in the gain-change snapshot
 - [x] Implement editor pulling at about 30 Hz with stamp checks (GUI engineer, Phase 2). Done early: `ui::SnapshotPoller` on a 33 ms Visage timer; frames with an old stamp are skipped, and a redraw is reported only for a visible change (0.1 dB)

@@ -41,7 +41,7 @@ Gain reduction is measured on the audio thread per band, after the dynamics dete
 - [x] Add per-band gain-reduction measurement and snapshot publishing (DSP lead, Phase 2). Done on 2026-11-16: every block the engine writes each band's smoothed, signed gain change (0 dB when its dynamics are off) to the gain-change snapshot (current and peak since the last read)
 - [x] Draw gain reduction on the node and the band panel indicator (GUI engineer, Phase 2). Done on 2026-11-16: an arc around the node whose length follows |change| / 30 dB, and a "GR" readout in the panel, both from the gain-change snapshot, redrawn when it changes
 - [x] Make snapshot publishing allocation-free with drop-when-full (Plugin and host engineer, Phase 1). Fixed memory; an unread frame is replaced by the next. Tested: 10 s of publishing with no reader allocates nothing
-- [ ] Evaluate the optional host gain-reduction and track-context extensions (Plugin and host engineer, Phase 3)
+- [x] Evaluate the optional host gain-reduction and track-context extensions (Plugin and host engineer, Phase 3). Evaluated 2026-11-16. CLAP has a track-info extension (track name, colour, channel layout) that a host may provide; reading it on the main thread when the host notifies would let the editor show the track name and colour at little cost: recommended for v1.x. CLAP has no standard gain-reduction query, and the VST3 equivalents are host-specific extensions that clap-wrapper does not expose, so a host gain-reduction meter would mean a VST3-only path outside clap-wrapper: not recommended for v1. If added later, it reads the cached gain-change value (area 14 design), never the snapshot FIFO. A product decision
 
 ## Acceptance tests
 
