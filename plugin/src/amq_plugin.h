@@ -77,6 +77,14 @@ protected:
     uint32_t latencyGet() const noexcept override { return latency_.load(std::memory_order_relaxed); }
 
     // state: any thread
+    bool startProcessing() noexcept override {
+        processing_.store(true);
+        return true;
+    }
+    void stopProcessing() noexcept override {
+        processing_.store(false);
+        applyPendingState();  // a load that arrived while stopping is applied now
+    }
     bool implementsState() const noexcept override { return true; }
     bool stateSave(const clap_ostream* stream) noexcept override;
     bool stateLoad(const clap_istream* stream) noexcept override;
@@ -114,6 +122,8 @@ private:
     void requestHostFlush() noexcept;                              // main thread
     void requestRestartIfNeeded(bool processing) noexcept;         // any thread
     void requestTextRescanIfNeeded() noexcept;                     // any thread
+    void applyPendingState() noexcept;                             // audio thread, or any while not processing
+    [[nodiscard]] double currentValue(params::ParamIndex i) const noexcept;  // a pending state load counts
     void rescanTextIfNeeded() noexcept;                            // main thread
 
     params::ParameterTable table_;
@@ -122,6 +132,15 @@ private:
     uint32_t maxFrames_ = 0;
     std::atomic<bool> snapPending_{false};    // state loaded: jump ramps at the next block
     std::atomic<bool> rescanPending_{false};  // state loaded off the main thread
+    // Batch state load (area 09 R15, area 21 R14): a load writes every value here; the audio thread
+    // applies them all at the start of its next block (or the loading thread at once while not
+    // processing), so no block ever runs on half a preset.
+    struct StateBatch {
+        std::array<double, params::kParamCount> v{};
+    };
+    engine::SeqSlot<StateBatch> pendingState_;
+    std::atomic<bool> statePending_{false};
+    std::atomic<bool> processing_{false};
     GuiEventQueue guiEvents_;                 // editor gestures -> host
     std::atomic<bool> editorOpen_{false};
     std::atomic<bool> refreshRequested_{false};

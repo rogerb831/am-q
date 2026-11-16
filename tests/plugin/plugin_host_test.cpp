@@ -265,6 +265,23 @@ int main(int argc, char** argv) {
     pe.param_id = gainId;
     Mem withGain;
     state->save(p, &withGain.os);
+    {  // A load while processing is one batch (area 21 R14): the host sees it at once, the audio
+       // thread applies it whole at the next block.
+        pe.param_id = gainId;
+        pe.value = -3.0;
+        pr.in_events = &oneEv;
+        p->process(p, &pr);
+        pr.in_events = &inEv;
+        Mem again;
+        again.b = withGain.b;
+        check(state->load(p, &again.is) && params->get_value(p, gainId, &v) && v == 7.5,
+              "state load while processing: the host reads the loaded value at once");
+        p->process(p, &pr);
+        Mem after;
+        state->save(p, &after.os);
+        check(after.b == withGain.b, "the next block applied the whole state");
+        p->on_main_thread(p);
+    }
     const clap_plugin* p2 = f->create_plugin(f, &th.host, d->id);
     p2->init(p2);
     const auto* state2 = ext<clap_plugin_state>(p2, CLAP_EXT_STATE);

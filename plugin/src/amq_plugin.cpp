@@ -149,6 +149,7 @@ void AmqPlugin::reset() noexcept {}
 
 clap_process_status AmqPlugin::process(const clap_process* p) noexcept {
     FtzGuard ftz;
+    if (statePending_.load(std::memory_order_acquire)) applyPendingState();  // the whole batch, at once
     if (snapPending_.exchange(false)) engine_.snapToTable();  // restored state: no ramps (area 09 R15)
     drainGuiEvents(p->out_events);
 
@@ -255,6 +256,7 @@ clap_process_status AmqPlugin::process(const clap_process* p) noexcept {
 
 void AmqPlugin::onMainThread() noexcept {
     refreshRequested_.store(false);
+    if (!processing_.load()) applyPendingState();
     if (rescanPending_.exchange(false) && _host.canUseParams()) _host.paramsRescan(CLAP_PARAM_RESCAN_VALUES);
     rescanTextIfNeeded();
     table_.dispatchNotifications();  // editor listeners, once the editor binds controls
@@ -293,8 +295,31 @@ bool AmqPlugin::paramsInfo(uint32_t index, clap_param_info* info) const noexcept
 bool AmqPlugin::paramsValue(clap_id id, double* value) noexcept {
     const auto idx = params::findByHostId(id);
     if (!idx || !value) return false;
-    *value = params::toHost(*params::specAt(*idx), table_.value(*idx));
+    *value = params::toHost(*params::specAt(*idx), currentValue(*idx));
     return true;
+}
+
+double AmqPlugin::currentValue(params::ParamIndex i) const noexcept {
+    if (statePending_.load(std::memory_order_acquire)) {
+        StateBatch b;
+        if (pendingState_.tryRead(b)) return b.v[i];
+    }
+    return table_.value(i);
+}
+
+// Applies a pending state load as one batch (source Preset: no undo entries, area 21 R14), then
+// jumps the ramps to it (no zipper) and has the host and the editor read the new values.
+void AmqPlugin::applyPendingState() noexcept {
+    if (!statePending_.exchange(false, std::memory_order_acq_rel)) return;
+    StateBatch b;
+    if (!pendingState_.tryRead(b)) {  // another load is writing: try again at the next chance
+        statePending_.store(true, std::memory_order_release);
+        return;
+    }
+    for (params::ParamIndex i = 0; i < params::kParamCount; ++i) table_.set(i, b.v[i], params::ParamSource::Preset);
+    snapPending_.store(true);
+    rescanPending_.store(true);
+    _host.requestCallback();
 }
 
 bool AmqPlugin::paramsValueToText(clap_id id, double value, char* display, uint32_t size) noexcept {
@@ -448,7 +473,7 @@ bool AmqPlugin::stateSave(const clap_ostream* stream) noexcept {
     uint8_t pair[kPairBytes];
     for (params::ParamIndex i = 0; i < params::kParamCount; ++i) {
         putU32(pair, specs[i].hostId);
-        putF64(pair + 4, table_.value(i));
+        putF64(pair + 4, currentValue(i));
         if (!writeAll(stream, pair, kPairBytes)) return false;
     }
     return true;
@@ -474,10 +499,13 @@ bool AmqPlugin::stateLoad(const clap_istream* stream) noexcept {
                 next[*idx] = getF64(pair + 4);
         }
     }
-    // PROVISIONAL: values are applied one by one. Applying them as one batch before the next
-    // block (area 09 R15, area 21 R14) is the batch-load task.
-    for (params::ParamIndex i = 0; i < params::kParamCount; ++i) table_.set(i, next[i], params::ParamSource::Preset);
-    snapPending_.store(true);  // the audio thread jumps its ramps to the restored values
+    // One batch (area 09 R15, area 21 R14): the audio thread applies every value at the start of its
+    // next block; while not processing, it is applied here at once.
+    StateBatch batch;
+    batch.v = next;
+    pendingState_.write(batch);
+    statePending_.store(true, std::memory_order_release);
+    if (!processing_.load()) applyPendingState();
     requestRestartIfNeeded(false);  // a restored state may hold another processing mode
     if (onMainThreadNow()) {
         if (_host.canUseParams()) _host.paramsRescan(CLAP_PARAM_RESCAN_VALUES);
