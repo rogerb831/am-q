@@ -14,6 +14,7 @@
 #include "host_checks.h"
 
 #include "amq/engine/engine.hpp"
+#include "amq/ui/undo_controller.hpp"
 #include "amq/ui/edit_controller.hpp"
 #include "gui_events.h"
 #include "amq/params/parameter_table.hpp"
@@ -148,6 +149,10 @@ private:
     std::atomic<bool> restartRequested_{false};  // one request_restart per mode change
     std::atomic<bool> textPanMidSide_{false};    // Pan Mode the host's value text was last rescanned for
     std::atomic<bool> textCallbackRequested_{false};
+    // Undo (area 12): the editor edits through this wrapper, so GUI edits are undoable; host
+    // automation and state loads are not recorded, and a state load clears the history.
+    ui::UndoController undo_{*this};
+    std::atomic<bool> undoClearPending_{false};
     std::unique_ptr<ui::Editor> editor_;
     // Editor size, for size queries off the main thread and for reopening at the same size.
     // Written on the main thread after every editor layout.

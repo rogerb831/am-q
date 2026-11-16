@@ -4,7 +4,10 @@
 #   amq_ui:       the Visage frames that draw the model and forward input.
 
 add_library(amq_ui_model STATIC
-    src/graph_model.cpp)
+    src/graph_model.cpp
+    src/undo_controller.cpp
+    src/band_ops.cpp
+    src/band_menu.cpp)
 add_library(amq::ui_model ALIAS amq_ui_model)
 target_include_directories(amq_ui_model PUBLIC include)
 target_link_libraries(amq_ui_model PUBLIC amq::params amq::dsp amq::analysis)

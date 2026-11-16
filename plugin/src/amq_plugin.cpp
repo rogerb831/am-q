@@ -257,6 +257,7 @@ clap_process_status AmqPlugin::process(const clap_process* p) noexcept {
 void AmqPlugin::onMainThread() noexcept {
     refreshRequested_.store(false);
     if (!processing_.load()) applyPendingState();
+    if (undoClearPending_.exchange(false)) undo_.clear();
     if (rescanPending_.exchange(false) && _host.canUseParams()) _host.paramsRescan(CLAP_PARAM_RESCAN_VALUES);
     rescanTextIfNeeded();
     table_.dispatchNotifications();  // editor listeners, once the editor binds controls
@@ -319,6 +320,7 @@ void AmqPlugin::applyPendingState() noexcept {
     for (params::ParamIndex i = 0; i < params::kParamCount; ++i) table_.set(i, b.v[i], params::ParamSource::Preset);
     snapPending_.store(true);
     rescanPending_.store(true);
+    undoClearPending_.store(true);  // undo steps from before the load no longer apply
     _host.requestCallback();
 }
 
@@ -535,7 +537,7 @@ bool AmqPlugin::guiGetPreferredApi(const char** api, bool* isFloating) noexcept 
 bool AmqPlugin::guiCreate(const char* api, bool isFloating) noexcept {
     if (!guiIsApiSupported(api, isFloating)) return false;
     if (!editor_) {
-        editor_ = std::make_unique<ui::Editor>(*this, guiLogicalW_, guiLogicalH_);
+        editor_ = std::make_unique<ui::Editor>(undo_, guiLogicalW_, guiLogicalH_);
         editor_->onSizeChanged = [this](uint32_t w, uint32_t h, double scale) {
             guiHostW_.store(w);
             guiHostH_.store(h);

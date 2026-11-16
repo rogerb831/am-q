@@ -47,7 +47,7 @@ target_link_libraries(amq_engine_tests PRIVATE amq::engine doctest::doctest)
 amq_set_warnings(amq_engine_tests)
 add_test(NAME amq_engine_tests COMMAND amq_engine_tests)
 
-add_executable(amq_ui_model_tests test_main.cpp ui/test_ui_model.cpp)
+add_executable(amq_ui_model_tests test_main.cpp ui/test_ui_model.cpp ui/test_band_ops.cpp)
 target_link_libraries(amq_ui_model_tests PRIVATE amq::ui_model doctest::doctest)
 amq_set_warnings(amq_ui_model_tests)
 add_test(NAME amq_ui_model_tests COMMAND amq_ui_model_tests)

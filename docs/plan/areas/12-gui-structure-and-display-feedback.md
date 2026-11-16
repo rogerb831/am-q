@@ -42,7 +42,7 @@ Processor-to-GUI data uses lock-free single-producer, single-consumer FIFOs in a
 - [ ] Build the spectral section with density and tilt controls (GUI engineer, Phase 2)
 - [ ] Build output metering and analyzer controls bound to Am-Q parameters and settings (GUI engineer, Phase 2)
 - [ ] Construct the EQ Match panel lazily on first open (GUI engineer, Phase 3)
-- [ ] Add bounded undo history with a depth setting (Plugin and host engineer, Phase 2)
+- [x] Add bounded undo history with a depth setting (Plugin and host engineer, Phase 2). Done on 2026-11-16 (`ui/include/amq/ui/undo_controller.hpp`): the editor edits through an `UndoController` wrapping the plugin; a gesture is one step, an explicit group (every band operation) is one step; each step keeps each parameter's value before its first and after its last change; undo and redo write back through host gestures; depth 100 by default (PROVISIONAL, `setDepth`); host automation and state loads are not recorded, and a state load clears the history. Tested in `tests/ui/test_band_ops.cpp`. Still to do with the key map (area 15): the undo and redo keys
 - [ ] Add an editor open/close soak test and an idle-CPU benchmark (Build and QA engineer, Phase 3)
 
 ## Acceptance tests
