@@ -354,6 +354,10 @@ void Engine::retargetAll() noexcept {
         panMode_.retarget(pm, static_cast<uint32_t>(std::lround(len)));
     }
 
+    // Display follower settings for the analyzer worker (area 19).
+    display_.setSettings(static_cast<int>(table_.value(params::globalParam(GlobalParam::AnalyzerSpeed))),
+                         table_.value(params::globalParam(GlobalParam::AnalyzerFreeze)) >= 0.5,
+                         table_.value(params::globalParam(GlobalParam::AnalyzerTilt)));
     // Auto Gain: ramp to the latest make-up gain; off, back to exactly 1 (area 03 R7, R8).
     {
         double agDb = 0.0;

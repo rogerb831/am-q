@@ -56,9 +56,11 @@ struct SpectrumSnapshot {
     std::array<float, kMaxSpectrumBins> pre;
     std::array<float, kMaxSpectrumBins> post;
     std::array<float, kMaxSpectrumBins> external;
+    std::array<float, kMaxSpectrumBins> postPeak;  // peak hold of the post spectrum (area 19 R?)
     SpectrumSnapshot() {
         pre.fill(kFloorDb);
         post.fill(kFloorDb);
+        postPeak.fill(kFloorDb);
         external.fill(kFloorDb);
     }
 };

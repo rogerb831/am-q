@@ -51,6 +51,7 @@ constexpr uint32_t gainReduction = 0xffff6b5b;
 constexpr uint32_t spectrumPre = 0x806f8fd0;
 constexpr uint32_t spectrumPost = 0xa0c4ee3c;
 constexpr uint32_t spectrumExt = 0x80d07fd0;
+constexpr uint32_t spectrumPeak = 0x50eceaf0;
 constexpr uint32_t lasso = 0x40eceaf0;
 constexpr uint32_t meter = 0xffc4ee3c;
 constexpr uint32_t meterHot = 0xffff6b5b;
@@ -125,17 +126,16 @@ public:
         if (!s) return;
         static const double ranges[] = {60.0, 90.0, 120.0};
         const double range = ranges[std::clamp(static_cast<int>(val(params::GlobalParam::AnalyzerRange)), 0, 2)];
-        const double tilt = val(params::GlobalParam::AnalyzerTilt);  // dB per octave about 1 kHz
         const auto& grid = dsp::logGrid();
         const float top = GraphGeometry::kTop, bottom = height() - GraphGeometry::kBottom;
-        auto drawOne = [&](const std::array<float, analysis::kMaxSpectrumBins>& db, uint32_t colour) {
+        auto drawOne = [&](const std::array<float, analysis::kMaxSpectrumBins>& db, uint32_t colour, float thickness = 1.0f) {
             visage::Path path;
             bool started = false;
             const uint32_t n = std::min<uint32_t>(s->binCount, static_cast<uint32_t>(grid.size()));
             for (uint32_t i = 0; i < n; ++i) {
                 const double hz = grid[i];
                 if (hz < g_.viewLo() || hz > g_.viewHi()) continue;
-                const double v = db[i] + tilt * std::log2(hz / 1000.0);
+                const double v = db[i];  // tilt and ballistics come from the display follower
                 const float y = std::clamp(top + static_cast<float>(-v / range) * (bottom - top), top, bottom);
                 const float x = g_.xOfHz(hz);
                 if (!started) path.moveTo(x, y), started = true;
@@ -143,10 +143,13 @@ public:
             }
             if (!started) return;
             c.setColor(colour);
-            c.stroke(path, 0.0f, 0.0f, width(), height(), 1.0f);
+            c.stroke(path, 0.0f, 0.0f, width(), height(), thickness);
         };
         if (val(params::GlobalParam::AnalyzerShowPre) >= 0.5) drawOne(s->pre, tok::spectrumPre);
-        if (val(params::GlobalParam::AnalyzerShowPost) >= 0.5) drawOne(s->post, tok::spectrumPost);
+        if (val(params::GlobalParam::AnalyzerShowPost) >= 0.5) {
+            drawOne(s->postPeak, tok::spectrumPeak, 0.75f);  // peak hold
+            drawOne(s->post, tok::spectrumPost);
+        }
         if (val(params::GlobalParam::AnalyzerShowExternal) >= 0.5) drawOne(s->external, tok::spectrumExt);
     }
 

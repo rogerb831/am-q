@@ -347,6 +347,7 @@ TEST_CASE("Display spectrum: grid mapping, floor before data, snapshot published
 
 TEST_CASE("Engine taps pre, post and side chain; the analyzer follows prepare and release (area 19 R1)") {
     amq::params::ParameterTable t;
+    t.set(amq::params::globalParam(amq::params::GlobalParam::AnalyzerTilt), 0.0, amq::params::ParamSource::Preset);  // calibrated reading
     amq::engine::Engine e(t);
     REQUIRE(e.prepare(48000.0, 512));
     const int n = e.analyzer().fftSize(SizeChoice::Display);
@@ -408,4 +409,46 @@ TEST_CASE("Analyzer CPU at the highest resolution, display and match consumers, 
     }
     MESSAGE("analyzer worker, 3 sources stereo at 16384 points: " << busy / 10.0 * 100.0 << " % of one core");
     CHECK(busy / 10.0 < 0.03);  // area 19 R10 planning budget
+}
+
+TEST_CASE("Display follower: tilt, rise and fall, freeze and peak hold (area 19 display follower)") {
+    using amq::params::GlobalParam;
+    amq::params::ParameterTable t;
+    t.set(amq::params::globalParam(GlobalParam::AnalyzerTilt), 4.5, amq::params::ParamSource::Preset);
+    t.set(amq::params::globalParam(GlobalParam::AnalyzerSpeed), 4, amq::params::ParamSource::Preset);  // Very Fast
+    amq::engine::Engine e(t);
+    REQUIRE(e.prepare(48000.0, 512));
+    const int n = e.analyzer().fftSize(SizeChoice::Display);
+    const double hz = 100 * 48000.0 / n;
+    auto run = [&](float amp, size_t len) {
+        const auto x = sine(len, hz, 48000.0, amp);
+        std::vector<float> ol(512), orr(512);
+        for (size_t pos = 0; pos + 512 <= x.size(); pos += 512) {
+            const float* in[2] = {x.data() + pos, x.data() + pos};
+            float* out[2] = {ol.data(), orr.data()};
+            e.process(in, 2, out, 2, 512);
+            e.runAnalyzerForTests();
+        }
+    };
+    auto peakOf = [&](const SpectrumSnapshot* s) { return *std::max_element(s->post.begin(), s->post.begin() + s->binCount); };
+    run(0.1f, static_cast<size_t>(n) * 4);
+    const SpectrumSnapshot* s = e.snapshots().pullSpectrum();
+    REQUIRE(s != nullptr);
+    // Tilt: 4.5 dB per octave about 1 kHz.
+    CHECK(peakOf(s) == doctest::Approx(-20.0 + 4.5 * std::log2(hz / 1000.0)).epsilon(0.01));
+    const float settled = peakOf(s);
+    // Fall: a 20 dB drop is followed, not jumped to; the peak hold stays above the fresh value.
+    run(0.01f, 2048);
+    s = e.snapshots().pullSpectrum();
+    REQUIRE(s != nullptr);
+    CHECK(peakOf(s) < settled);
+    CHECK(peakOf(s) > settled - 20.0f);
+    const float held = *std::max_element(s->postPeak.begin(), s->postPeak.begin() + s->binCount);
+    CHECK(held >= peakOf(s));
+    // Freeze: nothing moves while it is on.
+    t.set(amq::params::globalParam(GlobalParam::AnalyzerFreeze), 1, amq::params::ParamSource::Host);
+    const float frozen = peakOf(s);
+    run(0.1f, static_cast<size_t>(n) * 2);
+    const SpectrumSnapshot* f = e.snapshots().pullSpectrum();
+    if (f) CHECK(peakOf(f) == frozen);
 }

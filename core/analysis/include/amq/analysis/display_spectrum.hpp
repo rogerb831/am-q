@@ -8,14 +8,22 @@
 // bin interpolates the power linearly between the two nearest bins. Amplitude scaling: a sine
 // of peak amplitude A centred on a bin reads 20 log10(A) dBFS.
 //
-// Phase 1 scope: no ballistics, tilt, freeze or peak hold yet (area 19, Phase 2). A source
-// that stops (for example the side chain is unplugged) holds its last frame until then.
+// Display follower (area 19 task "display follower with millisecond rise and fall, freeze, peak-hold
+// and tilt"; a display stage, never fed to EQ Match). Each grid point follows its new value in dB
+// with a one-pole rise and fall (90 % times from Analyzer Speed, below; the coefficient comes from
+// each frame's real interval, so it is independent of FFT size and overlap). Tilt adds
+// dB-per-octave about 1 kHz. Freeze stops updating. The post spectrum also keeps a peak hold that
+// falls at kPeakFallDbPerSecond. All PROVISIONAL until the Product designer tunes them.
+//   Speed           Very Slow  Slow   Medium  Fast   Very Fast
+//   rise (ms)       60         40     25      12     6
+//   fall (ms)       3000       1500   800     400    200
 
 #include "amq/analysis/analyzer.hpp"
 #include "amq/analysis/publisher.hpp"
 #include "amq/dsp/log_grid.hpp"
 
 #include <array>
+#include <atomic>
 
 namespace amq::analysis {
 
@@ -26,6 +34,16 @@ public:
 
     void onFrame(const SpectrumFrame& f) noexcept override;
     void onPassEnd() noexcept override;
+
+    // Any thread (the engine, every block): Analyzer Speed (0-4), Freeze, Tilt in dB per octave.
+    void setSettings(int speed, bool freeze, double tiltDbPerOctave) noexcept {
+        speed_.store(speed, std::memory_order_relaxed);
+        freeze_.store(freeze, std::memory_order_relaxed);
+        tilt_.store(tiltDbPerOctave, std::memory_order_relaxed);
+    }
+    static constexpr std::array<double, 5> kRiseMs = {60, 40, 25, 12, 6};
+    static constexpr std::array<double, 5> kFallMs = {3000, 1500, 800, 400, 200};
+    static constexpr double kPeakFallDbPerSecond = 6.0;
 
     // Worker thread (tests): the latest values of a source, in dBFS per grid point.
     [[nodiscard]] const std::array<float, dsp::kLogGridPoints>& latest(Source s) const noexcept {
@@ -41,7 +59,14 @@ private:
     SnapshotPublisher* publisher_ = nullptr;
     int fftSize_ = 0;
     std::array<Point, dsp::kLogGridPoints> map_{};
-    std::array<std::array<float, dsp::kLogGridPoints>, kSourceCount> latest_{};
+    std::array<std::array<float, dsp::kLogGridPoints>, kSourceCount> latest_{};   // followed, tilted
+    std::array<double, dsp::kLogGridPoints> tiltOf_{};                             // log2(f / 1 kHz)
+    std::array<float, dsp::kLogGridPoints> peak_{};
+    std::array<uint64_t, kSourceCount> lastPos_{};
+    double sampleRate_ = 48000.0;
+    std::atomic<int> speed_{2};
+    std::atomic<bool> freeze_{false};
+    std::atomic<double> tilt_{0.0};
     bool dirty_ = false;
     uint64_t position_ = 0;
 };
