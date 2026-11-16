@@ -10,7 +10,10 @@
 #include <doctest/doctest.h>
 
 #include <cmath>
+#include <chrono>
 #include <complex>
+#include <cstdio>
+#include <memory>
 #include <vector>
 
 using namespace amq;
@@ -257,6 +260,113 @@ TEST_CASE("Natural Phase kernel scheduling: a change posts at once, automation i
     INFO(posted << " requests in 200 ms");
     CHECK(posted >= 15);
     CHECK(posted <= 21);
+}
+
+namespace {
+
+// 24 bands across shapes and all five placements, designed as the engine settles on them.
+void use24(params::ParameterTable& t) {
+    const dsp::Shape shapes[] = {dsp::Shape::Bell, dsp::Shape::LowShelf, dsp::Shape::HighShelf, dsp::Shape::Notch,
+                                 dsp::Shape::Bell, dsp::Shape::LowCut, dsp::Shape::HighCut, dsp::Shape::TiltShelf};
+    for (int b = 0; b < 24; ++b)
+        useBand(t, b, shapes[b % 8], 40.0 * std::pow(2.0, b * 0.4), (b % 2 ? 1.0 : -1.0) * (3.0 + b % 5), 0.7 + 0.3 * (b % 4),
+                b % 5);
+}
+
+std::unique_ptr<engine::CorrectionRequest> request24(const params::ParameterTable& t) {
+    auto r = std::make_unique<engine::CorrectionRequest>();
+    r->sampleRate = kFs;
+    r->channels = 2;
+    const uint8_t masks[] = {3, 1, 2, 1, 2};  // Stereo, Left, Right, Mid, Side
+    for (int b = 0; b < 24; ++b) {
+        auto& cb = r->bands[static_cast<size_t>(b)];
+        const int placement = static_cast<int>(t.value(params::bandParam(b, BandField::Placement)));
+        cb.active = true;
+        cb.stage = placement >= Mid ? 1 : 0;
+        cb.mask = masks[placement];
+        cb.in = engine::bandDesignInputs(t, b, kFs);
+        REQUIRE(engine::designBandCascade(cb.in, engine::DesignTier::Refined, cb.cascade));
+    }
+    return r;
+}
+
+}  // namespace
+
+TEST_CASE("Response caches: a one-band edit recomputes only that band, bit-identical to a fresh build (area 04 R12)") {
+    params::ParameterTable t;
+    use24(t);
+    auto r = request24(t);
+    dsp::NaturalPhaseKernelBuilder builder;
+    auto cache = std::make_unique<engine::CorrectionCache>();
+    auto warm = std::make_unique<engine::CorrectionKernels>(), fresh = std::make_unique<engine::CorrectionKernels>();
+    engine::buildCorrectionKernels(*r, builder, *cache, *warm);
+    CHECK(cache->recomputed == 24);
+    engine::buildCorrectionKernels(*r, builder, *cache, *warm);
+    CHECK(cache->recomputed == 24);  // nothing changed: nothing recomputed
+
+    // Edit band 7's gain, then band 12's cascade alone (same inputs, other sections).
+    t.set(params::bandParam(7, BandField::Gain), 9.5, ParamSource::Preset);
+    r->bands[7].in = engine::bandDesignInputs(t, 7, kFs);
+    REQUIRE(engine::designBandCascade(r->bands[7].in, engine::DesignTier::Refined, r->bands[7].cascade));
+    engine::buildCorrectionKernels(*r, builder, *cache, *warm);
+    CHECK(cache->recomputed == 25);
+    REQUIRE(engine::designBandCascade(r->bands[12].in, engine::DesignTier::Fast, r->bands[12].cascade));
+    engine::buildCorrectionKernels(*r, builder, *cache, *warm);
+    CHECK(cache->recomputed == 26);
+    // A band turned off and on again keeps its entry.
+    r->bands[3].active = false;
+    engine::buildCorrectionKernels(*r, builder, *cache, *warm);
+    r->bands[3].active = true;
+    engine::buildCorrectionKernels(*r, builder, *cache, *warm);
+    CHECK(cache->recomputed == 26);
+
+    engine::buildCorrectionKernels(*r, builder, *fresh);  // a fresh cache
+    CHECK(warm->taps == fresh->taps);
+}
+
+TEST_CASE("Response caches in the engine: a gain jump on one of 24 bands recomputes one band") {
+    params::ParameterTable t;
+    setMode(t, dsp::ProcessingMode::NaturalPhase);
+    use24(t);
+    engine::Engine e(t);
+    REQUIRE(e.prepare(kFs, kMaxFrames));
+    settle(e);
+    const auto before = e.kernelCacheRecomputes();
+    CHECK(before >= 24);
+    // A 20 dB step is a jump (no ramp), so exactly one design and one kernel request follow.
+    t.set(params::bandParam(5, BandField::Gain), t.value(params::bandParam(5, BandField::Gain)) + 20.0, ParamSource::Host);
+    run(e, 64);
+    e.runKernelJobsForTests();
+    CHECK(e.kernelCacheRecomputes() == before + 1);
+}
+
+// Report: kernel build time for 24 bands with a cold cache and after a one-band edit. Run with
+//   amq_engine_tests -tc="Response cache timing*" --no-skip
+TEST_CASE("Response cache timing (report)" * doctest::skip()) {
+    params::ParameterTable t;
+    use24(t);
+    auto r = request24(t);
+    dsp::NaturalPhaseKernelBuilder builder;
+    auto kernels = std::make_unique<engine::CorrectionKernels>();
+    using clk = std::chrono::steady_clock;
+    const int n = 50;
+    double cold = 0, edit = 0, same = 0;
+    for (int i = 0; i < n; ++i) {
+        auto cache = std::make_unique<engine::CorrectionCache>();
+        auto t0 = clk::now();
+        engine::buildCorrectionKernels(*r, builder, *cache, *kernels);
+        auto t1 = clk::now();
+        r->bands[7].in.gainDb += 0.01;  // one band's inputs change
+        engine::buildCorrectionKernels(*r, builder, *cache, *kernels);
+        auto t2 = clk::now();
+        engine::buildCorrectionKernels(*r, builder, *cache, *kernels);
+        auto t3 = clk::now();
+        cold += std::chrono::duration<double, std::milli>(t1 - t0).count();
+        edit += std::chrono::duration<double, std::milli>(t2 - t1).count();
+        same += std::chrono::duration<double, std::milli>(t3 - t2).count();
+    }
+    std::printf("24 bands, 48 kHz: cold %.3f ms, one band edited %.3f ms, nothing changed %.3f ms (mean of %d)\n",
+                cold / n, edit / n, same / n, n);
 }
 
 TEST_CASE("Zero Latency is unchanged: no correction stage, latency 0") {

@@ -32,6 +32,7 @@
 // at one partition boundary, and they crossfade (area 05 R8). Nothing on the audio thread
 // allocates or locks: requests and results go through single-writer sequence slots.
 
+#include "amq/dsp/analog_prototype.hpp"
 #include "amq/dsp/natural_phase_kernel.hpp"
 #include "amq/dsp/partitioned_convolver.hpp"
 #include "amq/dsp/realtime_design.hpp"
@@ -40,6 +41,7 @@
 
 #include <array>
 #include <atomic>
+#include <complex>
 #include <cstdint>
 #include <memory>
 #include <thread>
@@ -81,9 +83,29 @@ struct CorrectionOptions {
 // A digital band response below this (-120 dB) on a bin is rounding noise: take the limit.
 inline constexpr double kSingularResponse = 1e-6;
 
-// Builds the kernels for a request. Uses the builder's FFT; one builder per thread.
+// Per-band response caches (area 04 R12). For each band, the analog target and the digital
+// response at every kernel bin, with the prototype. An entry is valid while the band's design
+// inputs and its exact cascade are unchanged (compared by value, so it cannot go stale), so a
+// one-band edit recomputes only that band. One cache per building thread; about 200 KB, so
+// allocate it off the audio thread.
+struct BandResponseCache {
+    bool valid = false;
+    DesignInputs in;
+    dsp::SvfCascade cascade;
+    dsp::AnalogPrototype proto;
+    std::array<std::complex<double>, dsp::NaturalPhaseKernelBuilder::kBins> target{}, digital{};
+};
+struct CorrectionCache {
+    std::array<BandResponseCache, params::kBandCount> bands{};
+    uint64_t recomputed = 0;  // band entries (re)computed since construction
+};
+
+// Builds the kernels for a request, with the thread's builder and cache. No allocation.
 void buildCorrectionKernels(const CorrectionRequest& r, dsp::NaturalPhaseKernelBuilder& builder,
-                            CorrectionKernels& out, const CorrectionOptions& opt = {}) noexcept;
+                            CorrectionCache& cache, CorrectionKernels& out, const CorrectionOptions& opt = {}) noexcept;
+// The same with a fresh cache (allocates: tests and reports only).
+void buildCorrectionKernels(const CorrectionRequest& r, dsp::NaturalPhaseKernelBuilder& builder,
+                            CorrectionKernels& out, const CorrectionOptions& opt = {});
 
 class NaturalPhaseStage {
 public:
@@ -110,6 +132,8 @@ public:
     int runPending();
 
     [[nodiscard]] uint64_t swaps() const noexcept { return swaps_; }
+    // Band responses the worker's cache has (re)computed since prepare (tests, Manual mode).
+    [[nodiscard]] uint64_t cacheRecomputes() const noexcept { return workerCache_ ? workerCache_->recomputed : 0; }
     [[nodiscard]] uint64_t appliedId() const noexcept { return appliedId_; }
     [[nodiscard]] int latency() const noexcept {
         return dsp::NaturalPhaseKernelBuilder::kCentre + dsp::PartitionedConvolver::kDefaultPartition;
@@ -124,6 +148,8 @@ private:
     std::unique_ptr<CorrectionRequest> workerRequest_;               // worker scratch
     std::unique_ptr<CorrectionKernels> workerKernels_;               // worker scratch
     std::unique_ptr<CorrectionKernels> audioKernels_;                // audio-thread scratch
+    std::unique_ptr<CorrectionCache> workerCache_;                   // worker / test thread
+    std::unique_ptr<CorrectionCache> audioCache_;                    // offline renders
     std::vector<float> buf_;  // 6 * maxFrames: xL, xR, then the four convolver outputs
     uint32_t maxFrames_ = 0;
 

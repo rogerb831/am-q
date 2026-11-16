@@ -7,6 +7,7 @@
 #include <chrono>
 #include <cmath>
 #include <complex>
+#include <memory>
 
 namespace amq::engine {
 
@@ -51,11 +52,29 @@ cd cap(cd c) noexcept {
 
 }  // namespace
 
+namespace {
+
+bool sameCascade(const dsp::SvfCascade& x, const dsp::SvfCascade& y) noexcept {
+    if (x.sections.size() != y.sections.size()) return false;
+    for (size_t i = 0; i < x.sections.size(); ++i) {
+        const auto &p = x.sections[i], &q = y.sections[i];
+        if (p.g != q.g || p.k != q.k || p.m0 != q.m0 || p.m1 != q.m1 || p.m2 != q.m2) return false;
+    }
+    return true;
+}
+
+}  // namespace
+
 void buildCorrectionKernels(const CorrectionRequest& r, dsp::NaturalPhaseKernelBuilder& builder,
-                            CorrectionKernels& out, const CorrectionOptions& opt) noexcept {
+                            CorrectionKernels& out, const CorrectionOptions& opt) {
+    auto cache = std::make_unique<CorrectionCache>();
+    buildCorrectionKernels(r, builder, *cache, out, opt);
+}
+
+void buildCorrectionKernels(const CorrectionRequest& r, dsp::NaturalPhaseKernelBuilder& builder,
+                            CorrectionCache& cache, CorrectionKernels& out, const CorrectionOptions& opt) noexcept {
     out.id = r.id;
     const bool stereo = r.channels >= 2;
-    std::array<dsp::AnalogPrototype, params::kBandCount> proto;
     std::array<bool, params::kBandCount> use{};
     bool any = false, anyMs = false;
     for (size_t b = 0; b < r.bands.size(); ++b) {
@@ -63,8 +82,22 @@ void buildCorrectionKernels(const CorrectionRequest& r, dsp::NaturalPhaseKernelB
         const uint8_t mask = stereo ? band.mask : static_cast<uint8_t>(band.mask & 1u);
         if (!band.active || mask == 0 || band.cascade.sections.empty()) continue;
         if (!stereo && band.stage == 1) continue;  // no M/S stage on a mono channel
-        proto[b] = dsp::designAnalogPrototype(bandSpecFrom(band.in));
-        if (!proto[b].supported) continue;  // Brickwall stays its IIR (area 03 R16)
+        // Area 04 R12: recompute this band's responses only if its design changed.
+        auto& e = cache.bands[b];
+        if (!e.valid || !(e.in == band.in) || !sameCascade(e.cascade, band.cascade)) {
+            e.in = band.in;
+            e.cascade = band.cascade;
+            e.proto = dsp::designAnalogPrototype(bandSpecFrom(band.in));
+            if (e.proto.supported)
+                for (int k = 0; k < K::kBins; ++k) {
+                    const double hz = std::max(K::binHz(k, r.sampleRate), 1e-3);  // DC: the limit of the ratio
+                    e.target[static_cast<size_t>(k)] = e.proto.evaluateHz(hz);
+                    e.digital[static_cast<size_t>(k)] = dsp::svfCascadeResponseHz(band.cascade, hz, r.sampleRate);
+                }
+            e.valid = true;
+            ++cache.recomputed;
+        }
+        if (!e.proto.supported) continue;  // Brickwall stays its IIR (area 03 R16)
         use[b] = true;
         any = true;
         anyMs = anyMs || band.stage == 1;
@@ -77,15 +110,17 @@ void buildCorrectionKernels(const CorrectionRequest& r, dsp::NaturalPhaseKernelB
         return;
     }
 
-    // The 2x2 correction at one frequency, and the smallest digital band response there.
-    auto correctionAt = [&](double hz, double& minD) {
+    // The 2x2 correction at one frequency, and the smallest digital band response there. Bin k
+    // (k >= 0) reads the cached responses; k < 0 evaluates at hz (the singular-bin limit).
+    auto correctionAt = [&](double hz, double& minD, int k = -1) {
         cd lrA[2] = {1.0, 1.0}, lrD[2] = {1.0, 1.0}, msA[2] = {1.0, 1.0}, msD[2] = {1.0, 1.0};
         minD = 1e300;
         for (size_t b = 0; b < r.bands.size(); ++b) {
             if (!use[b]) continue;
             const auto& band = r.bands[b];
-            const cd a = proto[b].evaluateHz(hz);
-            const cd d = dsp::svfCascadeResponseHz(band.cascade, hz, r.sampleRate);
+            const auto& e = cache.bands[b];
+            const cd a = k >= 0 ? e.target[static_cast<size_t>(k)] : e.proto.evaluateHz(hz);
+            const cd d = k >= 0 ? e.digital[static_cast<size_t>(k)] : dsp::svfCascadeResponseHz(band.cascade, hz, r.sampleRate);
             minD = std::min(minD, std::abs(d));
             for (int c = 0; c < 2; ++c) {
                 if (!(band.mask & (1u << c))) continue;
@@ -106,7 +141,7 @@ void buildCorrectionKernels(const CorrectionRequest& r, dsp::NaturalPhaseKernelB
     for (int k = 0; k < K::kBins; ++k) {
         const double hz = std::max(K::binHz(k, r.sampleRate), 1e-3);  // DC: the limit of the ratio
         double minD = 0.0;
-        M2 cm = correctionAt(hz, minD);
+        M2 cm = correctionAt(hz, minD, k);
         if (opt.singularityLimit && minD < kSingularResponse) {
             // A band's zero sits on this bin: target and digital response are both rounding noise
             // here, but their ratio is smooth through it (a removable singularity: matched designs
@@ -178,12 +213,14 @@ bool NaturalPhaseStage::prepare(uint32_t maxFrames, const CorrectionRequest& ini
         if (!workerRequest_) workerRequest_ = std::make_unique<CorrectionRequest>();
         if (!workerKernels_) workerKernels_ = std::make_unique<CorrectionKernels>();
         if (!audioKernels_) audioKernels_ = std::make_unique<CorrectionKernels>();
+        workerCache_ = std::make_unique<CorrectionCache>();  // fresh per activation
+        audioCache_ = std::make_unique<CorrectionCache>();
         buf_.assign(static_cast<size_t>(maxFrames) * 6, 0.0f);
     } catch (...) {
         return false;
     }
     maxFrames_ = maxFrames;
-    buildCorrectionKernels(initial, *workerBuilder_, *workerKernels_);
+    buildCorrectionKernels(initial, *workerBuilder_, *workerCache_, *workerKernels_);
     for (size_t i = 0; i < conv_.size(); ++i)
         if (!conv_[i].setKernel(workerKernels_->taps[i].data(), CorrectionKernels::kTaps)) return false;
     request_.write(CorrectionRequest{});
@@ -197,14 +234,14 @@ bool NaturalPhaseStage::prepare(uint32_t maxFrames, const CorrectionRequest& ini
 void NaturalPhaseStage::post(const CorrectionRequest& r) noexcept { request_.write(r); }
 
 void NaturalPhaseStage::buildNow(const CorrectionRequest& r) noexcept {
-    buildCorrectionKernels(r, *audioBuilder_, *audioKernels_);
+    buildCorrectionKernels(r, *audioBuilder_, *audioCache_, *audioKernels_);
     pendingOffline_ = true;
 }
 
 int NaturalPhaseStage::runPending() {
     if (!workerRequest_ || !request_.tryRead(*workerRequest_)) return 0;
     if (workerRequest_->id == 0 || workerRequest_->id == builtId_) return 0;
-    buildCorrectionKernels(*workerRequest_, *workerBuilder_, *workerKernels_);
+    buildCorrectionKernels(*workerRequest_, *workerBuilder_, *workerCache_, *workerKernels_);
     result_.write(*workerKernels_);
     readyId_.store(workerRequest_->id, std::memory_order_release);
     builtId_ = workerRequest_->id;

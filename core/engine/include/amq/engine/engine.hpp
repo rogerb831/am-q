@@ -151,6 +151,8 @@ public:
     [[nodiscard]] double modeFadeGain() const noexcept { return fade_.current(); }
     // Natural Phase kernel sets handed to the convolvers since prepare (tests).
     [[nodiscard]] uint64_t kernelSwaps() const noexcept { return np_.swaps(); }
+    // Band responses the kernel worker's cache recomputed since prepare (tests, Manual mode).
+    [[nodiscard]] uint64_t kernelCacheRecomputes() const noexcept { return np_.cacheRecomputes(); }
 
     // Jump every ramp to the table value: state and preset restores apply without ramps
     // (area 09 R15). Audio thread, at a piece boundary.
