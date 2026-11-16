@@ -14,6 +14,7 @@
 
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <vector>
 
@@ -354,36 +355,80 @@ int main(int argc, char** argv) {
     auto handles = [] {
         return GetGuiResources(GetCurrentProcess(), GR_GDIOBJECTS) + GetGuiResources(GetCurrentProcess(), GR_USEROBJECTS);
     };
-    for (int i = 0; i < 5; ++i) {  // warm-up
-        gui->create(p, CLAP_WINDOW_API_WIN32, false);
-        gui->set_parent(p, &win);
-        gui->show(p);
-        pump(20);
-        gui->destroy(p);
-    }
-    pump(200);
-    auto cycle100 = [&] {
-        for (int i = 0; i < 100; ++i) {
+    //
+    // Memory is measured in two parts, because the graphics driver dominates the raw numbers.
+    // Visage releases the whole GPU device when the last editor closes (R8) and creates a new
+    // one on the next open. A bare Direct3D 11 device + swapchain create/destroy loop, with no
+    // Am-Q or Visage code, grows private memory by about 30 MB over the first 200-300 cycles and
+    // then swings by +-5 MB (measured 2026-11-15). The editor alone shows the same curve, with
+    // swings up to 10 MB, so its raw numbers cannot tell a leak from the driver.
+    //   6a. Editor without a window: everything Am-Q builds per editor (frame tree, model,
+    //       accessible tree, listeners), no GPU.
+    //   6b. Attached and shown, while a second instance keeps its editor open, as when a host
+    //       shows two Am-Q editors. The GPU device then lives through the soak, so each cycle
+    //       creates and releases only the per-editor resources: window, swapchain, layers,
+    //       textures, frame caches and the editor itself.
+    // The device teardown itself (R8) is exercised by every other open/close in this test.
+    constexpr double kMB = 1048576.0;
+    auto cycles = [&](int n, bool attach) {
+        for (int i = 0; i < n; ++i) {
             gui->create(p, CLAP_WINDOW_API_WIN32, false);
-            gui->set_parent(p, &win);
-            gui->show(p);
+            if (attach) {
+                gui->set_parent(p, &win);
+                gui->show(p);
+            }
             pump(10);
             gui->destroy(p);
         }
         pump(300);
     };
+
+    // 6a.
+    cycles(20, false);
+    const size_t d0 = privateBytes();
+    cycles(100, false);
+    const size_t d1 = privateBytes();
+    cycles(100, false);
+    const size_t d2 = privateBytes();
+    std::printf("  soak without a window: private memory %.2f -> %.2f -> %.2f MB\n", d0 / kMB, d1 / kMB, d2 / kMB);
+    // The first batch may still fill allocator caches (up to 0.3 MB seen); the second must not grow.
+    check(d2 < d1 + 128 * 1024, "second 100 create/destroy cycles without a window: memory growth under 128 KB");
+
+    // 6b.
+    const clap_plugin* holder = f->create_plugin(f, &gHost, f->get_plugin_descriptor(f, 0)->id);
+    holder->init(holder);
+    auto* holderGui = static_cast<const clap_plugin_gui*>(holder->get_extension(holder, CLAP_EXT_GUI));
+    HWND holderTop = CreateWindowW(wc.lpszClassName, L"Am-Q GUI test (second editor)", WS_OVERLAPPEDWINDOW, 140, 140,
+                                   900, 560, nullptr, nullptr, wc.hInstance, nullptr);
+    ShowWindow(holderTop, SW_SHOWNOACTIVATE);
+    clap_window holderWin{CLAP_WINDOW_API_WIN32, {holderTop}};
+    holderGui->create(holder, CLAP_WINDOW_API_WIN32, false);
+    holderGui->set_parent(holder, &holderWin);
+    holderGui->show(holder);
+    pump(300);
+    // Warm-up: with the device held, memory rises about 1.4 MB and GDI/USER objects by 3 over the
+    // first 250 cycles, then both stay flat (measured over a further 1000 cycles: within 0.5 MB,
+    // objects unchanged). A leak keeps rising after it.
+    const DWORD hw = handles();
+    const size_t aw = privateBytes();
+    cycles(250, true);
     const DWORD h0 = handles();
-    const size_t m0 = privateBytes();
-    cycle100();
+    const size_t a0 = privateBytes();
+    cycles(100, true);
+    const size_t a1 = privateBytes();
+    cycles(100, true);
+    const size_t a2 = privateBytes();
     const DWORD h1 = handles();
-    const size_t m1 = privateBytes();
-    cycle100();  // a leak keeps growing; caches filled by the first batch do not
-    const DWORD h2 = handles();
-    const size_t m2 = privateBytes();
-    std::printf("  soak: GDI+USER objects %lu -> %lu -> %lu, private memory %.1f -> %.1f -> %.1f MB\n", h0, h1, h2,
-                m0 / 1048576.0, m1 / 1048576.0, m2 / 1048576.0);
-    check(h2 <= h0 + 2, "200 editor open/close cycles: no GDI/USER object growth");
-    check(m2 < m1 + 2 * 1048576, "second 100 open/close cycles: memory growth under 2 MB (no leak per cycle)");
+    std::printf("  soak attached (second editor open): warm-up %.2f -> %.2f MB, objects %lu -> %lu; then %.2f -> %.2f -> "
+                "%.2f MB, objects %lu -> %lu\n",
+                aw / kMB, a0 / kMB, hw, h0, a0 / kMB, a1 / kMB, a2 / kMB, h0, h1);
+    check(h0 <= hw + 8, "attached warm-up (250 cycles): GDI/USER objects bounded (+8 at most)");
+    check(h1 <= h0, "200 attached open/close cycles after warm-up: no GDI/USER object growth");
+    check(a2 < a0 + 1024 * 1024, "200 attached open/close cycles after warm-up: memory growth under 1 MB (5 KB per cycle)");
+    holderGui->destroy(holder);
+    holder->destroy(holder);
+    DestroyWindow(holderTop);
+    pump(100);
     p->stop_processing(p);
     p->deactivate(p);
     p->destroy(p);
