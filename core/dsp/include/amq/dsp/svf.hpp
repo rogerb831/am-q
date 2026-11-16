@@ -15,6 +15,12 @@
 
 #include <cmath>
 #include <complex>
+#include <cstdint>
+
+#if defined(__SSE2__) || defined(_M_X64) || (defined(_M_IX86_FP) && _M_IX86_FP >= 2)
+#include <emmintrin.h>
+#define AMQ_SVF_SSE2 1
+#endif
 
 namespace amq::dsp {
 
@@ -101,6 +107,68 @@ struct SvfState {
     s.ic1 = 2.0 * v1 - s.ic1;
     s.ic2 = 2.0 * v2 - s.ic2;
     return c.m0 * v0 + c.m1 * v1 + c.m2 * v2;
+}
+
+// Block runs of one section in place (R18 kernel variants). Results are bit-identical to calling
+// svfTick per sample: a section's recurrence does not depend on the order sections are run in, and
+// the SIMD form keeps the scalar operation order.
+inline void svfRun(const SvfCoeffs& c, SvfState& s, double* x, uint32_t n) noexcept {
+    for (uint32_t i = 0; i < n; ++i) x[i] = svfTick(c, s, x[i]);
+}
+
+// One sample of linked stereo (same coefficients on both channels), bit-identical to two svfTick.
+inline void svfTickStereo(const SvfCoeffs& c, SvfState& sl, SvfState& sr, double& l, double& r) noexcept {
+#if defined(AMQ_SVF_SSE2)
+    const __m128d v0 = _mm_set_pd(r, l);
+    const __m128d ic1 = _mm_set_pd(sr.ic1, sl.ic1), ic2 = _mm_set_pd(sr.ic2, sl.ic2);
+    const __m128d a2 = _mm_set1_pd(c.a2);
+    const __m128d v3 = _mm_sub_pd(v0, ic2);
+    const __m128d v1 = _mm_add_pd(_mm_mul_pd(_mm_set1_pd(c.a1), ic1), _mm_mul_pd(a2, v3));
+    const __m128d v2 = _mm_add_pd(_mm_add_pd(ic2, _mm_mul_pd(a2, ic1)), _mm_mul_pd(_mm_set1_pd(c.a3), v3));
+    const __m128d two = _mm_set1_pd(2.0);
+    const __m128d n1 = _mm_sub_pd(_mm_mul_pd(two, v1), ic1), n2 = _mm_sub_pd(_mm_mul_pd(two, v2), ic2);
+    const __m128d y = _mm_add_pd(_mm_add_pd(_mm_mul_pd(_mm_set1_pd(c.m0), v0), _mm_mul_pd(_mm_set1_pd(c.m1), v1)),
+                                 _mm_mul_pd(_mm_set1_pd(c.m2), v2));
+    double t[2];
+    _mm_storeu_pd(t, n1);
+    sl.ic1 = t[0], sr.ic1 = t[1];
+    _mm_storeu_pd(t, n2);
+    sl.ic2 = t[0], sr.ic2 = t[1];
+    _mm_storeu_pd(t, y);
+    l = t[0], r = t[1];
+#else
+    l = svfTick(c, sl, l);
+    r = svfTick(c, sr, r);
+#endif
+}
+
+// Linked stereo: both channels share the coefficients; SSE2 runs them in one register.
+inline void svfRunStereo(const SvfCoeffs& c, SvfState& sl, SvfState& sr, double* l, double* r, uint32_t n) noexcept {
+#if defined(AMQ_SVF_SSE2)
+    const __m128d a1 = _mm_set1_pd(c.a1), a2 = _mm_set1_pd(c.a2), a3 = _mm_set1_pd(c.a3);
+    const __m128d m0 = _mm_set1_pd(c.m0), m1 = _mm_set1_pd(c.m1), m2 = _mm_set1_pd(c.m2);
+    const __m128d two = _mm_set1_pd(2.0);
+    __m128d ic1 = _mm_set_pd(sr.ic1, sl.ic1), ic2 = _mm_set_pd(sr.ic2, sl.ic2);
+    for (uint32_t i = 0; i < n; ++i) {
+        const __m128d v0 = _mm_set_pd(r[i], l[i]);
+        const __m128d v3 = _mm_sub_pd(v0, ic2);
+        const __m128d v1 = _mm_add_pd(_mm_mul_pd(a1, ic1), _mm_mul_pd(a2, v3));
+        const __m128d v2 = _mm_add_pd(_mm_add_pd(ic2, _mm_mul_pd(a2, ic1)), _mm_mul_pd(a3, v3));
+        ic1 = _mm_sub_pd(_mm_mul_pd(two, v1), ic1);
+        ic2 = _mm_sub_pd(_mm_mul_pd(two, v2), ic2);
+        const __m128d y = _mm_add_pd(_mm_add_pd(_mm_mul_pd(m0, v0), _mm_mul_pd(m1, v1)), _mm_mul_pd(m2, v2));
+        _mm_storel_pd(l + i, y);
+        _mm_storeh_pd(r + i, y);
+    }
+    double t[2];
+    _mm_storeu_pd(t, ic1);
+    sl.ic1 = t[0], sr.ic1 = t[1];
+    _mm_storeu_pd(t, ic2);
+    sl.ic2 = t[0], sr.ic2 = t[1];
+#else
+    svfRun(c, sl, l, n);
+    svfRun(c, sr, r, n);
+#endif
 }
 
 }  // namespace amq::dsp

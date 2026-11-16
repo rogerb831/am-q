@@ -566,6 +566,55 @@ void Engine::runStage(uint8_t stage, double* const* w, uint32_t outCh, uint32_t 
     for (auto& band : bands_) {
         if (band.stage != stage) continue;
         if (!band.wet.active() && band.wet.current() == 0.0) continue;  // off: bit-transparent
+        // Steady state (no glide, crossfade or enable fade): run section by section over the
+        // sub-block, both channels of a stereo band together (R18 kernel variants, SIMD).
+        if (!band.glideLeft && !band.xfade.active() && !band.wet.active() && band.wet.current() == 1.0) {
+            const size_t ns = band.coeffs.size();
+            if (outCh >= 2 && band.mask == 3) {
+                for (size_t k = 0; k < ns; ++k)
+                    dsp::svfRunStereo(band.coeffs[k], band.state[0][k], band.state[1][k], w[0] + off, w[1] + off, n);
+            } else {
+                for (uint32_t c = 0; c < outCh; ++c)
+                    if (band.mask & (1u << c))
+                        for (size_t k = 0; k < ns; ++k) dsp::svfRun(band.coeffs[k], band.state[c][k], w[c] + off, n);
+            }
+            continue;
+        }
+        // Gliding (no crossfade or enable fade): the same section-by-section order, with each
+        // section's coefficients stepped per sample. Equal to the per-sample loop below: the glide
+        // lands every section on its goal at the same sample, and identity sections dropped at
+        // the end pass audio unchanged.
+        if (band.glideLeft && !band.xfade.active() && !band.wet.active() && band.wet.current() == 1.0) {
+            const size_t ns = band.coeffs.size();
+            const uint32_t gl0 = band.glideLeft;
+            const bool stereoLinked = outCh >= 2 && band.mask == 3;
+            for (size_t k = 0; k < ns; ++k) {
+                auto& c = band.cur.sections[k];
+                const auto& d = band.step.sections[k];
+                auto co = band.coeffs[k];
+                uint32_t gl = gl0;
+                for (uint32_t i = 0; i < n; ++i) {
+                    if (gl) {
+                        if (--gl == 0) c = band.goal.sections[k];
+                        else c.g += d.g, c.k += d.k, c.m0 += d.m0, c.m1 += d.m1, c.m2 += d.m2;
+                        co = dsp::svfCoeffs(c);
+                    }
+                    if (stereoLinked) {
+                        dsp::svfTickStereo(co, band.state[0][k], band.state[1][k], w[0][off + i], w[1][off + i]);
+                    } else {
+                        for (uint32_t ch = 0; ch < outCh; ++ch)
+                            if (band.mask & (1u << ch)) w[ch][off + i] = dsp::svfTick(co, band.state[ch][k], w[ch][off + i]);
+                    }
+                }
+                band.coeffs[k] = co;
+            }
+            band.glideLeft = gl0 > n ? gl0 - n : 0;
+            if (band.glideLeft == 0) {
+                band.cur = band.goal;
+                dropIdentitySections(band);
+            }
+            continue;
+        }
         for (uint32_t i = 0; i < n; ++i) {
             if (band.glideLeft) {
                 const size_t m = band.coeffs.size();
