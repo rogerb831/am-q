@@ -32,8 +32,8 @@ before a product build ships.
 | Lucide cursors (vendored in Visage) | as vendored | ISC | Drag cursors | Yes | Visage `visage_windowing/cursors` |
 | glslang (via Visage) | 16.2.0 | BSD-3-Clause and others (see its LICENSE.txt) | Build-time shader compiler only | No | https://github.com/KhronosGroup/glslang |
 | SPIRV-Cross (via Visage) | vulkan-sdk-1.4.341.0 | Apache-2.0 | Build-time shader transpiler only | No | https://github.com/KhronosGroup/SPIRV-Cross |
-| clap-validator | 0.4.1 (built from source with cargo) | MIT | CLAP conformance testing | No (test tool) | https://github.com/free-audio/clap-validator |
-| pluginval | v1.0.4 (official Windows release binary, unsigned; size matches the GitHub asset, no digest published) | GPL-3.0 | VST3 conformance testing (external tool, never linked) | No (test tool) | https://github.com/Tracktion/pluginval |
+| clap-validator | 0.4.1 (the spike built it from source with cargo; CI uses the official release binaries, pinned by SHA-256 in `tools/ci/fetch_validators.sh`) | MIT | CLAP conformance testing | No (test tool) | https://github.com/free-audio/clap-validator |
+| pluginval | v1.0.4 (official Windows and macOS release binaries, unsigned; no digest published, so CI pins the SHA-256 of the downloaded assets in `tools/ci/fetch_validators.sh`) | GPL-3.0 | VST3 conformance testing (external tool, never linked) | No (test tool) | https://github.com/Tracktion/pluginval |
 
 The editor loads the system Segoe UI font at runtime (the design tokens' fallback for Inter);
 no Segoe UI file is redistributed. Inter itself (SIL OFL 1.1) is not yet bundled.

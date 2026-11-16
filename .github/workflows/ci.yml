@@ -1,0 +1,111 @@
+# Build, unit tests and the three plugin validators (area 01: "Add pluginval, the VST3 validator
+# and clap-validator to CI on both platforms"; "CI builds both" host-check configurations).
+#
+#   windows         shipping build (host checks off): ctest, clap-validator, pluginval at
+#                   strictness 10 and the Steinberg VST3 validator.
+#   windows-strict  AMQ_STRICT_HOST_CHECKS=ON: any CLAP host contract violation aborts. ctest
+#                   and clap-validator (the plugin host test is shipping-only by design).
+#   macos           the same as windows, native arm64 with the default Makefiles generator
+#                   (universal binaries are part of the macOS task). Allowed to fail until
+#                   the first macOS build task in area 01 is done; remove continue-on-error
+#                   then.
+#
+# Validator binaries are pinned by version and SHA-256 in tools/ci/fetch_validators.sh.
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    continue-on-error: ${{ matrix.experimental }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows
+            os: windows-2022
+            platform: windows
+            strict: OFF
+            experimental: false
+            generator: -G "Visual Studio 17 2022" -A x64
+          - name: windows-strict
+            os: windows-2022
+            platform: windows
+            strict: ON
+            experimental: false
+            generator: -G "Visual Studio 17 2022" -A x64
+          - name: macos
+            os: macos-15
+            platform: macos
+            strict: OFF
+            experimental: true
+            generator: ""
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: >
+          cmake -S . -B build ${{ matrix.generator }}
+          -DCMAKE_BUILD_TYPE=Release
+          -DAMQ_BUILD_PLUGIN=ON
+          -DAMQ_STRICT_HOST_CHECKS=${{ matrix.strict }}
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Unit tests
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: Build the VST3 validator
+        if: matrix.strict == 'OFF'
+        run: |
+          cmake -S tools/vst3_validator -B build-vst3-validator ${{ matrix.generator }} \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DFETCHCONTENT_SOURCE_DIR_AMQ_VST3SDK="$GITHUB_WORKSPACE/build/_deps/amq_vst3sdk-src"
+          cmake --build build-vst3-validator --config Release --target validator --parallel
+          exe=$(find build-vst3-validator -type f \( -name validator -o -name validator.exe \) | head -n 1)
+          echo "VST3_VALIDATOR=$GITHUB_WORKSPACE/$exe" >> "$GITHUB_ENV"
+
+      - name: Fetch clap-validator and pluginval
+        run: bash tools/ci/fetch_validators.sh "$RUNNER_TEMP/validators" ${{ matrix.platform }}
+
+      - name: Run validators
+        run: >
+          bash tools/ci/run_validators.sh build "$RUNNER_TEMP/validators" validator-logs
+          ${{ matrix.strict == 'ON' && '-' || '"$VST3_VALIDATOR"' }}
+
+      - name: Upload validator logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: validator-logs-${{ matrix.name }}
+          path: validator-logs
+          if-no-files-found: ignore
+
+      - name: Upload plugins
+        if: success() && matrix.strict == 'OFF'
+        uses: actions/upload-artifact@v4
+        with:
+          name: am-q-${{ matrix.name }}
+          path: |
+            build/**/Am-Q.clap
+            build/**/Am-Q.vst3
+            !build/_deps/**
+          if-no-files-found: warn
