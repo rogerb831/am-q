@@ -249,3 +249,28 @@ TEST_CASE("Shape ids and names are pinned (area 15 R7)") {
     REQUIRE(choices.size() >= 10);
     for (size_t i = 0; i < 10; ++i) CHECK(choices[i] == names[i]);
 }
+
+TEST_CASE("Clamping, reset and same-value rules (area 08 acceptance 'Clamping'; area 21 R16)") {
+    ParameterTable t;
+    for (ParamIndex i = 0; i < kParamCount; ++i) {
+        const auto& s = *specAt(i);
+        for (auto src : {ParamSource::Host, ParamSource::Gui, ParamSource::Preset}) {
+            t.set(i, s.max + 1000.0, src);
+            CHECK(t.value(i) == clampPlain(s, s.max + 1000.0));
+            CHECK(t.value(i) == s.max);
+            t.set(i, s.min - 1000.0, src);
+            CHECK(t.value(i) == s.min);
+        }
+    }
+    const auto& shape = *specAt(bandParam(0, BandField::Shape));
+    CHECK(clampPlain(shape, 2.6) == 3.0);  // choices round to a whole index
+    CHECK(sameValue(shape, 2.0, 2.0));
+    CHECK_FALSE(sameValue(shape, 2.0, 3.0));
+    const auto& gain = *specAt(bandParam(0, BandField::Gain));
+    CHECK(sameValue(gain, 1.0, 1.0 + 1e-12));
+    CHECK_FALSE(sameValue(gain, 1.0, 1.001));
+    t.resetToDefaults(ParamSource::Preset);
+    bool defaults = true;
+    for (ParamIndex i = 0; i < kParamCount; ++i) defaults &= t.value(i) == specAt(i)->def;
+    CHECK(defaults);
+}

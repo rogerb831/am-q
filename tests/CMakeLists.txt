@@ -42,7 +42,7 @@ target_link_libraries(amq_analysis_tests PRIVATE amq::analysis amq::engine docte
 amq_set_warnings(amq_analysis_tests)
 add_test(NAME amq_analysis_tests COMMAND amq_analysis_tests)
 
-add_executable(amq_engine_tests test_main.cpp engine/test_engine.cpp engine/test_bands.cpp engine/test_refine.cpp engine/test_midside.cpp engine/test_response.cpp engine/test_natural_phase.cpp engine/test_natural_phase_mode.cpp engine/test_bypass.cpp engine/test_output_pan_mode.cpp engine/test_solo.cpp engine/test_structure.cpp engine/test_cpu.cpp engine/test_rt_safety.cpp engine/alloc_counter.cpp engine/test_dynamic_eq.cpp engine/test_linear_phase.cpp engine/test_spectral.cpp engine/test_auto_gain.cpp)
+add_executable(amq_engine_tests test_main.cpp engine/test_engine.cpp engine/test_bands.cpp engine/test_refine.cpp engine/test_midside.cpp engine/test_response.cpp engine/test_natural_phase.cpp engine/test_natural_phase_mode.cpp engine/test_bypass.cpp engine/test_output_pan_mode.cpp engine/test_solo.cpp engine/test_structure.cpp engine/test_cpu.cpp engine/test_rt_safety.cpp engine/alloc_counter.cpp engine/test_dynamic_eq.cpp engine/test_linear_phase.cpp engine/test_spectral.cpp engine/test_auto_gain.cpp engine/test_latency_matrix.cpp)
 target_link_libraries(amq_engine_tests PRIVATE amq::engine doctest::doctest)
 amq_set_warnings(amq_engine_tests)
 add_test(NAME amq_engine_tests COMMAND amq_engine_tests)
@@ -68,4 +68,11 @@ if(AMQ_BUILD_PLUGIN AND WIN32 AND NOT AMQ_STRICT_HOST_CHECKS)
     target_link_libraries(amq_plugin_gui_test PRIVATE clap psapi)
     target_compile_definitions(amq_plugin_gui_test PRIVATE UNICODE _UNICODE)
     add_dependencies(amq_plugin_gui_test AmQ_clap)
+endif()
+
+# Area 21 R16: every parameter interface function has a caller or a test.
+find_package(Python3 COMPONENTS Interpreter)
+if(Python3_Interpreter_FOUND)
+    add_test(NAME amq_param_coverage
+             COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/ci/check_param_coverage.py ${PROJECT_SOURCE_DIR})
 endif()
