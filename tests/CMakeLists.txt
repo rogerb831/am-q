@@ -42,12 +42,12 @@ target_link_libraries(amq_analysis_tests PRIVATE amq::analysis amq::engine docte
 amq_set_warnings(amq_analysis_tests)
 add_test(NAME amq_analysis_tests COMMAND amq_analysis_tests)
 
-add_executable(amq_engine_tests test_main.cpp engine/test_engine.cpp engine/test_bands.cpp engine/test_refine.cpp engine/test_midside.cpp engine/test_response.cpp engine/test_natural_phase.cpp engine/test_natural_phase_mode.cpp engine/test_bypass.cpp engine/test_output_pan_mode.cpp engine/test_solo.cpp engine/test_structure.cpp engine/test_cpu.cpp engine/test_rt_safety.cpp engine/alloc_counter.cpp engine/test_dynamic_eq.cpp engine/test_linear_phase.cpp engine/test_spectral.cpp engine/test_auto_gain.cpp engine/test_latency_matrix.cpp engine/test_eq_match_fit.cpp)
+add_executable(amq_engine_tests test_main.cpp engine/test_engine.cpp engine/test_bands.cpp engine/test_refine.cpp engine/test_midside.cpp engine/test_response.cpp engine/test_natural_phase.cpp engine/test_natural_phase_mode.cpp engine/test_bypass.cpp engine/test_output_pan_mode.cpp engine/test_solo.cpp engine/test_structure.cpp engine/test_cpu.cpp engine/test_rt_safety.cpp engine/alloc_counter.cpp engine/test_dynamic_eq.cpp engine/test_linear_phase.cpp engine/test_spectral.cpp engine/test_auto_gain.cpp engine/test_latency_matrix.cpp engine/test_eq_match_fit.cpp engine/test_eq_match_engine.cpp)
 target_link_libraries(amq_engine_tests PRIVATE amq::engine doctest::doctest)
 amq_set_warnings(amq_engine_tests)
 add_test(NAME amq_engine_tests COMMAND amq_engine_tests)
 
-add_executable(amq_ui_model_tests test_main.cpp ui/test_ui_model.cpp ui/test_band_ops.cpp ui/test_interaction.cpp ui/test_keys_panel.cpp)
+add_executable(amq_ui_model_tests test_main.cpp ui/test_ui_model.cpp ui/test_band_ops.cpp ui/test_interaction.cpp ui/test_keys_panel.cpp ui/test_eq_match_apply.cpp)
 target_link_libraries(amq_ui_model_tests PRIVATE amq::ui_model doctest::doctest)
 amq_set_warnings(amq_ui_model_tests)
 add_test(NAME amq_ui_model_tests COMMAND amq_ui_model_tests)

@@ -7,6 +7,7 @@
 
 #include "amq/analysis/snapshot.hpp"
 #include "amq/params/parameter_table.hpp"
+#include "amq/ui/match_host.hpp"
 
 namespace amq::ui {
 
@@ -29,6 +30,12 @@ public:
     virtual const analysis::LevelSnapshot* pullLevels() noexcept { return nullptr; }
     virtual const analysis::GainChangeSnapshot* pullGainChange() noexcept { return nullptr; }
     virtual const analysis::SpectrumSnapshot* pullSpectrum() noexcept { return nullptr; }
+
+    // The source the next performEdit calls carry (GUI by default; EQ Match while it applies, area
+    // 16 R12; the undo history records both).
+    virtual void setEditSource(params::ParamSource) {}
+    // EQ Match (areas 16-20), or nullptr when the host side has none.
+    virtual MatchHost* matchHost() noexcept { return nullptr; }
 };
 
 }  // namespace amq::ui

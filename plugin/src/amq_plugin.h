@@ -49,6 +49,8 @@ public:
     void beginEdit(params::ParamIndex index) override;
     void performEdit(params::ParamIndex index, double plain) override;
     void endEdit(params::ParamIndex index) override;
+    void setEditSource(params::ParamSource s) override { editSource_ = s; }
+    ui::MatchHost* matchHost() noexcept override { return &match_; }
 
 protected:
     // clap_plugin
@@ -152,6 +154,30 @@ private:
     // Undo (area 12): the editor edits through this wrapper, so GUI edits are undoable; host
     // automation and state loads are not recorded, and a state load clears the history.
     ui::UndoController undo_{*this};
+    params::ParamSource editSource_ = params::ParamSource::Gui;  // main thread
+    // EQ Match bridge (areas 16-20): the editor's controls over the engine's EqMatchStage.
+    class MatchBridge : public ui::MatchHost {
+    public:
+        explicit MatchBridge(engine::Engine& e) : e_(e) {}
+        bool status(ui::MatchStatus& out) override;
+        void setRecording(int capture, bool on) override { e_.eqMatch().setRecording(capture, on); }
+        void reset(int capture) override { e_.eqMatch().reset(capture); }
+        void setReferenceFromFile(bool file) override;
+        bool loadReferenceFile(const std::string& path, std::string* error) override;
+        void setWindow(bool lastSeconds, double seconds) override;
+        void setSmoothing(int index) override;
+        void setLevelAlign(bool on) override;
+        bool startFit() override { return e_.eqMatch().startFit(); }
+        void cancelFit() override { e_.eqMatch().cancelFit(); }
+        bool takeFit(std::vector<ui::MatchBand>& out) override;
+
+    private:
+        engine::Engine& e_;
+        engine::MatchSnapshot snap_;
+        bool lastSeconds_ = false, align_ = true;
+        double seconds_ = 10.0;
+        int smoothing_ = 1;
+    } match_{engine_};
     std::atomic<bool> undoClearPending_{false};
     std::unique_ptr<ui::Editor> editor_;
     // Editor size, for size queries off the main thread and for reopening at the same size.

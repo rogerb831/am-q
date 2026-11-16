@@ -384,7 +384,7 @@ void AmqPlugin::beginEdit(params::ParamIndex index) {
 void AmqPlugin::performEdit(params::ParamIndex index, double plain) {
     const auto* s = params::specAt(index);
     if (!s) return;
-    if (table_.set(index, plain, params::ParamSource::Gui) != params::SetResult::Changed) return;
+    if (table_.set(index, plain, editSource_) != params::SetResult::Changed) return;
     guiEvents_.push({GuiEvent::Value, s->hostId, params::toHost(*s, table_.value(index))});
     requestHostFlush();
 }
@@ -596,6 +596,62 @@ bool AmqPlugin::guiSetSize(uint32_t width, uint32_t height) noexcept {
     if (!editor_ || !onMainThreadNow()) return false;
     ui::Editor::constrainHostSize(&width, &height, editor_->hostScale());
     editor_->setHostSize(width, height);
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// EQ Match bridge (main thread)
+// ---------------------------------------------------------------------------
+
+bool AmqPlugin::MatchBridge::status(ui::MatchStatus& o) {
+    auto& m = e_.eqMatch();
+    m.latest(snap_);  // keeps the last one when nothing new arrived
+    o.inputReady = snap_.inputReady, o.referenceReady = snap_.referenceReady;
+    o.inputRecording = snap_.inputRecording, o.referenceRecording = snap_.referenceRecording;
+    o.inputSeconds = snap_.inputSeconds, o.referenceSeconds = snap_.referenceSeconds;
+    o.curveValid = snap_.curve.valid;
+    o.levelOffsetDb = snap_.curve.levelOffsetDb;
+    o.target = snap_.curve.target, o.weight = snap_.curve.weight;
+    o.fitting = m.fitRunning();
+    o.fitProgress = m.fitProgress();
+    o.fileBusy = m.fileBusy();
+    o.fileProgress = m.fileProgress();
+    o.fileError = m.fileError();
+    o.referenceIsFile = m.referenceSource() == engine::MatchReferenceSource::File;
+    o.lastSeconds = lastSeconds_, o.windowSeconds = seconds_, o.smoothing = smoothing_, o.levelAlign = align_;
+    return true;
+}
+
+void AmqPlugin::MatchBridge::setReferenceFromFile(bool file) {
+    e_.eqMatch().setReferenceSource(file ? engine::MatchReferenceSource::File : engine::MatchReferenceSource::SideChain);
+    e_.eqMatch().reset(1);
+}
+
+bool AmqPlugin::MatchBridge::loadReferenceFile(const std::string& path, std::string* error) {
+    return e_.eqMatch().loadReferenceFile(path, error);
+}
+
+void AmqPlugin::MatchBridge::setWindow(bool lastSeconds, double seconds) {
+    lastSeconds_ = lastSeconds, seconds_ = seconds;
+    e_.eqMatch().setWindow(lastSeconds ? analysis::MatchCapture::Window::LastSeconds : analysis::MatchCapture::Window::Whole,
+                           seconds);
+}
+
+void AmqPlugin::MatchBridge::setSmoothing(int index) {
+    smoothing_ = std::clamp(index, 0, 3);
+    e_.eqMatch().setSmoothing(static_cast<analysis::MatchSmoothing>(smoothing_));
+}
+
+void AmqPlugin::MatchBridge::setLevelAlign(bool on) {
+    align_ = on;
+    e_.eqMatch().setLevelAlign(on);
+}
+
+bool AmqPlugin::MatchBridge::takeFit(std::vector<ui::MatchBand>& out) {
+    engine::FitResult r;
+    if (!e_.eqMatch().takeFit(r)) return false;
+    out.clear();
+    for (const auto& b : r.bands) out.push_back({b.shape, b.slope, b.hz, b.gainDb, b.q});
     return true;
 }
 

@@ -40,6 +40,8 @@ public:
     const analysis::LevelSnapshot* pullLevels() noexcept override { return in_.pullLevels(); }
     const analysis::GainChangeSnapshot* pullGainChange() noexcept override { return in_.pullGainChange(); }
     const analysis::SpectrumSnapshot* pullSpectrum() noexcept override { return in_.pullSpectrum(); }
+    void setEditSource(params::ParamSource s) override { in_.setEditSource(s); }
+    MatchHost* matchHost() noexcept override { return in_.matchHost(); }
 
     // Explicit grouping (nests; the outermost end commits). The label names the step in menus.
     void beginGroup(std::string label);

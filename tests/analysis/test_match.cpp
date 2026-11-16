@@ -1,9 +1,13 @@
 // EQ Match captures and difference curve (area 17 R4, R5, R8, R13; area 18 R1-R7; area 20 R1, R3-R7, R10).
+#include "amq/analysis/audio_file.hpp"
 #include "amq/analysis/match_curve.hpp"
 
 #include <doctest/doctest.h>
 
 #include <algorithm>
+#include <cstring>
+#include <string>
+#include <tuple>
 #include <cmath>
 #include <random>
 #include <vector>
@@ -161,4 +165,92 @@ TEST_CASE("Fractional-octave smoothing: width in octaves, edges shrink, a consta
     flat.fill(3.5);
     smoothFractionalOctave(flat, 1.0 / 3.0, out);
     for (double v : out) CHECK(v == doctest::Approx(3.5));
+}
+
+namespace {
+std::vector<unsigned char> wavBytes(int channels, int rate, int bits, bool isFloat, const std::vector<double>& frames,
+                                    bool extensible = false) {
+    auto put32 = [](std::vector<unsigned char>& b, uint32_t v) {
+        for (int i = 0; i < 4; ++i) b.push_back(static_cast<unsigned char>(v >> (8 * i)));
+    };
+    auto put16 = [](std::vector<unsigned char>& b, uint16_t v) {
+        b.push_back(static_cast<unsigned char>(v));
+        b.push_back(static_cast<unsigned char>(v >> 8));
+    };
+    std::vector<unsigned char> data;
+    for (double v : frames)
+        for (int c = 0; c < channels; ++c) {
+            const double x = c == 0 ? v : -v;
+            if (isFloat) {
+                float f = static_cast<float>(x);
+                unsigned char t[4];
+                std::memcpy(t, &f, 4);
+                data.insert(data.end(), t, t + 4);
+            } else if (bits == 16) {
+                put16(data, static_cast<uint16_t>(static_cast<int16_t>(std::lround(x * 32767))));
+            } else {
+                const auto i = static_cast<int32_t>(std::lround(x * 8388607));
+                data.push_back(static_cast<unsigned char>(i)), data.push_back(static_cast<unsigned char>(i >> 8)),
+                    data.push_back(static_cast<unsigned char>(i >> 16));
+            }
+        }
+    std::vector<unsigned char> b = {'R', 'I', 'F', 'F'};
+    put32(b, 0);
+    b.insert(b.end(), {'W', 'A', 'V', 'E', 'f', 'm', 't', ' '});
+    put32(b, extensible ? 40 : 16);
+    put16(b, extensible ? 0xFFFE : (isFloat ? 3 : 1));
+    put16(b, static_cast<uint16_t>(channels));
+    put32(b, static_cast<uint32_t>(rate));
+    put32(b, static_cast<uint32_t>(rate * channels * bits / 8));
+    put16(b, static_cast<uint16_t>(channels * bits / 8));
+    put16(b, static_cast<uint16_t>(bits));
+    if (extensible) {
+        put16(b, 22), put16(b, static_cast<uint16_t>(bits)), put32(b, 3);
+        put16(b, isFloat ? 3 : 1);  // the sub-format GUID's first two bytes
+        for (int i = 0; i < 14; ++i) b.push_back(0);
+    }
+    b.insert(b.end(), {'L', 'I', 'S', 'T'});  // an unknown chunk to skip
+    put32(b, 3);
+    b.insert(b.end(), {1, 2, 3, 0});           // odd size plus pad byte
+    b.insert(b.end(), {'d', 'a', 't', 'a'});
+    put32(b, static_cast<uint32_t>(data.size()));
+    b.insert(b.end(), data.begin(), data.end());
+    return b;
+}
+}  // namespace
+
+TEST_CASE("WAV reader: PCM 16 and 24-bit, float, extensible; garbage refused with a message") {
+    const std::vector<double> v = {0.0, 0.5, -0.25, 0.999};
+    for (auto [bits, isFloat, ext] : {std::tuple{16, false, false}, std::tuple{24, false, false}, std::tuple{32, true, false},
+                                      std::tuple{24, false, true}}) {
+        AudioFile f;
+        std::string err;
+        REQUIRE(parseWav(wavBytes(2, 44100, bits, isFloat, v, ext), f, &err));
+        CHECK(f.sampleRate == 44100.0);
+        REQUIRE(f.channels.size() == 2);
+        REQUIRE(f.frames() == v.size());
+        for (size_t i = 0; i < v.size(); ++i) {
+            CHECK(f.channels[0][i] == doctest::Approx(v[i]).epsilon(1e-4));
+            CHECK(f.channels[1][i] == doctest::Approx(-v[i]).epsilon(1e-4));
+        }
+    }
+    AudioFile f;
+    std::string err;
+    CHECK_FALSE(parseWav({'n', 'o', 'p', 'e'}, f, &err));
+    CHECK(err == "Not a WAV file.");
+}
+
+TEST_CASE("Resampling 44.1 to 48 kHz keeps a tone's level and frequency") {
+    AudioFile f;
+    f.sampleRate = 44100.0;
+    f.channels.assign(1, std::vector<float>(44100));
+    for (size_t i = 0; i < 44100; ++i) f.channels[0][i] = static_cast<float>(0.5 * std::sin(2 * kPi * 3000.0 * i / 44100.0));
+    resample(f, 48000.0);
+    CHECK(f.sampleRate == 48000.0);
+    CHECK(f.frames() == 48000);
+    // Amplitude in the middle (away from the edges), against the ideal 3 kHz sine at 48 kHz.
+    double worst = 0.0;
+    for (size_t i = 10000; i < 38000; ++i)
+        worst = std::max(worst, std::abs(f.channels[0][i] - 0.5 * std::sin(2 * kPi * 3000.0 * i / 48000.0)));
+    CHECK(worst < 0.5 * (std::pow(10.0, 0.05 / 20.0) - 1.0) + 1e-3);  // within 0.05 dB
 }

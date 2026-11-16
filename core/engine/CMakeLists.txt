@@ -9,7 +9,8 @@ add_library(amq_engine STATIC
     src/linear_phase.cpp
     src/spectral.cpp
     src/auto_gain.cpp
-    src/eq_match_fit.cpp)
+    src/eq_match_fit.cpp
+    src/eq_match.cpp)
 add_library(amq::engine ALIAS amq_engine)
 target_include_directories(amq_engine PUBLIC include)
 target_link_libraries(amq_engine PUBLIC amq::params amq::dsp amq::analysis)

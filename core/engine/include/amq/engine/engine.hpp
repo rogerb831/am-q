@@ -72,6 +72,7 @@
 #include "amq/dsp/realtime_design.hpp"
 #include "amq/engine/design_worker.hpp"
 #include "amq/engine/auto_gain.hpp"
+#include "amq/engine/eq_match.hpp"
 #include "amq/engine/linear_phase.hpp"
 #include "amq/engine/natural_phase.hpp"
 #include "amq/engine/spectral.hpp"
@@ -152,6 +153,8 @@ public:
     // Auto Gain: the make-up gain applied now, in dB (0 when off and settled).
     [[nodiscard]] double autoGainDb() const noexcept { return 20.0 * std::log10(autoGain_.current()); }
     [[nodiscard]] uint64_t autoGainRecomputes() const noexcept { return ag_.recomputes(); }
+    // EQ Match (eq_match.hpp): captures fed from the analyzer at its highest resolution.
+    [[nodiscard]] EqMatchStage& eqMatch() noexcept { return *eqMatch_; }
 
     // Allocates the work buffers (main thread). Returns false, and the engine outputs silence,
     // for an unsupported sample rate. Ramps and filters are seeded from the current table
@@ -408,6 +411,7 @@ private:
     int activeResolution_ = 1;
     LinearPhaseStage lp_;
     AutoGainStage ag_;
+    std::unique_ptr<EqMatchStage> eqMatch_ = std::make_unique<EqMatchStage>();  // large: on the heap
     LinearRamp autoGain_;       // linear make-up gain
     uint64_t agSeen_ = 0, agLastPost_ = 0, agNextId_ = 0;
     bool agDirty_ = true, agPosted_ = false, agWasOn_ = false;

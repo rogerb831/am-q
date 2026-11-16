@@ -79,10 +79,14 @@ bool Engine::prepare(double sampleRate, uint32_t maxFrames) noexcept {
         soloMixBuf_.assign(maxFrames, 0.0);
         if (!analyzerSubscribed_) {
             analyzer_.subscribe(&display_, analysis::kAllSources, analysis::SizeChoice::Display);
+            analyzer_.subscribe(eqMatch_.get(), analysis::sourceBit(analysis::Source::Pre) |
+                                               analysis::sourceBit(analysis::Source::External),
+                                analysis::SizeChoice::Highest);
             analyzerSubscribed_ = true;
         }
         if (!analyzer_.prepare(sampleRate)) return false;
         display_.prepare(&publisher_, sampleRate, analyzer_.fftSize(analysis::SizeChoice::Display));
+        eqMatch_->prepare(sampleRate, analyzer_.fftSize(analysis::SizeChoice::Highest));
     } catch (...) {
         return false;
     }
