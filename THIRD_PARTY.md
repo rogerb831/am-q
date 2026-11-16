@@ -23,7 +23,7 @@ before a product build ships.
 | clap-helpers | main @ `a380c97` (no release tags) | MIT | C++ plugin base class, host proxy, contract checks | Yes (headers) | https://github.com/free-audio/clap-helpers |
 | clap-wrapper | v0.17.0 (`806bba0`) | MIT | CLAP → VST3 wrapper (clap-first build) | Yes | https://github.com/free-audio/clap-wrapper |
 | {fmt} (bundled in clap-wrapper) | as bundled | MIT | String formatting inside clap-wrapper | Yes | https://github.com/fmtlib/fmt |
-| VST3 SDK | 3.8.0 (`9fad977`) | MIT (since 3.8.0) | VST3 interfaces used by clap-wrapper; the SDK's validator for testing | Yes (wrapper part) | https://github.com/steinbergmedia/vst3sdk |
+| VST3 SDK | 3.8.0 (`9fad977`) | MIT (since 3.8.0) | VST3 interfaces used by clap-wrapper; the SDK's validator and hosting classes for testing (`tools/vst3_tools/`) | Yes (wrapper part) | https://github.com/steinbergmedia/vst3sdk |
 | Visage | v1.0.0 (`5754ff8`) | MIT | GPU UI (Direct3D 11 on Windows) | Yes | https://github.com/VitalAudio/visage |
 | FreeType (via Visage) | 2.14.1 | FreeType License (FTL, BSD-style with credit clause) or GPL-2.0, at our choice; we would use FTL | Font rasterisation | Yes | https://gitlab.freedesktop.org/freetype/freetype |
 | stb (vendored in Visage) | as vendored | MIT or public domain | Image resize | Yes | https://github.com/nothings/stb |

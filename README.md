@@ -23,7 +23,7 @@ Read [CLEAN_ROOM.md](CLEAN_ROOM.md) before contributing. The only spec is
 | `plugin/` | The CLAP plugin (clap-helpers) and its clap-first VST3 build (clap-wrapper). So far: the parameter table exported to the host, block splitting at every automation event, 64-bit I/O conversion, a versioned id/value state chunk, zero latency, and the editor (response graph: double-click to create a band, drag to move, wheel for Q, Alt-click to enable or disable). All five placements process audio (Stereo, Left, Right, and Mid/Side through an on-demand M/S stage); dynamics and spectral bands do not yet. |
 | `ui/` | The editor. `amq_ui_model` holds the framework-free logic: edit controller, gestures, attachments, graph geometry, response curve and interaction. `amq_ui` holds the Visage frames: response graph, band nodes, readout. Also the accessible-control model (`ui/include/amq/ui/accessible.h`). |
 | `cmake/AmqPluginDeps.cmake` | Pinned plugin dependencies (CLAP, clap-helpers, clap-wrapper, VST3 SDK, Visage), fetched at configure time. |
-| `tools/vst3_validator/` | Builds the Steinberg VST3 validator from the pinned SDK, as a separate project. |
+| `tools/vst3_tools/` | Builds the Steinberg VST3 validator and our VST3 test host (`tests/plugin/vst3_host_test.cpp`) from the pinned SDK, as a separate project. |
 | `tools/ci/` | CI scripts: fetch the pinned clap-validator and pluginval, run all three validators. |
 | `.github/workflows/ci.yml` | CI: Windows shipping and strict-host-check builds, and macOS (allowed to fail for now); ctest plus the validators. |
 | `tools/accuracy_harness/` | Sweep shapes x slopes x frequencies x gains x Q x sample rates; report errors vs the analog prototype. |

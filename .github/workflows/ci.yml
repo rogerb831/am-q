@@ -73,15 +73,23 @@ jobs:
       - name: Unit tests
         run: ctest --test-dir build -C Release --output-on-failure
 
-      - name: Build the VST3 validator
+      - name: Build the VST3 validator and the VST3 host test
         if: matrix.strict == 'OFF'
         run: |
-          cmake -S tools/vst3_validator -B build-vst3-validator ${{ matrix.generator }} \
+          cmake -S tools/vst3_tools -B build-vst3-tools ${{ matrix.generator }} \
             -DCMAKE_BUILD_TYPE=Release \
             -DFETCHCONTENT_SOURCE_DIR_AMQ_VST3SDK="$GITHUB_WORKSPACE/build/_deps/amq_vst3sdk-src"
-          cmake --build build-vst3-validator --config Release --target validator --parallel
-          exe=$(find build-vst3-validator -type f \( -name validator -o -name validator.exe \) | head -n 1)
+          cmake --build build-vst3-tools --config Release --parallel
+          exe=$(find build-vst3-tools -type f \( -name validator -o -name validator.exe \) | head -n 1)
           echo "VST3_VALIDATOR=$GITHUB_WORKSPACE/$exe" >> "$GITHUB_ENV"
+
+      # Shipping build only: like the CLAP host test, it makes off-main-thread calls on purpose,
+      # which the strict host checks turn into an abort.
+      - name: VST3 host test
+        if: matrix.strict == 'OFF' && matrix.platform == 'windows'
+        run: |
+          vst3=$(find build -path '*/_deps' -prune -o -name Am-Q.vst3 -print -prune | head -n 1)
+          build-vst3-tools/Release/amq_vst3_host_test.exe "$vst3"
 
       - name: Fetch clap-validator and pluginval
         run: bash tools/ci/fetch_validators.sh "$RUNNER_TEMP/validators" ${{ matrix.platform }}
