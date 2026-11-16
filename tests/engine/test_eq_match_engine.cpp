@@ -115,3 +115,34 @@ TEST_CASE("EQ Match in the engine: input and side-chain captures, the curve, and
     REQUIRE(m.latest(s));
     CHECK_FALSE(s.inputReady);
 }
+
+TEST_CASE("EQ Match overflow: a stalled analysis worker drops audio, counted; the capture stays valid (area 17 R6)") {
+    const double fs = 48000.0;
+    params::ParameterTable t;
+    engine::Engine e(t);
+    REQUIRE(e.prepare(fs, 1024));
+    auto& m = e.eqMatch();
+    m.setRecording(0, true);
+    const auto x = pink(static_cast<size_t>(4 * fs), 9);
+    std::vector<float> ol(1024), orr(1024);
+    // Two seconds without running the analyzer: far more than its 0.5 s tap ring.
+    for (size_t p = 0; p + 1024 <= static_cast<size_t>(2 * fs); p += 1024) {
+        const float* ip[2] = {x.data() + p, x.data() + p};
+        float* op[2] = {ol.data(), orr.data()};
+        e.process(ip, 2, op, 2, 1024);
+    }
+    e.runAnalyzerForTests();
+    CHECK(e.analyzer().droppedFrames(analysis::Source::Pre) > 0);
+    // Then normal running: frames keep counting into the same capture.
+    for (size_t p = static_cast<size_t>(2 * fs); p + 1024 <= x.size(); p += 1024) {
+        const float* ip[2] = {x.data() + p, x.data() + p};
+        float* op[2] = {ol.data(), orr.data()};
+        e.process(ip, 2, op, 2, 1024);
+        e.runAnalyzerForTests();
+    }
+    m.updateNowForTests();
+    engine::MatchSnapshot s;
+    REQUIRE(m.latest(s));
+    CHECK(s.inputSeconds > 1.5);
+    CHECK(s.inputReady);
+}

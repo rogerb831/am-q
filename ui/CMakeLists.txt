@@ -18,7 +18,11 @@ amq_set_warnings(amq_ui_model)
 
 if(AMQ_BUILD_PLUGIN)
     add_library(amq_ui STATIC
-        src/editor.cpp)
+        src/editor.cpp
+        src/file_dialog.cpp)
+    if(WIN32)
+        target_link_libraries(amq_ui PRIVATE comdlg32)
+    endif()
     add_library(amq::ui ALIAS amq_ui)
     target_include_directories(amq_ui PUBLIC include)
     target_link_libraries(amq_ui PUBLIC amq::ui_model clap PRIVATE visage VisageEmbeddedFonts)

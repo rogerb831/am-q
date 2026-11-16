@@ -22,6 +22,7 @@ struct MatchStatus {
     bool inputReady = false, referenceReady = false, inputRecording = false, referenceRecording = false;
     bool curveValid = false, fitting = false, fileBusy = false, referenceIsFile = false;
     double inputSeconds = 0.0, referenceSeconds = 0.0, levelOffsetDb = 0.0;
+    double inputDroppedSeconds = 0.0, referenceDroppedSeconds = 0.0;  // audio the analysis worker skipped (area 17 R6)
     float fitProgress = 0.0f, fileProgress = 0.0f;
     std::string fileError;
     bool lastSeconds = false;  // averaging window: false whole capture, true last N seconds

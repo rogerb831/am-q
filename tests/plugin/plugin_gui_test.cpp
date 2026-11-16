@@ -233,6 +233,20 @@ int main(int argc, char** argv) {
     p->on_main_thread(p);
     pump(100);
 
+    // 3b. The EQ Match panel opens lazily from its panel button (area 12) and draws its overlay; the
+    // editor keeps running (no crash, still one live editor) and closes it again.
+    {
+        const double bx = kW - 150 + 60 + 20, by = graphH() + 12 + 3 * 28 + 12;
+        post(WM_LBUTTONDOWN, MK_LBUTTON, bx, by);
+        post(WM_LBUTTONUP, 0, bx, by);
+        pump(200);
+        check(IsWindow(gChild) != 0, "EQ Match panel opens without disturbing the editor");
+        post(WM_LBUTTONDOWN, MK_LBUTTON, bx, by);
+        post(WM_LBUTTONUP, 0, bx, by);
+        pump(100);
+        check(IsWindow(gChild) != 0, "EQ Match panel closes again");
+    }
+
     // 4. Resizing (area 12 R16): limits, set_size, layout follows, size kept across reopen.
     {
         check(gui->can_resize(p), "gui.can_resize");

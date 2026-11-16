@@ -66,6 +66,9 @@ TEST_CASE("Apply: one undo step across slider moves, source EQ Match, prefix and
     CHECK(h.source == ParamSource::Gui);
     CHECK(u.undoSteps() == steps + 1);  // everything above is one step (R12, R13)
     CHECK(u.undoLabel() == "EQ Match");
+    a.apply(1.0, 3, &msg);  // a later slider move amends the same step
+    a.finish();
+    CHECK(u.undoSteps() == steps + 1);
     u.undo();
     for (int b = 1; b < 4; ++b) CHECK(v(h, b, BandField::Used) == 0.0);
     CHECK(v(h, 0, BandField::Gain) == 2.0);

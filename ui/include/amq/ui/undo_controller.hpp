@@ -46,6 +46,9 @@ public:
     // Explicit grouping (nests; the outermost end commits). The label names the step in menus.
     void beginGroup(std::string label);
     void endGroup();
+    // Reopens the last step as an open group when it has this label and nothing came after it, so
+    // further edits amend it (EQ Match slider moves, area 16 R13). False otherwise.
+    bool reopenLast(const std::string& label);
 
     bool undo();
     bool redo();

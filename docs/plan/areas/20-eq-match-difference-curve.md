@@ -29,14 +29,14 @@ Am-Q builds the EQ Match difference curve (reference minus input) on the worker,
 
 ## Implementation tasks
 
-- [ ] Specify the difference curve, level alignment, smoothing options, clamping and confidence weights (DSP lead, Phase 0)
-- [ ] Implement the BS.1770 loudness meter per capture on counted frames (DSP lead, Phase 3)
-- [ ] Implement fractional-octave smoothing with edge handling and the four settings (DSP lead, Phase 3)
-- [ ] Implement confidence weighting from the capture floor (DSP lead, Phase 3)
-- [ ] Publish the difference-curve snapshot on the worker at 10 Hz or faster and on Match (Plugin and host engineer, Phase 3)
-- [ ] Draw the difference, fitted and residual curves with low-confidence shading, plus the level-offset readout and toggle (GUI engineer, Phase 3)
+- [x] Specify the difference curve, level alignment, smoothing options, clamping and confidence weights (DSP lead, Phase 0). Done on 2026-11-16 in the header of `core/analysis/include/amq/analysis/match_curve.hpp` (PROVISIONAL floor and ramp constants)
+- [x] Implement the BS.1770 loudness meter per capture on counted frames (DSP lead, Phase 3). Done on 2026-11-16: each counted frame's K-weighted mean square from its power spectrum (Parseval), grouped into 400 ms blocks and gated like BS.1770; a +6 dB reference reads +6.02 LU (tested). The standalone time-domain meter (`dsp/loudness.hpp`) validates Auto Gain
+- [x] Implement fractional-octave smoothing with edge handling and the four settings (DSP lead, Phase 3). Done on 2026-11-16: 1/3, 1/6 (default), 1/12, 1/24 octave on the uniform log grid, edges shrinking symmetrically; tested
+- [x] Implement confidence weighting from the capture floor (DSP lead, Phase 3). Done on 2026-11-16: weights fall to 0 over 10 dB as either capture nears its floor (its loudest point minus 60 dB, at least -110 dBFS), and are 0 above the usable limit (PROVISIONAL constants)
+- [x] Publish the difference-curve snapshot on the worker at 10 Hz or faster and on Match (Plugin and host engineer, Phase 3). Done on 2026-11-16: rebuilt every 100 ms of analysed audio on the analysis worker and when a file finishes; Match fits exactly the published curve (R8)
+- [x] Draw the difference, fitted and residual curves with low-confidence shading, plus the level-offset readout and toggle (GUI engineer, Phase 3). Done on 2026-11-16: the editor's match overlay draws the difference curve (dimmed where the weight is under 0.5), the fitted response at the current Amount and Bands, and the residual; the panel shows the level offset and the Align Level toggle
 - [ ] Design the smoothing selector and level-alignment control (Product designer, Phase 3)
-- [ ] Build tests for direction, level alignment, smoothing, editor-size independence and fit/display agreement (Build and QA engineer, Phase 3)
+- [x] Build tests for direction, level alignment, smoothing, editor-size independence and fit/display agreement (Build and QA engineer, Phase 3). Done on 2026-11-16: direction and level alignment (`test_match.cpp`: a +6 dB reference gives +6 dB unaligned and about 0 aligned), smoothing, and the engine test (the fit finds the bell the curve shows). Editor-size independence holds by construction: the grid and smoothing are in octaves, never pixels
 
 ## Acceptance tests
 

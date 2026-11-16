@@ -15,6 +15,7 @@ using params::BandField;
 void EqMatchApplier::setFit(std::vector<MatchBand> bands) {
     finish();
     fit_ = std::move(bands);
+    applied_ = false;  // a new match is a new undo step
 }
 
 void EqMatchApplier::finish() {
@@ -38,9 +39,10 @@ MatchBand EqMatchApplier::scaled(const MatchBand& b, double amount) {
 int EqMatchApplier::apply(double amount, int count, std::string* message) {
     const auto& t = c_.table();
     if (!open_) {  // one undo step for the apply and every slider move after it (R12, R13)
-        c_.beginGroup("EQ Match");
+        if (!(applied_ && c_.reopenLast("EQ Match"))) c_.beginGroup("EQ Match");
         c_.setEditSource(params::ParamSource::EqMatch);
         open_ = true;
+        applied_ = true;
     }
     // The bands to write: a prefix of the fit; cuts drop out at a low Amount.
     std::vector<MatchBand> want;

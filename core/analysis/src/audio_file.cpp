@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <iterator>
 
@@ -85,7 +86,8 @@ bool parseWav(const std::vector<unsigned char>& b, AudioFile& out, std::string* 
 }
 
 bool readWav(const std::string& path, AudioFile& out, std::string* error) {
-    std::ifstream f(path, std::ios::binary);
+    const std::u8string u8(path.begin(), path.end());  // UTF-8 paths (the file dialog's)
+    std::ifstream f(std::filesystem::path(u8), std::ios::binary);
     if (!f) {
         if (error) *error = "Could not open the file.";
         return false;

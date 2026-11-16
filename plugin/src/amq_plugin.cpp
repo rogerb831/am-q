@@ -618,6 +618,9 @@ bool AmqPlugin::MatchBridge::status(ui::MatchStatus& o) {
     o.fileProgress = m.fileProgress();
     o.fileError = m.fileError();
     o.referenceIsFile = m.referenceSource() == engine::MatchReferenceSource::File;
+    const double fs = e_.sampleRate() > 0.0 ? e_.sampleRate() : 48000.0;
+    o.inputDroppedSeconds = static_cast<double>(e_.analyzer().droppedFrames(analysis::Source::Pre)) / fs;
+    o.referenceDroppedSeconds = static_cast<double>(e_.analyzer().droppedFrames(analysis::Source::External)) / fs;
     o.lastSeconds = lastSeconds_, o.windowSeconds = seconds_, o.smoothing = smoothing_, o.levelAlign = align_;
     return true;
 }

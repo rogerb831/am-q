@@ -32,13 +32,13 @@ Am-Q averages EQ Match captures by power (Welch method) on a fixed log grid. Sil
 
 ## Implementation tasks
 
-- [ ] Specify the power accumulator, gate, window modes and log-grid mapping (DSP lead, Phase 0)
+- [x] Specify the power accumulator, gate, window modes and log-grid mapping (DSP lead, Phase 0). Done on 2026-11-16 in the `match_capture.hpp` header: double sums of mean power per grid point, the -90 dBFS broadband gate, whole capture or the last N seconds from 0.5 s blocks, and bin-coverage averaging with interpolation for points narrower than a bin
 - [ ] Prototype magnitude versus power averaging and peak versus broadband gating on test material; record the results (DSP lead, Phase 0)
-- [ ] Implement the log-grid power mapper with bin-coverage weights and sub-bin interpolation (DSP lead, Phase 3)
-- [ ] Implement whole-capture and last-N-seconds accumulators with drift control (DSP lead, Phase 3)
-- [ ] Expose capture statistics (counted, skipped, seconds) to the GUI through snapshots (Plugin and host engineer, Phase 3)
-- [ ] Add the averaging-window selector and capture statistics display (GUI engineer, Phase 3)
-- [ ] Build averaging tests: stationary noise, gated silence, level steps, long captures (Build and QA engineer, Phase 3)
+- [x] Implement the log-grid power mapper with bin-coverage weights and sub-bin interpolation (DSP lead, Phase 3). Done on 2026-11-16 (`MatchCapture`)
+- [x] Implement whole-capture and last-N-seconds accumulators with drift control (DSP lead, Phase 3). Done on 2026-11-16: whole capture in double sums (an hour of frames drifts under 0.01 dB, tested), last N seconds (1 to 60 s) summed exactly from a ring of 0.5 s blocks, so old audio stops counting within one block and no running total can drift
+- [x] Expose capture statistics (counted, skipped, seconds) to the GUI through snapshots (Plugin and host engineer, Phase 3). Done on 2026-11-16: counted seconds and skipped frames per capture in the `MatchSnapshot`
+- [x] Add the averaging-window selector and capture statistics display (GUI engineer, Phase 3). Done on 2026-11-16 in the EQ Match panel (Whole / Last N s, seconds per capture)
+- [x] Build averaging tests: stationary noise, gated silence, level steps, long captures (Build and QA engineer, Phase 3). Done on 2026-11-16 (`tests/analysis/test_match.cpp`)
 
 ## Acceptance tests
 

@@ -6,6 +6,8 @@
 #include "amq/ui/band_menu.hpp"
 #include "amq/ui/band_ops.hpp"
 #include "amq/ui/band_panel.hpp"
+#include "amq/ui/eq_match_apply.hpp"
+#include "amq/ui/file_dialog.hpp"
 #include "amq/ui/graph_model.hpp"
 #include "amq/ui/key_dispatcher.hpp"
 #include "amq/ui/snapshot_poller.hpp"
@@ -55,6 +57,9 @@ constexpr uint32_t spectrumPeak = 0x50eceaf0;
 constexpr uint32_t lasso = 0x40eceaf0;
 constexpr uint32_t meter = 0xffc4ee3c;
 constexpr uint32_t meterHot = 0xffff6b5b;
+constexpr uint32_t matchTarget = 0xffeceaf0;
+constexpr uint32_t matchFitted = 0xff6fb7ff;
+constexpr uint32_t matchResidual = 0x80ff6b5b;
 }  // namespace tok
 
 constexpr float kPanelHeight = 176.0f;  // PROVISIONAL band panel height (region map pending)
@@ -381,6 +386,37 @@ public:
     PanelFrame(UndoController& c, GraphInteraction& m, BandOps& ops, KeyDispatcher& keys, const SnapshotPoller& p)
         : c_(c), m_(m), ops_(ops), keys_(keys), p_(p), label_(font(11.0f)), value_(font(12.0f)), title_(font(13.0f)) {}
 
+    // EQ Match panel state, built on first open (area 12 "construct the EQ Match panel lazily").
+    struct MatchUi {
+        explicit MatchUi(UndoController& c) : applier(c) {}
+        EqMatchApplier applier;
+        MatchStatus st;
+        double amount = 1.0;
+        int count = 0;
+        std::string msg;
+    };
+    [[nodiscard]] MatchUi* match() noexcept { return matchOpen_ ? match_.get() : nullptr; }
+    std::function<void()> onMatchChanged;  // the overlay redraws
+    // GUI timer: status, progress and a finished fit (applied at once, all bands, 100 %).
+    void pollMatch() {
+        MatchHost* host = c_.matchHost();
+        if (!matchOpen_ || !match_ || !host) return;
+        auto& mu = *match_;
+        host->status(mu.st);
+        std::vector<MatchBand> bands;
+        if (host->takeFit(bands)) {
+            mu.applier.setFit(bands);
+            mu.count = static_cast<int>(bands.size());
+            mu.amount = 1.0;
+            mu.applier.apply(mu.amount, mu.count, &mu.msg);
+            mu.applier.finish();
+            if (bands.empty()) mu.msg = "Nothing to match: the curves already agree.";
+        }
+        if (!mu.st.fileError.empty()) mu.msg = mu.st.fileError;
+        redraw();
+        if (onMatchChanged) onMatchChanged();
+    }
+
     void draw(visage::Canvas& c) override {
         c.setColor(tok::surface200);
         c.fill(0, 0, width(), height());
@@ -389,6 +425,10 @@ public:
         cells_.clear();
         const float meterW = 150.0f;
         drawMeters(c, width() - meterW, meterW);
+        if (matchOpen_ && match_) {
+            drawMatch(c, width() - meterW);
+            return;
+        }
         const int b = m_.focused();
         if (b < 0) {
             c.setColor(tok::inkMuted);
@@ -429,8 +469,13 @@ public:
     void mouseDown(const visage::MouseEvent& e) override {
         const int k = cellAt(e.position.x, e.position.y);
         if (k < 0) return;
-        const auto& cell = cells_[static_cast<size_t>(k)];
+        const auto cell = cells_[static_cast<size_t>(k)];
         if (!cell.enabled) return;
+        if (cell.act != 0) {
+            matchAction(cell, e.position.y);
+            redraw();
+            return;
+        }
         const int b = m_.focused();
         if (cell.kind == ControlKind::Button) {
             if (cell.button == PanelButton::Delete) {
@@ -456,6 +501,17 @@ public:
         redraw();
     }
     void mouseDrag(const visage::MouseEvent& e) override {
+        if (matchDrag_ && match_) {  // Amount / Bands: live, merged into the apply's undo step (R13)
+            auto& mu = *match_;
+            const double d = (dragY_ - e.position.y) / 200.0;
+            if (matchDrag_ == kAmount) mu.amount = std::clamp(dragStart_ + d, 0.0, 1.0);
+            else mu.count = std::clamp(static_cast<int>(std::lround(dragStart_ + d * static_cast<double>(mu.applier.fit().size()))),
+                                       0, static_cast<int>(mu.applier.fit().size()));
+            mu.applier.apply(mu.amount, mu.count, &mu.msg);
+            redraw();
+            if (onMatchChanged) onMatchChanged();
+            return;
+        }
         if (!gesture_.isOpen()) return;
         const double perPx = (e.isShiftDown() ? 0.1 : 1.0) / 200.0;  // 200 px for the full range, PROVISIONAL
         const double n = std::clamp(dragStart_ + (dragY_ - e.position.y) * perPx, 0.0, 1.0);
@@ -464,6 +520,8 @@ public:
         redraw();
     }
     void mouseUp(const visage::MouseEvent&) override {
+        if (matchDrag_ && match_) match_->applier.finish();
+        matchDrag_ = 0;
         gesture_.close();
         redraw();
     }
@@ -490,7 +548,131 @@ private:
         PanelButton button = PanelButton::None;
         bool enabled = true;
         std::string tooltip;
+        int act = 0;  // EQ Match action (MatchAct)
     };
+    enum MatchAct : int { kToggle = 1, kInRec, kInReset, kRefSource, kRefRec, kRefReset, kLoadFile, kWindow, kSmoothing,
+                          kAlign, kMatch, kAmount, kBands };
+
+    Cell& button(visage::Canvas& c, const char* text, float x, float y, float w, bool on, bool enabled, int act) {
+        c.setColor(on && enabled ? tok::accent : tok::surface300);
+        c.roundedRectangle(x, y, w, 24.0f, 4.0f);
+        c.setColor(on && enabled ? tok::surface100 : (enabled ? tok::ink : tok::inkDisabled));
+        c.text(visage::String(text), value_, visage::Font::kCenter, x, y, w, 24.0f);
+        Cell cell;
+        cell.x = x, cell.y = y, cell.w = w, cell.h = 24.0f, cell.enabled = enabled, cell.act = act;
+        cell.kind = ControlKind::Button;
+        cells_.push_back(cell);
+        return cells_.back();
+    }
+    void text(visage::Canvas& c, const std::string& s, float x, float y, float w, uint32_t colour = tok::inkMuted) {
+        c.setColor(colour);
+        c.text(visage::String(s), label_, visage::Font::kLeft, x, y, w, 24.0f);
+    }
+
+    // EQ Match panel (areas 16-20 GUI tasks): captures, source, averaging window, smoothing, level
+    // alignment, Match with progress and cancel, Amount and Bands, and the message line. Wording and
+    // layout PROVISIONAL until the Product designer's panel design (area 16, 17, 20 design tasks).
+    void drawMatch(visage::Canvas& c, float right) {
+        auto& mu = *match_;
+        const auto& st = mu.st;
+        char buf[160];
+        c.setColor(tok::ink);
+        c.text(visage::String("EQ Match"), title_, visage::Font::kLeft, 16.0f, 8.0f, 120.0f, 20.0f);
+        float x = 16.0f, y = 36.0f;
+        text(c, "Input", x, y, 48.0f);
+        button(c, st.inputRecording ? "Stop" : "Record", x + 48.0f, y, 64.0f, st.inputRecording, true, kInRec);
+        button(c, "Reset", x + 116.0f, y, 52.0f, false, true, kInReset);
+        std::snprintf(buf, sizeof buf, "%.1f s %s", st.inputSeconds, st.inputReady ? "ready" : "not ready");
+        text(c, buf, x + 174.0f, y, 110.0f, st.inputReady ? tok::ink : tok::inkMuted);
+        x = 310.0f;
+        text(c, "Reference", x, y, 70.0f);
+        button(c, st.referenceIsFile ? "File" : "Side Chain", x + 70.0f, y, 84.0f, false, !st.fileBusy, kRefSource);
+        if (st.referenceIsFile) {
+            button(c, "Load File...", x + 158.0f, y, 90.0f, false, !st.fileBusy, kLoadFile);
+            std::snprintf(buf, sizeof buf, st.fileBusy ? "analysing %.0f %%" : (st.referenceReady ? "ready" : "no file"),
+                          100.0 * st.fileProgress);
+        } else {
+            button(c, st.referenceRecording ? "Stop" : "Record", x + 158.0f, y, 64.0f, st.referenceRecording, true, kRefRec);
+            button(c, "Reset", x + 226.0f, y, 52.0f, false, true, kRefReset);
+            std::snprintf(buf, sizeof buf, "%.1f s %s", st.referenceSeconds, st.referenceReady ? "ready" : "not ready");
+        }
+        text(c, buf, x + 284.0f, y, std::max(60.0f, right - x - 300.0f), st.referenceReady ? tok::ink : tok::inkMuted);
+        x = 16.0f, y = 70.0f;
+        static const char* smooth[] = {"1/3 oct", "1/6 oct", "1/12 oct", "1/24 oct"};
+        std::snprintf(buf, sizeof buf, st.lastSeconds ? "Last %.0f s" : "Whole", st.windowSeconds);
+        button(c, buf, x, y, 84.0f, false, true, kWindow);
+        button(c, smooth[std::clamp(st.smoothing, 0, 3)], x + 88.0f, y, 76.0f, false, true, kSmoothing);
+        button(c, "Align Level", x + 168.0f, y, 88.0f, st.levelAlign, true, kAlign);
+        std::snprintf(buf, sizeof buf, "offset %+.1f LU", st.levelOffsetDb);
+        text(c, buf, x + 262.0f, y, 100.0f);
+        button(c, st.fitting ? "Cancel" : "Match", x + 366.0f, y, 72.0f, !st.fitting && st.curveValid, st.fitting || st.curveValid,
+               kMatch);
+        if (st.fitting) {
+            std::snprintf(buf, sizeof buf, "fitting %.0f %%", 100.0 * st.fitProgress);
+            text(c, buf, x + 442.0f, y, 100.0f, tok::ink);
+        }
+        y = 104.0f;
+        const bool haveFit = !mu.applier.fit().empty();
+        std::snprintf(buf, sizeof buf, "Amount %.0f %%", 100.0 * mu.amount);
+        auto& a = button(c, buf, x, y, 120.0f, false, haveFit, kAmount);
+        a.kind = ControlKind::Knob;
+        std::snprintf(buf, sizeof buf, "Bands %d / %d", mu.count, static_cast<int>(mu.applier.fit().size()));
+        auto& bnd = button(c, buf, x + 124.0f, y, 110.0f, false, haveFit, kBands);
+        bnd.kind = ControlKind::Knob;
+        if (!st.curveValid) text(c, "Record both captures (at least 2 s each) to enable Match.", x + 244.0f, y, right - x - 260.0f);
+        // Dropped audio (area 17 R6): the captures stay valid; the gap is only reported.
+        const double dropped = (st.inputRecording ? st.inputDroppedSeconds : 0.0) +
+                               (st.referenceRecording ? st.referenceDroppedSeconds : 0.0);
+        std::string line = mu.msg;
+        if (line.empty() && dropped > 0.0) {
+            std::snprintf(buf, sizeof buf, "The analysis fell behind: %.2f s of audio skipped (captures stay valid).", dropped);
+            line = buf;
+        }
+        text(c, line, 16.0f, height() - 24.0f, right - 32.0f, tok::ink);
+    }
+
+    void matchAction(const Cell& cell, float y) {
+        if (cell.act == kToggle) {
+            matchOpen_ = !matchOpen_;
+            if (matchOpen_ && !match_) match_ = std::make_unique<MatchUi>(c_);  // lazily, once
+            if (!matchOpen_ && match_) match_->applier.finish();
+            if (onMatchChanged) onMatchChanged();
+            return;
+        }
+        MatchHost* host = c_.matchHost();
+        if (!host || !match_) return;
+        auto& mu = *match_;
+        const auto& st = mu.st;
+        switch (cell.act) {
+            case kInRec: host->setRecording(0, !st.inputRecording); break;
+            case kInReset: host->reset(0); break;
+            case kRefSource: host->setReferenceFromFile(!st.referenceIsFile); break;
+            case kRefRec: host->setRecording(1, !st.referenceRecording); break;
+            case kRefReset: host->reset(1); break;
+            case kLoadFile: {
+                const std::string path = pickAudioFile();
+                std::string err;
+                if (!path.empty() && !host->loadReferenceFile(path, &err)) mu.msg = err;
+                break;
+            }
+            case kWindow: host->setWindow(!st.lastSeconds, st.windowSeconds); break;
+            case kSmoothing: host->setSmoothing((st.smoothing + 1) % 4); break;
+            case kAlign: host->setLevelAlign(!st.levelAlign); break;
+            case kMatch:
+                if (st.fitting) host->cancelFit();
+                else if (!host->startFit()) mu.msg = "Match needs both captures ready.";
+                else mu.msg.clear();
+                break;
+            case kAmount:
+            case kBands:
+                matchDrag_ = cell.act;
+                dragY_ = y;
+                dragStart_ = cell.act == kAmount ? mu.amount : static_cast<double>(mu.count);  // Bands: a count
+                break;
+            default: break;
+        }
+        host->status(mu.st);
+    }
 
     void drawCell(visage::Canvas& c, const PanelControl& p, float x, float y, float w, size_t) {
         c.setColor(p.enabled ? tok::inkMuted : tok::inkDisabled);
@@ -560,6 +742,7 @@ private:
             cells_.push_back(cell);
             y += 28.0f;
         }
+        if (c_.matchHost()) button(c, "EQ Match", x0 + 60.0f, y, w - 72.0f, matchOpen_, true, kToggle);
     }
 
     void showChoice(const Cell& cell, int band) {
@@ -600,6 +783,47 @@ private:
     params::ParamIndex dragId_ = 0;
     float dragY_ = 0.0f;
     double dragStart_ = 0.0;
+    bool matchOpen_ = false;
+    std::unique_ptr<MatchUi> match_;
+    int matchDrag_ = 0;
+};
+
+// EQ Match overlay (area 20 R9): the difference curve (dimmed where confidence is low, R5), the fitted
+// response at the current Amount and Bands, and the residual. Display only; it never feeds the fit.
+class MatchOverlayFrame : public visage::Frame {
+public:
+    MatchOverlayFrame(const GraphGeometry& g, PanelFrame& panel) : g_(g), panel_(panel) { setIgnoresMouseEvents(true, false); }
+    void draw(visage::Canvas& c) override {
+        auto* mu = panel_.match();
+        if (!mu || !mu->st.curveValid) return;
+        const auto& grid = analysis::matchGrid();
+        std::array<double, analysis::kMatchGridPoints> fitted{};
+        const auto& fit = mu->applier.fit();
+        for (int i = 0; i < std::min<int>(mu->count, static_cast<int>(fit.size())); ++i) {
+            const auto b = EqMatchApplier::scaled(fit[static_cast<size_t>(i)], mu->amount);
+            const auto p = dsp::designAnalogPrototype({b.shape, b.hz, b.gainDb, b.q, b.slope});
+            if (!p.supported) continue;
+            for (size_t k = 0; k < grid.size(); ++k) fitted[k] += 20.0 * std::log10(std::max(std::abs(p.evaluateHz(grid[k])), 1e-9));
+        }
+        auto line = [&](auto value, uint32_t colour, float thick, bool confidence) {
+            for (size_t k = 1; k < grid.size(); ++k) {
+                if (grid[k] < g_.viewLo() || grid[k - 1] > g_.viewHi()) continue;
+                uint32_t col = colour;
+                if (confidence && mu->st.weight[k] < 0.5) col = (colour & 0x00ffffffu) | 0x50000000u;  // low confidence
+                c.setColor(col);
+                c.segment(g_.xOfHz(grid[k - 1]), g_.yOfDb(value(k - 1)), g_.xOfHz(grid[k]), g_.yOfDb(value(k)), thick, true);
+            }
+        };
+        line([&](size_t k) { return mu->st.target[k]; }, tok::matchTarget, 1.5f, true);
+        if (!fit.empty()) {
+            line([&](size_t k) { return fitted[k]; }, tok::matchFitted, 1.5f, false);
+            line([&](size_t k) { return mu->st.target[k] - fitted[k]; }, tok::matchResidual, 1.0f, false);
+        }
+    }
+
+private:
+    const GraphGeometry& g_;
+    PanelFrame& panel_;
 };
 
 // ---------------------------------------------------------------------------
@@ -706,8 +930,9 @@ struct Editor::Impl : params::ParameterListener {
     GroundFrame ground;
     SpectrumFrame spectrum;
     CurveFrame curveFrame;
-    NodesFrame nodes;
     PanelFrame panel;
+    MatchOverlayFrame overlay;
+    NodesFrame nodes;
     std::array<std::unique_ptr<BandNodeAccessible>, params::kBandCount> nodeAccess;
     GraphAccessible graphAccess;
     RootAccessible rootAccess;
@@ -720,8 +945,9 @@ struct Editor::Impl : params::ParameterListener {
           ground(geometry),
           spectrum(geometry, ctl.table(), poller),
           curveFrame(geometry, curve, ctl.table()),
-          nodes(interaction, ops, keys, poller),
           panel(ctl, interaction, ops, keys, poller),
+          overlay(geometry, panel),
+          nodes(interaction, ops, keys, poller),
           graphAccess(nodeAccess),
           rootAccess(graphAccess) {
         for (int b = 0; b < params::kBandCount; ++b) nodeAccess[static_cast<size_t>(b)] = std::make_unique<BandNodeAccessible>(ctl, interaction, b);
@@ -734,12 +960,14 @@ struct Editor::Impl : params::ParameterListener {
         };
         nodes.onViewChanged = [this] { relayoutCurve(); };
         nodes.onEdited = [this] { panel.redraw(); };
+        panel.onMatchChanged = [this] { overlay.redraw(); };
         c.addListener(this);
         pollTimer.onTimerCallback() += [this] {
             const unsigned changed = poller.poll(c);
             if (changed & SnapshotPoller::kSpectrum) spectrum.redraw();
             if (changed & (SnapshotPoller::kLevels | SnapshotPoller::kGainChange)) panel.redraw();
             if (changed & SnapshotPoller::kGainChange) nodes.redraw();
+            panel.pollMatch();  // EQ Match status and fits, only while its panel is open
         };
     }
     ~Impl() override {
@@ -796,6 +1024,7 @@ struct Editor::Impl : params::ParameterListener {
         ground.redraw();
         spectrum.redraw();
         curveFrame.redraw();
+        overlay.redraw();
         nodes.redraw();
     }
 
@@ -813,6 +1042,7 @@ struct Editor::Impl : params::ParameterListener {
         ground.setBounds(0, 0, w, gh);
         spectrum.setBounds(0, 0, w, gh);
         curveFrame.setBounds(0, 0, w, gh);
+        overlay.setBounds(0, 0, w, gh);
         nodes.setBounds(0, 0, w, gh);
         panel.setBounds(0, gh, w, h - gh);
         relayoutCurve();
@@ -888,6 +1118,7 @@ Editor::Editor(UndoController& controller, uint32_t logicalWidth, uint32_t logic
     app.addChild(&impl_->ground);
     app.addChild(&impl_->spectrum);
     app.addChild(&impl_->curveFrame);
+    app.addChild(&impl_->overlay);
     app.addChild(&impl_->nodes);
     app.addChild(&impl_->panel);
     // Add to (not replace) Visage's own resize callback, which keeps its top-level frame in step.

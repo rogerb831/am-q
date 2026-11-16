@@ -58,6 +58,16 @@ void UndoController::beginGroup(std::string label) {
     ++groups_;
 }
 
+bool UndoController::reopenLast(const std::string& label) {
+    if (recording_ || replaying_ || undo_.empty() || undo_.back().label != label) return false;
+    current_ = std::move(undo_.back());
+    undo_.pop_back();
+    redo_.clear();
+    recording_ = true;
+    ++groups_;
+    return true;
+}
+
 void UndoController::endGroup() {
     if (groups_ > 0) --groups_;
     closeStepIfDone();

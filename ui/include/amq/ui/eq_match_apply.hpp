@@ -1,7 +1,9 @@
 #pragma once
 // EQ Match apply (area 16 R11-R14). Writes a fit into bands through the setter with source EQ Match
 // and keeps the whole apply as one undo step: the first apply after a new fit opens an undo group,
-// and every Amount or Bands slider move until finish() merges into it (R13).
+// and every Amount or Bands slider move merges into it (R13): while a slider moves the group is open,
+// and a later move reopens the same step as long as it is still the latest one (nothing else was
+// edited in between). finish() closes it (slider released, panel closed).
 //
 //   Bands slider: the first `count` fitted bands (strongest first, R10).
 //   Amount (0..1): scales every fitted gain in dB (R11); for cuts it moves the slope towards the
@@ -42,6 +44,7 @@ private:
     std::vector<MatchBand> fit_;
     std::vector<int> tagged_;
     bool open_ = false;
+    bool applied_ = false;  // this fit has an EQ Match step that later moves may amend
 };
 
 }  // namespace amq::ui
