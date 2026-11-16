@@ -35,6 +35,12 @@ public:
     static constexpr float kLeft = 16.0f, kRight = 56.0f, kTop = 16.0f, kBottom = 32.0f;
 
     void setSize(float w, float h) noexcept { w_ = w, h_ = h; }
+    // Horizontal zoom (area 13 wheel bindings): the displayed span, within kMinHz .. kMaxHz.
+    void setView(double loHz, double hiHz) noexcept;
+    void zoomAt(float x, double factor) noexcept;  // factor < 1 zooms in, around the pointer
+    [[nodiscard]] double viewLo() const noexcept { return lo_; }
+    [[nodiscard]] double viewHi() const noexcept { return hi_; }
+    [[nodiscard]] double octavesPerPixel() const noexcept;
     void setRangeDb(double r) noexcept { rangeDb_ = r > 0.0 ? r : 12.0; }
     [[nodiscard]] float width() const noexcept { return w_; }
     [[nodiscard]] float height() const noexcept { return h_; }
@@ -48,6 +54,7 @@ public:
 private:
     float w_ = 1180.0f, h_ = 672.0f;
     double rangeDb_ = 12.0;
+    double lo_ = kMinHz, hi_ = kMaxHz;
 };
 
 // Response curve in dB at fixed frequencies, computed from parameter values with the analog
@@ -78,23 +85,63 @@ private:
 
 struct NodeInfo {
     bool used = false, enabled = false, hasGain = true;
-    double hz = 1000.0, gainDb = 0.0;
+    bool selected = false, focused = false, dynamic = false, soloed = false;
+    double hz = 1000.0, gainDb = 0.0, rangeDb = 0.0;
     float x = 0.0f, y = 0.0f;
+    bool hasRangeHandle = false;  // a dynamic gain band: the handle sits at gain + range
+    float rangeY = 0.0f;
 };
 
+// Pointer and wheel interaction (area 13). PROVISIONAL modifier table until the Product designer's
+// interaction spec (area 13 Phase 0 task) and Counsel's review:
+//   click a node: select it (and focus it); Shift+click: add; Command+click: toggle
+//   click empty: clear the selection (Shift keeps it); drag on empty: lasso (Shift adds)
+//   drag a node: moves every selected band by the same octaves and dB (gainless shapes: Q);
+//     Shift: fine (x0.1); Command held during the drag: lock to the first dominant axis (at the
+//     press Command toggles the selection); Alt: vertical moves Q
+//   a soloed band's vertical drag sets Solo Gain (R11; the editor shows soloDragDb())
+//   range handle (dynamic gain bands, at gain + range): drag sets Dyn Range; Alt-click toggles
+//     Dynamics Enabled (R7); Alt-click a node toggles Enabled
+//   wheel over a node or the selection: Q; Shift: gain; Alt: Dyn Range; Command: slope (steps
+//     through the slopes the shape allows); over empty space with no selection: horizontal zoom
+//   optional Gain-Q coupling (off by default, area 13 Phase 3): dragging gain narrows Q by
+//     2^(change in |gain| / 12)
+// Every change is one gesture (one undo step) across all affected bands.
 class GraphInteraction {
 public:
     static constexpr float kDragThresholdPx = 3.0f;  // PROVISIONAL (area 13 R2; Product designer)
     static constexpr float kNodeRadiusPx = 11.0f;
+    static constexpr float kHandleRadiusPx = 7.0f;
     static constexpr double kWheelQStep = 0.02;      // Q position per wheel unit, PROVISIONAL
+    static constexpr double kWheelGainDb = 0.5;      // dB per wheel unit (gain and range), PROVISIONAL
     static constexpr double kDragQPerPx = 0.004;     // Q position per pixel for gainless shapes
+    static constexpr double kFineFactor = 0.1;       // Shift-drag, PROVISIONAL
+    static constexpr double kZoomPerWheel = 0.85;    // span factor per wheel unit, PROVISIONAL
 
-    GraphInteraction(EditController& c, const GraphGeometry& g) : c_(c), g_(g) {}
+    GraphInteraction(EditController& c, GraphGeometry& g) : c_(c), g_(g) {}
 
     [[nodiscard]] NodeInfo node(int band) const;
     [[nodiscard]] int hitTest(float x, float y) const;  // band index or -1; topmost (highest index) wins
-    [[nodiscard]] int selected() const noexcept { return selected_; }
+    [[nodiscard]] int hitRangeHandle(float x, float y) const;
+    // Focus: the band last clicked (the band panel shows it); -1 for none.
+    [[nodiscard]] int selected() const noexcept { return focused_; }
+    [[nodiscard]] int focused() const noexcept { return focused_; }
+    [[nodiscard]] const std::vector<int>& selection() const noexcept { return selection_; }
+    [[nodiscard]] bool isSelected(int band) const noexcept;
     [[nodiscard]] bool dragging() const noexcept { return gesture_.isOpen(); }
+    [[nodiscard]] bool lassoActive() const noexcept { return mode_ == Mode::Lasso; }
+    [[nodiscard]] std::array<float, 4> lassoRect() const noexcept;  // x0, y0, x1, y1
+    [[nodiscard]] bool soloDragActive() const noexcept { return mode_ == Mode::Solo && gesture_.isOpen(); }
+    [[nodiscard]] double soloDragDb() const;
+
+    void setSelection(std::vector<int> bands, int focus = -2);
+    void selectAll();
+    void clearSelection();
+    void focusNext(int direction);  // Tab / Shift+Tab over the used bands (area 15)
+    // Right-click: the bands a menu acts on (a node outside the selection becomes the selection).
+    std::vector<int> contextTargets(float x, float y);
+    // Ends a drag without keeping it: the values return to where the drag began (Escape).
+    void cancelDrag();
 
     void pointerDown(float x, float y, Button b, Modifiers m, int clickCount);
     void pointerDrag(float x, float y, Modifiers m);
@@ -104,19 +151,36 @@ public:
     // Creates a band at a graph position; returns its index or -1 if all 24 are in use.
     int createBandAt(float x, float y);
 
+    bool gainQCoupling = false;  // area 13 Phase 3 option, off by default
     std::function<void()> onSelectionChanged;
 
 private:
-    void select(int band);
+    enum class Mode : uint8_t { None, Pending, Nodes, Range, Lasso, Solo };
+    struct Item {
+        int band = 0;
+        double f0 = 0.0, v0 = 0.0, q0 = 0.0, g0 = 0.0;
+        bool hasGain = true;
+    };
+    void changed();
+    void beginDrag(Modifiers m);
     [[nodiscard]] double value(params::ParamIndex i) const { return c_.table().value(i); }
+    [[nodiscard]] bool soloed(int band) const;
 
     EditController& c_;
-    const GraphGeometry& g_;
-    int selected_ = -1;
+    GraphGeometry& g_;
+    std::vector<int> selection_;
+    int focused_ = -1;
+    Mode mode_ = Mode::None;
+    Mode pendingMode_ = Mode::None;
     int pressed_ = -1;
-    bool pending_ = false;
-    float downX_ = 0, downY_ = 0, grabDx_ = 0, grabDy_ = 0;
-    double startQ_ = 0.5;
+    bool pendingAltQ_ = false;
+    bool clickSelectsOnly_ = false;  // a plain click inside a multi-selection reduces it on release
+    int axis_ = -1;                  // Command-drag: 0 x, 1 y
+    float downX_ = 0, downY_ = 0, curX_ = 0, curY_ = 0;
+    double solo0_ = 0.0, range0_ = 0.0;
+    bool lassoAdd_ = false;
+    std::vector<Item> items_;
+    std::vector<std::pair<params::ParamIndex, double>> undoValues_;  // for cancelDrag
     EditGesture gesture_;
 };
 

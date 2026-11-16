@@ -7,7 +7,9 @@ add_library(amq_ui_model STATIC
     src/graph_model.cpp
     src/undo_controller.cpp
     src/band_ops.cpp
-    src/band_menu.cpp)
+    src/band_menu.cpp
+    src/key_dispatcher.cpp
+    src/band_panel.cpp)
 add_library(amq::ui_model ALIAS amq_ui_model)
 target_include_directories(amq_ui_model PUBLIC include)
 target_link_libraries(amq_ui_model PUBLIC amq::params amq::dsp amq::analysis)

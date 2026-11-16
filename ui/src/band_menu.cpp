@@ -1,5 +1,7 @@
 #include "amq/ui/band_menu.hpp"
 
+#include "amq/ui/band_panel.hpp"
+
 #include <string>
 
 namespace amq::ui {
@@ -51,22 +53,23 @@ std::vector<MenuItem> bandMenu(const BandOps& ops, const BandOps::Bands& targets
     m.push_back({spectral ? menu::ClearSpectral : menu::MakeSpectral, spectral ? "Clear Spectral" : "Make Spectral",
                  has && gain});
     const int shape = common(ops, targets, BandField::Shape);
-    for (int s = 0; s < dsp::kShapeCount; ++s)
-        m.push_back({menu::ShapeBase + s, std::string(dsp::shapeName(static_cast<dsp::Shape>(s))), has, shape == s,
-                     s == 0, "Shape"});
+    // Labels and order from the table (area 11: menus read the table's choices).
+    const auto shapes = choiceItems(ops.table(), params::bandParam(0, BandField::Shape));
+    for (const auto& it : shapes)
+        m.push_back({menu::ShapeBase + it.value, it.label, has, shape == it.value, it.value == 0, "Shape"});
     const int slope = common(ops, targets, BandField::Slope);
-    for (int s = 0; s < dsp::kSlopeCount; ++s) {
+    const auto& slopes = params::specAt(params::bandParam(0, BandField::Slope))->choices;
+    for (int s = 0; s < static_cast<int>(slopes.size()); ++s) {
         bool ok = has;  // a slope is offered only if every target's shape allows it
         for (int b : targets)
             ok = ok && dsp::slopeAllowed(static_cast<dsp::Shape>(static_cast<int>(val(ops, b, BandField::Shape))),
                                         static_cast<dsp::Slope>(s));
-        m.push_back({menu::SlopeBase + s, std::string(dsp::slopeName(static_cast<dsp::Slope>(s))), ok, slope == s, false,
-                     "Slope"});
+        m.push_back({menu::SlopeBase + s, slopes[static_cast<size_t>(s)], ok, slope == s, false, "Slope"});
     }
-    static const char* kPlacement[] = {"Stereo", "Left", "Right", "Mid", "Side"};
+    const auto& places = params::specAt(params::bandParam(0, BandField::Placement))->choices;
     const int placement = common(ops, targets, BandField::Placement);
-    for (int p = 0; p < 5; ++p)
-        m.push_back({menu::PlacementBase + p, kPlacement[p], has, placement == p, false, "Placement"});
+    for (int p = 0; p < static_cast<int>(places.size()); ++p)
+        m.push_back({menu::PlacementBase + p, places[static_cast<size_t>(p)], has, placement == p, false, "Placement"});
     m.push_back({menu::Cut, "Cut", has, false, true});
     m.push_back({menu::Copy, "Copy", has});
     m.push_back({menu::Paste, plural || has ? "Paste Over" : "Paste", clipboardHasBands});
