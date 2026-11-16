@@ -170,3 +170,23 @@ TEST_CASE("A gain moved to 0 dB fades out smoothly, and back up fades in") {
     // Never a jump beyond the sine's own movement (0.4 * 2 pi 440 / 48000 = 0.023) times the boost.
     CHECK(maxStep(y.l, 1, n) < 0.05);
 }
+
+TEST_CASE("Brickwall in Natural Phase: left out of the correction, so it is its IIR delayed by the latency") {
+    std::mt19937 rng(9);
+    std::uniform_real_distribution<float> u(-0.4f, 0.4f);
+    Io x{std::vector<float>(16384), std::vector<float>(16384)};
+    for (size_t i = 0; i < x.l.size(); ++i) x.l[i] = u(rng), x.r[i] = u(rng);
+    auto run = [&](dsp::ProcessingMode mode) {
+        params::ParameterTable t;
+        band(t, 0, dsp::Shape::HighCut, 5000, 0, 1.0, dsp::Slope::Brickwall);
+        t.set(params::globalParam(GlobalParam::Mode), static_cast<int>(mode), ParamSource::Preset);
+        engine::Engine e(t);
+        REQUIRE(e.prepare(kFs, 512));
+        return render(e, x);
+    };
+    const auto zl = run(dsp::ProcessingMode::ZeroLatency);
+    const auto np = run(dsp::ProcessingMode::NaturalPhase);
+    double worst = 0.0;
+    for (size_t i = 0; i + 320 < x.l.size(); ++i) worst = std::max(worst, std::abs(double(np.l[i + 320]) - zl.l[i]));
+    CHECK(worst < 1e-6);
+}

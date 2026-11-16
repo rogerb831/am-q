@@ -29,9 +29,10 @@ namespace amq::dsp {
 enum class DesignMode : uint8_t { MagnitudeMatched, BilinearCentre, BilinearBandwidth };
 enum class FilterRole : uint8_t { UserBand, Helper };
 
-[[nodiscard]] inline DesignMode designModeFor(Shape s, FilterRole role) noexcept {
+[[nodiscard]] inline DesignMode designModeFor(Shape s, FilterRole role, Slope slope = Slope::Db12) noexcept {
     if (role == FilterRole::Helper) return DesignMode::BilinearBandwidth;
-    return s == Shape::AllPass ? DesignMode::BilinearCentre : DesignMode::MagnitudeMatched;
+    // All Pass and Brickwall cuts: bilinear at the centre (phase exact / equiripple kept).
+    return s == Shape::AllPass || slope == Slope::Brickwall ? DesignMode::BilinearCentre : DesignMode::MagnitudeMatched;
 }
 
 inline constexpr double kButterworthQ = 0.7071067811865476;

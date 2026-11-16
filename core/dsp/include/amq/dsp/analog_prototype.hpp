@@ -44,7 +44,7 @@ inline constexpr int kShapeCount = 10;
 
 enum class Slope : int {
     Db6 = 0, Db12, Db18, Db24, Db30, Db36, Db48, Db72, Db96,
-    Brickwall,  // Low Cut / High Cut only; Phase 2 design, not implemented in Phase 0
+    Brickwall,  // Low Cut / High Cut only: an order-16 inverse Chebyshev cut (analog_prototype.cpp)
 };
 inline constexpr int kSlopeCount = 10;
 
@@ -85,13 +85,15 @@ struct AnalogSection {
 
 // At most 10 sections today (Flat Tilt: 20 real poles); 16 leaves headroom.
 inline constexpr std::size_t kMaxAnalogSections = 16;
+inline constexpr int kBrickwallOrder = 16;  // PROVISIONAL (see analog_prototype.cpp)
 
 struct AnalogPrototype {
     Shape shape = Shape::Bell;
     double centreHz = 1000.0;  // the normalisation frequency f0
     int order = 0;              // nominal order from R10 (0 if unsupported)
     double q = 1.0;             // displayed Q after clamping (R8), for tolerance rules
-    bool supported = false;     // false for Brickwall (Phase 2)
+    bool supported = false;     // false for a slope the shape does not allow
+    bool brickwall = false;     // Brickwall cut: designed bilinear, left out of Natural Phase (area 03 R16)
     // The overall gain is folded into sections[0]. Fixed capacity: no allocation (area 01 R19).
     FixedVector<AnalogSection, kMaxAnalogSections> sections;
 

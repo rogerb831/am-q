@@ -97,7 +97,7 @@ void buildCorrectionKernels(const CorrectionRequest& r, dsp::NaturalPhaseKernelB
             e.valid = true;
             ++cache.recomputed;
         }
-        if (!e.proto.supported) continue;  // Brickwall stays its IIR (area 03 R16)
+        if (!e.proto.supported || e.proto.brickwall) continue;  // Brickwall stays its IIR (area 03 R16)
         use[b] = true;
         any = true;
         anyMs = anyMs || band.stage == 1;

@@ -23,6 +23,13 @@ bool toCascade(const DigitalFilter& f, SvfCascade& out) noexcept {
 RealtimeDesignResult designBandRealtime(const BandSpec& spec, double sampleRate, SvfCascade& out) noexcept {
     const AnalogPrototype proto = designAnalogPrototype(spec);
     if (!proto.supported || proto.sections.overflowed()) return RealtimeDesignResult::Unsupported;
+    if (proto.brickwall) {
+        // Brickwall: bilinear pre-warped at f0 (BilinearCentre): the map only warps frequency, so
+        // the flat passband and the equiripple stopband keep their depth, and -3 dB stays at f0.
+        if (toCascade(designBilinear(proto, sampleRate, std::min(spec.frequencyHz, 0.45 * sampleRate)), out))
+            return RealtimeDesignResult::Matched;
+        return RealtimeDesignResult::Unsupported;
+    }
     if (spec.shape != Shape::AllPass) {
         if (toCascade(designMatched(proto, sampleRate, DesignMethod::MatchedThreePoint), out))
             return RealtimeDesignResult::Matched;

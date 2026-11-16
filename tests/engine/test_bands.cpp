@@ -116,7 +116,7 @@ TEST_CASE("Realtime design: every shape, slope, frequency and rate gives a stabl
                                             static_cast<dsp::Slope>(sl)};
                             dsp::SvfCascade c;
                             const auto res = dsp::designBandRealtime(s, fs, c);
-                            const bool expectSupported = dsp::slopeAllowed(s.shape, s.slope) && s.slope != dsp::Slope::Brickwall;
+                            const bool expectSupported = dsp::slopeAllowed(s.shape, s.slope);
                             INFO("shape " << sh << " slope " << sl << " fs " << fs << " f " << s.frequencyHz);
                             if (!expectSupported) {
                                 CHECK(res == dsp::RealtimeDesignResult::Unsupported);

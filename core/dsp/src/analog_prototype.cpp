@@ -253,6 +253,45 @@ Zpk flatTilt(double centreHz, double gainDb) {
     return z;
 }
 
+// Brickwall (area 01 task, PROVISIONAL constants: the passband/stopband tolerance is an open
+// question): an inverse Chebyshev (Chebyshev type II) low-pass of order kBrickwallOrder with a
+// kBrickwallStopDb equiripple stopband and a maximally flat passband, scaled so -3 dB is at
+// Omega = 1. From the textbook construction: the type I poles for ripple eps, inverted, and
+// zeros on the j axis at 1 / cos(theta_k). The stopband starts at Omega = cosh(acosh(1/eps) / N)
+// (about 0.26 octave above the -3 dB point for N = 16, 80 dB). High-pass by s -> 1/s.
+inline constexpr double kBrickwallStopDb = 80.0;
+
+Zpk brickwallLowpass() {
+    const int n = kBrickwallOrder;
+    const double eps = 1.0 / std::sqrt(std::pow(10.0, kBrickwallStopDb / 10.0) - 1.0);
+    const double mu = std::asinh(1.0 / eps) / n;
+    const double w3 = 1.0 / std::cosh(std::acosh(1.0 / eps) / n);  // -3 dB point, stopband edge at 1
+    Zpk z;
+    for (int k = 1; k <= n; ++k) {
+        const double th = kPi * (2.0 * k - 1.0) / (2.0 * n);
+        const cd p1{-std::sinh(mu) * std::sin(th), std::cosh(mu) * std::cos(th)};
+        z.poles.push_back(1.0 / p1 / w3);
+        const double c = std::cos(th);
+        if (std::abs(c) > 1e-12) z.zeros.push_back(cd{0.0, 1.0 / (c * w3)});
+    }
+    cd h0 = 1.0;  // DC gain 1
+    for (const auto& r : z.zeros) h0 *= -r;
+    for (const auto& p : z.poles) h0 /= -p;
+    z.k = 1.0 / h0.real();
+    return z;
+}
+
+Zpk brickwallHighpass() {
+    const Zpk lp = brickwallLowpass();
+    Zpk z;
+    for (const auto& r : lp.zeros) z.zeros.push_back(1.0 / r);
+    for (const auto& p : lp.poles) z.poles.push_back(1.0 / p);
+    for (size_t i = lp.zeros.size(); i < lp.poles.size(); ++i) z.zeros.push_back(cd{0.0, 0.0});
+    cd hInf = 1.0;  // high-frequency gain 1: H(s) -> k as s -> infinity when the degrees match
+    z.k = 1.0 / hInf.real();
+    return z;
+}
+
 double zpkMagnitude(const Zpk& z, double omega) {
     const cd s{0.0, omega};
     cd h = z.k;
@@ -361,11 +400,17 @@ AnalogPrototype designAnalogPrototype(const BandSpec& specIn) {
     proto.order = filterOrder(spec.shape, spec.slope);
     proto.q = spec.q;
 
-    if (spec.slope == Slope::Brickwall || !slopeAllowed(spec.shape, spec.slope)) {
-        proto.supported = false;  // Brickwall is a Phase 2 design (area 01 tasks)
+    if (!slopeAllowed(spec.shape, spec.slope)) {
+        proto.supported = false;
         return proto;
     }
     proto.supported = true;
+    if (spec.slope == Slope::Brickwall) {  // Low Cut / High Cut only (slopeAllowed); Q is ignored
+        proto.brickwall = true;
+        proto.order = kBrickwallOrder;
+        proto.sections = zpkToSections(spec.shape == Shape::LowCut ? brickwallHighpass() : brickwallLowpass());
+        return proto;
+    }
 
     const int n = proto.order;
     const double g = dbToLinear(spec.gainDb);

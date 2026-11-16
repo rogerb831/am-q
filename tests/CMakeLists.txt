@@ -21,6 +21,7 @@ add_executable(amq_dsp_tests
     test_accuracy_smoke.cpp
     test_speakers_design_modes.cpp
     test_svf_variants.cpp
+    test_brickwall.cpp
 )
 target_link_libraries(amq_dsp_tests PRIVATE amq::dsp amq::accuracy doctest::doctest)
 amq_set_warnings(amq_dsp_tests)

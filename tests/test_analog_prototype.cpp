@@ -28,7 +28,10 @@ TEST_CASE("order = slope / 6, minimum 2 for Bell, Band Pass, Notch (R10)") {
     CHECK(slopeAllowed(Shape::LowCut, Slope::Brickwall));
     CHECK(slopeAllowed(Shape::HighCut, Slope::Brickwall));
     CHECK_FALSE(slopeAllowed(Shape::Bell, Slope::Brickwall));
-    CHECK_FALSE(designAnalogPrototype({Shape::LowCut, 1000.0, 0.0, 1.0, Slope::Brickwall}).supported);
+    CHECK(designAnalogPrototype({Shape::LowCut, 1000.0, 0.0, 1.0, Slope::Brickwall}).supported);
+    CHECK(designAnalogPrototype({Shape::LowCut, 1000.0, 0.0, 1.0, Slope::Brickwall}).brickwall);
+    CHECK(designAnalogPrototype({Shape::LowCut, 1000.0, 0.0, 1.0, Slope::Brickwall}).order == kBrickwallOrder);
+    CHECK_FALSE(designAnalogPrototype({Shape::Bell, 1000.0, 0.0, 1.0, Slope::Brickwall}).supported);
 }
 
 TEST_CASE("cascade order: sections carry exactly 'order' poles") {

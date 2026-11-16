@@ -430,7 +430,8 @@ void Engine::dropIdentitySections(Band& band) noexcept {
 void Engine::refineStep(int b, uint64_t sample) noexcept {
     Band& band = bands_[static_cast<size_t>(b)];
     if (!band.runnable || band.refineDone) return;
-    if (band.dShape == static_cast<int>(dsp::Shape::AllPass)) {  // its bilinear design is already final
+    if (band.dShape == static_cast<int>(dsp::Shape::AllPass) ||
+        band.dSlope == static_cast<int>(dsp::Slope::Brickwall)) {  // bilinear designs are already final
         band.refineDone = true;
         return;
     }
