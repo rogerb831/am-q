@@ -13,21 +13,12 @@
 #include <random>
 #include <vector>
 
-// ---------------------------------------------------------------------------
-// Allocation counter: counts global operator new calls on a thread while armed.
-// ---------------------------------------------------------------------------
-namespace {
-thread_local bool gCountAllocs = false;
-std::atomic<long> gAllocs{0};
-}  // namespace
+#include "alloc_counter.hpp"
 
-void* operator new(std::size_t n) {
-    if (gCountAllocs) ++gAllocs;
-    if (void* p = std::malloc(n ? n : 1)) return p;
-    throw std::bad_alloc();
-}
-void operator delete(void* p) noexcept { std::free(p); }
-void operator delete(void* p, std::size_t) noexcept { std::free(p); }
+namespace {
+auto& gCountAllocs = amq_test::countAllocs;
+auto& gAllocs = amq_test::allocs;
+}  // namespace
 
 using namespace amq;
 using params::BandField;
