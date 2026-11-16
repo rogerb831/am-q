@@ -48,6 +48,9 @@ Engine::Engine(const params::ParameterTable& table) noexcept : table_(table) {
     panPolicy_ = {20.0, 5.0, 100.0};        // pan units
     polarityPolicy_ = {10.0, 10.0, 2.0, true};
     wetPolicy_ = {kEnableFadeMs, kEnableFadeMs, 2.0, true};
+    bypassPolicy_ = {kBypassFadeMs, kBypassFadeMs, 2.0, true};
+    fadePolicy_ = {kModeFadeMs, kModeFadeMs, 2.0, true};
+    fade_.snap(1.0);
     snapToTable();
     pendingSnap_ = false;
 }
@@ -98,6 +101,24 @@ bool Engine::prepare(double sampleRate, uint32_t maxFrames) noexcept {
         fillCorrectionRequest(kMaxChannels);
         npRequest_.id = ++npNextId_;
         if (!np_.prepare(maxFrames, npRequest_)) return false;
+    }
+    // The bypass dry path is delayed by exactly the latency this activation reports (area 02 R2).
+    dryLen_ = dsp::latencySamples(activeMode_, 0, sampleRate, false);
+    dryPos_ = 0;
+    try {
+        dryLine_.assign(static_cast<size_t>(kMaxChannels) * dryLen_, 0.0f);
+        dry_.assign(static_cast<size_t>(kMaxChannels) * maxFrames, 0.0);
+    } catch (...) {
+        return false;
+    }
+    // After a fade-out for a mode change, fade back in; any other activation starts at full level.
+    silentSamples_ = 0;
+    gaveUpMode_ = -1;
+    if (fadedOut_.exchange(false)) {
+        fade_.snap(0.0);
+        fade_.retarget(1.0, rampSamples(fadePolicy_, 1.0, sampleRate));
+    } else {
+        fade_.snap(1.0);
     }
     if (mode_ == DesignMode::Thread) {
         worker_.start();
@@ -169,6 +190,7 @@ void Engine::snapToTable() noexcept {
     levelGain_.snap(params::outputLevelGain(levelTargetDb_));
     pan_.snap(table_.value(params::globalParam(GlobalParam::OutputPan)));
     polarity_.snap(table_.value(params::globalParam(GlobalParam::Invert)) >= 0.5 ? -1.0 : 1.0);
+    bypass_.snap(table_.value(params::globalParam(GlobalParam::Bypass)) >= 0.5 ? 1.0 : 0.0);
     for (auto& b : bands_) b.event = true;
     pendingSnap_ = true;
 }
@@ -227,6 +249,14 @@ void Engine::retargetAll() noexcept {
     if (pan != pan_.target()) pan_.retarget(pan, rampSamples(panPolicy_, pan - pan_.current(), sampleRate_));
 
     const double pol = table_.value(params::globalParam(GlobalParam::Invert)) >= 0.5 ? -1.0 : 1.0;
+    const double byp = table_.value(params::globalParam(GlobalParam::Bypass)) >= 0.5 ? 1.0 : 0.0;
+    if (byp != bypass_.target()) bypass_.retarget(byp, rampSamples(bypassPolicy_, 1.0, sampleRate_));
+
+    // Fade out while the table asks for another mode, back in if it stops asking (area 02 R13).
+    const bool waiting = restartNeeded() && static_cast<int>(requestedMode()) != gaveUpMode_;
+    const double fadeTarget = waiting ? 0.0 : 1.0;
+    if (fadeTarget != fade_.target()) fade_.retarget(fadeTarget, rampSamples(fadePolicy_, 1.0, sampleRate_));
+
     if (pol != polarity_.target())
         polarity_.retarget(pol, rampSamples(polarityPolicy_, pol - polarity_.current(), sampleRate_));
 }
@@ -558,10 +588,25 @@ void Engine::process(const float* const* in, uint32_t numIn, float* const* out, 
         analyzer_.write(analysis::Source::External, sc, std::min(numSc, kMaxChannels), frames);
     }
     double* w[kMaxChannels] = {work_.data(), work_.data() + maxFrames_};
+    double* dry[kMaxChannels] = {dry_.data(), dry_.data() + maxFrames_};
     for (uint32_t c = 0; c < outCh; ++c) {
         const float* x = in[std::min(c, numIn - 1)];
         for (uint32_t i = 0; i < frames; ++i) w[c][i] = x[i];
+        // The dry path, delayed by the reported latency (area 02 R2). Read before any output
+        // is written: in may alias out.
+        if (dryLen_ == 0) {
+            for (uint32_t i = 0; i < frames; ++i) dry[c][i] = x[i];
+        } else {
+            float* line = dryLine_.data() + static_cast<size_t>(c) * dryLen_;
+            uint32_t p = dryPos_;
+            for (uint32_t i = 0; i < frames; ++i) {
+                dry[c][i] = line[p];
+                line[p] = x[i];
+                if (++p == dryLen_) p = 0;
+            }
+        }
     }
+    if (dryLen_) dryPos_ = static_cast<uint32_t>((dryPos_ + frames) % dryLen_);
 
     // Bands in series, in index order (area 01 R7), sub-block by sub-block between reads.
     const uint64_t end = pos_ + frames;
@@ -611,8 +656,32 @@ void Engine::process(const float* const* in, uint32_t numIn, float* const* out, 
             if (p > 0.0) gl *= 1.0 - p / 100.0;
             else if (p < 0.0) gr *= 1.0 + p / 100.0;
         }
-        out[0][i] = static_cast<float>(w[0][i] * gl);
-        if (stereo) out[1][i] = static_cast<float>(w[1][i] * gr);
+        // Global bypass: crossfade to the delayed dry input; fully bypassed it is the dry input
+        // exactly (area 01 R6, area 02 R2). Then the mode-change fade (area 02 R13).
+        const double m = bypass_.next();
+        const double fz = fade_.next();
+        double yl = w[0][i] * gl, yr = stereo ? w[1][i] * gr : 0.0;
+        if (m == 1.0) {
+            yl = dry[0][i];
+            if (stereo) yr = dry[1][i];
+        } else if (m != 0.0) {
+            yl += m * (dry[0][i] - yl);
+            if (stereo) yr += m * (dry[1][i] - yr);
+        }
+        if (fz != 1.0) yl *= fz, yr *= fz;
+        out[0][i] = static_cast<float>(yl);
+        if (stereo) out[1][i] = static_cast<float>(yr);
+    }
+    const bool silent = fade_.target() == 0.0 && !fade_.active();
+    fadedOut_.store(silent, std::memory_order_release);
+    if (silent) {
+        silentSamples_ += frames;
+        if (static_cast<double>(silentSamples_) >= kRestartWaitMs * 1e-3 * sampleRate_) {
+            gaveUpMode_ = static_cast<int>(requestedMode());  // the next piece fades back in
+            silentSamples_ = 0;
+        }
+    } else {
+        silentSamples_ = 0;
     }
     for (uint32_t c = kMaxChannels; c < numOut; ++c)
         if (out[c]) std::fill(out[c], out[c] + frames, 0.0f);

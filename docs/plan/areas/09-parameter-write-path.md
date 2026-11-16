@@ -51,7 +51,7 @@ Every Am-Q parameter write goes through one clamped setter. GUI edits are wrappe
 - [x] Implement VST3 and CLAP parameter export with fixed indices and linear normalized mapping (Plugin and host engineer, Phase 1). CLAP params extension with hashed, frozen ids; VST3 via clap-wrapper; all three validators clean
 - [x] Implement the event scan and block splitter with slot writes (Plugin and host engineer, Phase 1)
 - [x] Implement audio-side ramps with size-dependent time, instant jumps and seed-on-prepare (DSP lead, Phase 1). `core/engine/ramp.hpp`. The policies (20 ms long, 5 ms short, per-field jump thresholds) are PROVISIONAL until the zipper tests
-- [ ] Implement format bypass with latency-compensated crossfade (Plugin and host engineer, Phase 2)
+- [x] Implement format bypass with latency-compensated crossfade (Plugin and host engineer, Phase 2). Done on 2026-11-16 with the area 01 global bypass: the format bypass parameter drives the engine's latency-compensated crossfade. The "Bypass" acceptance test still needs the listening check in hosts
 - [ ] Implement the processor-controller message layer for latency, preset name and blobs (Plugin and host engineer, Phase 1)
 - [ ] Document the per-shape displayed-Q to design-Q convention (DSP lead, Phase 0)
 - [ ] Build host automation tests in at least three DAWs (Build and QA engineer, Phase 3)

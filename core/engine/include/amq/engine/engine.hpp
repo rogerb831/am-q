@@ -19,11 +19,19 @@
 //      bit-transparent.
 //   4. In Natural Phase, the combined 2x2 correction FIR (natural_phase.hpp; area 03 R14).
 //   5. The output Level / Pan / Invert node (area 03 R10-R12).
+//   6. Global bypass (area 01 R6, area 02 R2): a smoothed crossfade from this output to the dry
+//      input, delayed by exactly the reported latency. Fully bypassed, the output is the delayed
+//      input bit for bit; the wet path keeps running so un-bypassing crossfades cleanly.
+//   7. The mode-change fade (area 02 R13).
 //
 // Processing mode (area 02 R9, R13). The mode is latched in prepare(), because the latency
 // it implies is reported to the host at activation. Zero Latency and Natural Phase run; Linear
 // Phase is Phase 2 and runs as Zero Latency (latency 0) until then. When global.mode asks for a
-// different mode, restartNeeded() turns true and the wrapper asks the host to restart.
+// different mode, restartNeeded() turns true and the output fades out; restartReady() turns
+// true once it is silent, and the wrapper then asks the host to restart. The next prepare()
+// fades the output back in. Other activations start at full level. A host that never restarts
+// would leave the plugin silent, so after kRestartWaitMs of silence the output fades back in on
+// the old mode, until the requested mode changes again.
 //
 // Design tiers: bands are designed on the audio thread with the fast three-point design while
 // they move; once settled, the refined design (R12) comes from DesignWorker and the
@@ -31,7 +39,7 @@
 //
 // Not yet (later tasks): dynamics,
 // spectral bands, the 100 ms section-count crossfade (R17), near-zero bypass (R16), Auto Gain,
-// bypass, and SIMD.
+// and SIMD.
 //
 // Threading: prepare() and release() on the main thread while not processing; process(),
 // snapToTable() and the read accessors on the audio thread. process() never allocates, locks
@@ -64,6 +72,9 @@ inline constexpr double kJumpOctaves = 0.5;        // PROVISIONAL: redesign at o
 inline constexpr double kEnableFadeMs = 10.0;      // area 02 R6 initial value
 inline constexpr double kRefineSwapDelayMs = 50.0; // PROVISIONAL: swap a refined design this long after the request
 inline constexpr double kRefineGlideMs = 20.0;     // PROVISIONAL: glide from the fast to the refined design
+inline constexpr double kBypassFadeMs = 20.0;      // PROVISIONAL: global bypass crossfade (90 % time)
+inline constexpr double kModeFadeMs = 10.0;        // PROVISIONAL: fade out / in around a mode change (area 02 open question)
+inline constexpr double kRestartWaitMs = 1000.0;   // PROVISIONAL: silent wait for the host's restart before fading back in
 
 // Where refined designs are computed (area 01 "Design tiers").
 enum class DesignMode : uint8_t {
@@ -130,6 +141,14 @@ public:
     // True while prepared and the table asks for another mode: the host must restart the
     // plugin (deactivate, activate) so the new latency can be reported. Any thread.
     [[nodiscard]] bool restartNeeded() const noexcept { return prepared_ && requestedMode() != activeMode_; }
+    // True once restartNeeded() and the output has faded to silence: the moment to ask the host
+    // for the restart (area 02 R13). Any thread.
+    [[nodiscard]] bool restartReady() const noexcept {
+        return restartNeeded() && fadedOut_.load(std::memory_order_acquire);
+    }
+    // Current bypass mix (0 = processed, 1 = bypassed) and mode-fade gain (tests).
+    [[nodiscard]] double bypassMix() const noexcept { return bypass_.current(); }
+    [[nodiscard]] double modeFadeGain() const noexcept { return fade_.current(); }
     // Natural Phase kernel sets handed to the convolvers since prepare (tests).
     [[nodiscard]] uint64_t kernelSwaps() const noexcept { return np_.swaps(); }
 
@@ -263,6 +282,20 @@ private:
     LinearRamp polarity_;    // +1 / -1, always ramped
     RampPolicy polarityPolicy_;
     RampPolicy wetPolicy_;
+
+    // Global bypass and the dry path (area 02 R2). dryLine_ holds the last dryLen_ input samples
+    // per channel (dryLen_ = the reported latency); dry_ is this piece's delayed input.
+    LinearRamp bypass_;      // 0 = processed, 1 = bypassed
+    RampPolicy bypassPolicy_;
+    std::vector<float> dryLine_;
+    std::vector<double> dry_;
+    uint32_t dryLen_ = 0, dryPos_ = 0;
+    // Mode-change fade (area 02 R13).
+    LinearRamp fade_;
+    RampPolicy fadePolicy_;
+    std::atomic<bool> fadedOut_{false};
+    uint64_t silentSamples_ = 0;  // samples spent faded out, waiting for the host's restart
+    int gaveUpMode_ = -1;         // requested mode whose restart never came: play the old mode
 };
 
 }  // namespace amq::engine

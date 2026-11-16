@@ -112,7 +112,7 @@ private:
     void drainGuiEvents(const clap_output_events* out) noexcept;  // process() / flush()
     void requestGuiRefresh() noexcept;                             // audio thread
     void requestHostFlush() noexcept;                              // main thread
-    void requestRestartIfNeeded() noexcept;                        // any thread
+    void requestRestartIfNeeded(bool processing) noexcept;         // any thread
 
     params::ParameterTable table_;
     engine::Engine engine_{table_};

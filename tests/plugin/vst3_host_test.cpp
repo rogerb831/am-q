@@ -445,6 +445,29 @@ int main(int argc, char** argv) {
         check(before == 0 && latencyRestarts >= 1, "Natural Phase automation reaches the host as restartComponent(kLatencyChanged)");
         check(after == 320 && peak == 320 && std::abs(y[320] - 1.0f) <= 1e-6f,
               "after the restart: latency 320, flat impulse exactly 320 samples late");
+
+        // The host's bypass parameter (kIsBypass): with Output Level turned down, bypass gives
+        // the input delayed by the latency, bit for bit (area 01 R6, area 09 R7).
+        ParamID bypassId = kNoParamId;
+        for (int32 i = 0; i < q.ctrl->getParameterCount(); ++i) {
+            ParameterInfo info{};
+            q.ctrl->getParameterInfo(i, info);
+            if (info.flags & ParameterInfo::kIsBypass) bypassId = info.id;
+        }
+        const std::vector<float> silence(512, 0.0f);
+        ParameterChanges quiet;
+        addPoint(quiet, q.find("Output Level"), 0, 0.25);
+        q.run(silence, silence, &quiet);
+        q.run(silence, silence, nullptr);
+        const auto wet = q.run(imp, silence, nullptr);
+        ParameterChanges byp;
+        addPoint(byp, bypassId, 0, 1.0);
+        for (int b = 0; b < 3; ++b) q.run(silence, silence, b == 0 ? &byp : nullptr);
+        const auto dry = q.run(imp, silence, nullptr);
+        bool exact = true;
+        for (int i = 0; i < 512; ++i) exact &= dry[static_cast<size_t>(i)] == (i == 320 ? 1.0f : 0.0f);
+        check(bypassId != kNoParamId && std::abs(wet[320]) < 0.5f && exact,
+              "host bypass (kIsBypass): input delayed by 320 samples, bit for bit");
         q.stop();
     }
 

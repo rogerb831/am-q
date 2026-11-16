@@ -527,6 +527,38 @@ int main(int argc, char** argv) {
         check(peak == 320 && std::abs(y[320] - 1.0f) <= 1e-6f, "Natural Phase, bands flat: impulse exactly 320 samples late");
         block(nullptr, false);
         check(mh.restartRequests == 1, "no further restart requests while the mode is unchanged");
+
+        // Host bypass (area 01 R6, area 09 R7): the CLAP bypass parameter crossfades to the dry
+        // input delayed by the latency. Output Level at 0.25 changes the processed signal only.
+        clap_id bypassId = 0, levelId2 = 0;
+        for (uint32_t i = 0; i < qparams->count(q); ++i) {
+            clap_param_info info{};
+            qparams->get_info(q, i, &info);
+            if (info.flags & CLAP_PARAM_IS_BYPASS) bypassId = info.id;
+            if (!std::strcmp(info.name, "Output Level")) levelId2 = info.id;
+        }
+        auto event = [&](clap_id id, double value) {
+            auto ev = modeEvent(value);
+            ev.param_id = id;
+            return ev;
+        };
+        const auto quiet = event(levelId2, 0.25);
+        block(&quiet, false);
+        block(nullptr, false);
+        const auto wetImp = block(nullptr, true);
+        const auto bypassOn = event(bypassId, 1.0);
+        block(&bypassOn, false);
+        block(nullptr, false);
+        const auto dryImp = block(nullptr, true);
+        bool dryExact = true;
+        for (int i = 0; i < 1024; ++i) dryExact &= dryImp[static_cast<size_t>(i)] == (i == 320 ? 1.0f : 0.0f);
+        check(bypassId && std::abs(wetImp[320]) < 0.5f && dryExact,
+              "host bypass: the output becomes the input delayed by 320 samples, bit for bit");
+        const auto bypassOff = event(bypassId, 0.0);
+        block(&bypassOff, false);
+        block(nullptr, false);
+        check(std::abs(block(nullptr, true)[320] - wetImp[320]) < 1e-6f, "bypass off: the processed signal returns");
+        check(mh.restartRequests == 1, "bypass never asks for a restart");
         const auto toZl = modeEvent(0.0);
         block(&toZl, false);
         restart();
