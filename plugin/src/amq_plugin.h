@@ -220,18 +220,20 @@ private:
         bool savePreset(const std::filesystem::path& path, std::string* error) override;
         std::string currentName() const override;
         std::filesystem::path currentPath() const override;
-        bool edited() const override { return edited_; }
+        bool edited() const override { return edited_.load(); }
         void parameterChanged(params::ParamIndex i, double, params::ParamSource source) override;
         // State trailer (any thread; the name and path are copied under the lock).
         void setCurrent(const std::string& name, const std::string& pathUtf8, bool edited);
         void current(std::string& name, std::string& pathUtf8) const;
-        bool loading = false;  // a preset load is in progress: its changes do not mark edited
+        // A preset load is in progress: its changes do not mark edited. Atomic: set on the main
+        // thread, read by a state load that a VST3 host may call on another thread.
+        std::atomic<bool> loading{false};
 
     private:
         AmqPlugin& p_;
         mutable std::mutex m_;
         std::string name_ = ui::kInitPresetName, path_;
-        bool edited_ = false;
+        std::atomic<bool> edited_{false};  // written under m_ or on the main thread, read by the editor
     } presets_{*this};
 };
 

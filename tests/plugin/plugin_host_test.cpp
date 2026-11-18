@@ -21,6 +21,8 @@
 #include <windows.h>
 
 #include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -553,6 +555,73 @@ int main(int argc, char** argv) {
           "off-main-thread latency, audio-ports, params, state and gui-size calls");
     p->on_main_thread(p);  // deferred params.rescan
     check(params->get_value(p, gainId, &v) && v == 7.5, "off-thread state load kept the values");
+
+    // 6b. Audit additions since the skeleton (2026-11-18): port layouts and the state's preset
+    // trailer, off the main thread; then state save and load hammered on a second thread while
+    // the main thread services the plugin (no crash, no torn state).
+    {
+        const auto* cfg = ext<clap_plugin_audio_ports_config>(p, CLAP_EXT_AUDIO_PORTS_CONFIG);
+        // A chunk whose editor trailer names a preset: the saved chunk up to "AMQE", then a v2
+        // trailer with zoom 1 and the name "Night Drive" (no path).
+        Mem base;
+        state->save(p, &base.os);
+        const uint8_t magic[4] = {'A', 'M', 'Q', 'E'};
+        auto at = std::search(base.b.begin(), base.b.end(), magic, magic + 4);
+        std::vector<uint8_t> named(base.b.begin(), at);
+        auto u32 = [&](uint32_t x) { for (int k = 0; k < 4; ++k) named.push_back(static_cast<uint8_t>(x >> (8 * k))); };
+        named.insert(named.end(), magic, magic + 4);
+        u32(2);
+        const double zoom = 1.0;
+        const auto* zb = reinterpret_cast<const uint8_t*>(&zoom);
+        named.insert(named.end(), zb, zb + 8);
+        const std::string name = "Night Drive";
+        u32(static_cast<uint32_t>(name.size()));
+        named.insert(named.end(), name.begin(), name.end());
+        u32(0);
+        bool portsOff = false, loadNamed = false;
+        std::thread t2([&] {
+            clap_audio_port_info info{};
+            clap_audio_ports_config c{};
+            portsOff = ports->get(p, 0, true, &info) && info.channel_count == 2 && ports->get(p, 1, true, &info) &&
+                       ports->get(p, 0, false, &info) && cfg && cfg->count(p) == 2 && cfg->get(p, 1, &c) &&
+                       c.main_input_channel_count == 1;
+            Mem m;
+            m.b = named;
+            loadNamed = state->load(p, &m.is);
+        });
+        t2.join();
+        p->on_main_thread(p);
+        Mem after;
+        state->save(p, &after.os);
+        const bool kept = std::search(after.b.begin(), after.b.end(), name.begin(), name.end()) != after.b.end();
+        check(portsOff && at != base.b.end(), "off-main-thread port info and port layouts");
+        check(loadNamed && kept, "off-thread state load restores the preset name; a main-thread save keeps it");
+
+        std::atomic<bool> stop{false};
+        std::atomic<int> rounds{0}, bad{0};
+        std::thread hammer([&] {
+            while (!stop.load()) {
+                Mem m;
+                if (!state->save(p, &m.os)) ++bad;
+                Mem back;
+                back.b = m.b;
+                if (!state->load(p, &back.is)) ++bad;
+                ++rounds;
+            }
+        });
+        for (int i = 0; i < 300; ++i) {
+            p->on_main_thread(p);
+            double gv = 0;
+            params->get_value(p, gainId, &gv);
+            if (gv != 7.5) ++bad;
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        stop = true;
+        hammer.join();
+        p->on_main_thread(p);
+        check(bad.load() == 0 && rounds.load() > 10,
+              "state save and load on a second thread while the main thread services the plugin: values intact");
+    }
 
     p->stop_processing(p);
     p->deactivate(p);
