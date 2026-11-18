@@ -3,6 +3,11 @@
 Every third-party dependency (SDKs, frameworks, libraries, test tools) and its licence.
 Counsel must clear an entry before it ships in a product build.
 
+Binary packages carry `THIRD_PARTY_NOTICES.txt` with the licence text of every component linked
+or embedded in the plugin, built by `tools/ci/third_party_notices.sh` from the fetched sources.
+Visage does not include the Lato font's licence, so its OFL 1.1 text is kept in
+`licenses/Lato-OFL.txt` (the copyright line is the one in the embedded font, Lato 1.104).
+
 ## Main repository (core/dsp, tests, tools)
 
 | Name | Version | Licence | Used for | Shipped in product? | Source |

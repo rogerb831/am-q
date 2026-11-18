@@ -11,7 +11,8 @@
 #                   then.
 #
 # The windows job also uploads the binary build: Am-Q-<version>-windows-x64 (Am-Q.clap, the
-# Am-Q.vst3 bundle and INSTALL.txt) and its debug symbols as a separate -symbols artifact.
+# Am-Q.vst3 bundle, INSTALL.txt and THIRD_PARTY_NOTICES.txt) and its debug symbols as a separate
+# -symbols artifact. A v* tag also runs the release job, which publishes both as a GitHub Release.
 #
 # Validator binaries are pinned by version and SHA-256 in tools/ci/fetch_validators.sh.
 name: CI
@@ -137,6 +138,8 @@ jobs:
           # Symbols: out of the bundle, named after the plugin they belong to.
           find "dist/$pkg/Am-Q.vst3" -name '*.pdb' -exec mv {} "dist/$pkg-symbols/Am-Q.vst3.pdb" \;
           cp "$(dirname "$clap")/Am-Q.pdb" "dist/$pkg-symbols/Am-Q.clap.pdb"
+          # The licences of everything linked or embedded in the binaries (they require it).
+          bash tools/ci/third_party_notices.sh build "dist/$pkg/THIRD_PARTY_NOTICES.txt"
           cat > "dist/$pkg/INSTALL.txt" <<EOF
           Am-Q $ver (Windows, x64)
           Built from commit $GITHUB_SHA.
@@ -144,6 +147,8 @@ jobs:
           CLAP: copy Am-Q.clap to C:\Program Files\Common Files\CLAP
           VST3: copy the Am-Q.vst3 folder to C:\Program Files\Common Files\VST3
           Then rescan plugins in your host.
+
+          Third-party licences: THIRD_PARTY_NOTICES.txt
           EOF
           echo "PKG=$pkg" >> "$GITHUB_ENV"
 
@@ -162,3 +167,46 @@ jobs:
           name: ${{ env.PKG }}-symbols
           path: dist/${{ env.PKG }}-symbols
           if-no-files-found: error
+
+  # Release: a v* tag (it must match project(VERSION); the build's tag check fails otherwise)
+  # publishes a GitHub Release with the Windows package and its symbols as zips. It waits for the
+  # build matrix and goes ahead only if both Windows jobs passed (macOS is not required yet).
+  release:
+    name: release
+    needs: build
+    if: always() && github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # create the release
+      actions: read     # read this run's jobs and artifacts
+    steps:
+      - name: Require the Windows jobs to have passed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ok=$(gh run view "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --json jobs                --jq '[.jobs[] | select(.name == "windows" or .name == "windows-strict") | .conclusion] | length == 2 and all(. == "success")')
+          if [ "$ok" != "true" ]; then
+            echo "::error::the windows and windows-strict jobs must pass before a release"
+            exit 1
+          fi
+
+      - name: Download the package and symbols
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --pattern 'Am-Q-*' --dir dist
+
+      - name: Zip them
+        run: |
+          cd dist
+          for d in */; do zip -qr "${d%/}.zip" "${d%/}"; done
+          ls -l *.zip
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release create "$GITHUB_REF_NAME" dist/*.zip
+          --repo "$GITHUB_REPOSITORY"
+          --title "Am-Q ${GITHUB_REF_NAME#v}"
+          --generate-notes
+          --verify-tag
