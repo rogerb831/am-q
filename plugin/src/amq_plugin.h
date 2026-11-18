@@ -64,10 +64,21 @@ protected:
     clap_process_status process(const clap_process* process) noexcept override;
     void onMainThread() noexcept override;
 
-    // audio ports: any thread (constant data)
+    // audio ports: the layout is stereo or mono (main pair and side chain alike), chosen by the
+    // host while the plugin is inactive (audio-ports-config for CLAP hosts; configurable-audio-ports,
+    // which clap-wrapper calls from VST3 setBusArrangements). Area 01 R33: v1 ships mono and stereo.
     bool implementsAudioPorts() const noexcept override { return true; }
     uint32_t audioPortsCount(bool isInput) const noexcept override;
     bool audioPortsInfo(uint32_t index, bool isInput, clap_audio_port_info* info) const noexcept override;
+    bool implementsAudioPortsConfig() const noexcept override { return true; }
+    uint32_t audioPortsConfigCount() const noexcept override { return 2; }
+    bool audioPortsGetConfig(uint32_t index, clap_audio_ports_config* config) const noexcept override;
+    bool audioPortsSetConfig(clap_id configId) noexcept override;
+    bool implementsConfigurableAudioPorts() const noexcept override { return true; }
+    bool configurableAudioPortsCanApplyConfiguration(const clap_audio_port_configuration_request* requests,
+                                                     uint32_t count) const noexcept override;
+    bool configurableAudioPortsApplyConfiguration(const clap_audio_port_configuration_request* requests,
+                                                  uint32_t count) noexcept override;
 
     // params: count, info, value and text conversion on any thread (constant specs, atomics);
     // flush on the main or audio thread, never concurrently with process (CLAP)
@@ -152,6 +163,13 @@ private:
     std::atomic<bool> editorOpen_{false};
     std::atomic<bool> refreshRequested_{false};
     std::atomic<uint32_t> latency_{0};        // written on the main thread in activate()
+    // Port channel counts (1 or 2): main pair and side chain. Changed on the main thread while
+    // inactive; atomics because port info may be read on any thread.
+    std::atomic<uint32_t> mainChannels_{2}, scChannels_{2};
+    // The layout a set of configurable-audio-ports requests asks for, or false if Am-Q cannot
+    // give it: main in and out must have the same count, each 1 or 2.
+    bool layoutFor(const clap_audio_port_configuration_request* requests, uint32_t count, uint32_t& main,
+                   uint32_t& sc) const noexcept;
     std::atomic<bool> restartRequested_{false};  // one request_restart per mode change
     std::atomic<bool> textPanMidSide_{false};    // Pan Mode the host's value text was last rescanned for
     std::atomic<bool> textCallbackRequested_{false};

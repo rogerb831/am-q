@@ -249,6 +249,26 @@ int main(int argc, char** argv) {
     p.start(333);
     check(p.proc->getLatencySamples() == 0, "latency 0 after activation");
 
+    // 2b. Mono through setBusArrangements (area 01 R33): clap-wrapper asks the plugin's
+    //     configurable-audio-ports, and the buses then report one channel. Mono in with stereo
+    //     out is refused. (Mono processing itself is tested in the CLAP host test.)
+    {
+        Plugin m;
+        m.open(factory);
+        SpeakerArrangement monoIn[2] = {SpeakerArr::kMono, SpeakerArr::kMono}, monoOut[1] = {SpeakerArr::kMono};
+        SpeakerArrangement stereoOut[1] = {SpeakerArr::kStereo};
+        check(m.proc->setBusArrangements(monoIn, 2, stereoOut, 1) != kResultOk, "setBusArrangements refuses mono in, stereo out");
+        BusInfo mb{};
+        check(m.proc->setBusArrangements(monoIn, 2, monoOut, 1) == kResultOk &&
+                  m.comp->getBusInfo(kAudio, kInput, 0, mb) == kResultOk && mb.channelCount == 1 &&
+                  m.comp->getBusInfo(kAudio, kOutput, 0, mb) == kResultOk && mb.channelCount == 1 &&
+                  m.comp->getBusInfo(kAudio, kInput, 1, mb) == kResultOk && mb.channelCount == 1,
+              "setBusArrangements to mono: main and side-chain buses report one channel");
+        SpeakerArrangement arr = 0;
+        check(m.proc->getBusArrangement(kOutput, 0, arr) == kResultOk && arr == SpeakerArr::kMono,
+              "getBusArrangement reports mono");
+    }
+
     // 3. Pass-through with an odd block size; side chain does not reach the main output.
     const auto inL = noise(333, 7), inR = noise(333, 8);
     {

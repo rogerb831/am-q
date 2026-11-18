@@ -437,8 +437,8 @@ void AmqPlugin::requestGuiRefresh() noexcept {
 }
 
 // ---------------------------------------------------------------------------
-// Audio ports: a stereo main pair, plus an optional stereo side-chain input (area 01 R2).
-// clap-wrapper turns the non-main input into a VST3 aux bus. Any thread: constant answers.
+// Audio ports: a main pair, plus an optional side-chain input (area 01 R2), all stereo or all
+// mono. clap-wrapper turns the non-main input into a VST3 aux bus. Any thread.
 // ---------------------------------------------------------------------------
 
 namespace {
@@ -454,17 +454,72 @@ bool AmqPlugin::audioPortsInfo(uint32_t index, bool isInput, clap_audio_port_inf
         info->id = kSidechainId;
         std::snprintf(info->name, sizeof(info->name), "%s", "Sidechain");
         info->flags = CLAP_AUDIO_PORT_SUPPORTS_64BITS;  // not main: optional, never in place
-        info->channel_count = 2;
-        info->port_type = CLAP_PORT_STEREO;
+        info->channel_count = scChannels_.load();
+        info->port_type = info->channel_count == 1 ? CLAP_PORT_MONO : CLAP_PORT_STEREO;
         info->in_place_pair = CLAP_INVALID_ID;
         return true;
     }
     info->id = isInput ? kMainInId : kMainOutId;
     std::snprintf(info->name, sizeof(info->name), "%s", isInput ? "Main In" : "Main Out");
     info->flags = CLAP_AUDIO_PORT_IS_MAIN | CLAP_AUDIO_PORT_SUPPORTS_64BITS;
-    info->channel_count = 2;
-    info->port_type = CLAP_PORT_STEREO;
+    info->channel_count = mainChannels_.load();
+    info->port_type = info->channel_count == 1 ? CLAP_PORT_MONO : CLAP_PORT_STEREO;
     info->in_place_pair = isInput ? kMainOutId : kMainInId;
+    return true;
+}
+
+// The two layouts a CLAP host can pick (audio-ports-config): id 0 stereo, id 1 mono.
+bool AmqPlugin::audioPortsGetConfig(uint32_t index, clap_audio_ports_config* config) const noexcept {
+    if (!config || index >= 2) return false;
+    std::memset(config, 0, sizeof(*config));
+    const bool mono = index == 1;
+    config->id = index;
+    std::snprintf(config->name, sizeof(config->name), "%s", mono ? "Mono" : "Stereo");
+    config->input_port_count = 2;
+    config->output_port_count = 1;
+    config->has_main_input = config->has_main_output = true;
+    config->main_input_channel_count = config->main_output_channel_count = mono ? 1 : 2;
+    config->main_input_port_type = config->main_output_port_type = mono ? CLAP_PORT_MONO : CLAP_PORT_STEREO;
+    return true;
+}
+
+bool AmqPlugin::audioPortsSetConfig(clap_id configId) noexcept {
+    if (isActive() || configId > 1) return false;
+    const uint32_t ch = configId == 1 ? 1 : 2;
+    mainChannels_ = ch, scChannels_ = ch;
+    return true;
+}
+
+bool AmqPlugin::layoutFor(const clap_audio_port_configuration_request* requests, uint32_t count, uint32_t& main,
+                          uint32_t& sc) const noexcept {
+    uint32_t in = mainChannels_.load(), out = in;
+    sc = scChannels_.load();
+    for (uint32_t i = 0; i < count; ++i) {
+        const auto& r = requests[i];
+        if (r.channel_count < 1 || r.channel_count > 2) return false;
+        if (r.port_type && std::strcmp(r.port_type, r.channel_count == 1 ? CLAP_PORT_MONO : CLAP_PORT_STEREO) != 0)
+            return false;
+        if (r.is_input && r.port_index == 0) in = r.channel_count;
+        else if (r.is_input && r.port_index == 1) sc = r.channel_count;
+        else if (!r.is_input && r.port_index == 0) out = r.channel_count;
+        else return false;
+    }
+    if (in != out) return false;  // the engine runs the main pair at one width
+    main = in;
+    return true;
+}
+
+bool AmqPlugin::configurableAudioPortsCanApplyConfiguration(const clap_audio_port_configuration_request* requests,
+                                                            uint32_t count) const noexcept {
+    uint32_t main = 0, sc = 0;
+    return !isActive() && layoutFor(requests, count, main, sc);
+}
+
+bool AmqPlugin::configurableAudioPortsApplyConfiguration(const clap_audio_port_configuration_request* requests,
+                                                         uint32_t count) noexcept {
+    uint32_t main = 0, sc = 0;
+    if (isActive() || !layoutFor(requests, count, main, sc)) return false;
+    mainChannels_ = main, scChannels_ = sc;
     return true;
 }
 

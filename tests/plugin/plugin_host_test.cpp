@@ -149,6 +149,56 @@ int main(int argc, char** argv) {
           "one stereo main output");
     check(lat && state && gui, "latency, state and gui extensions present");
 
+    // 2b. Mono layout (area 01 R33): audio-ports-config for CLAP hosts and configurable-audio-ports
+    // (what clap-wrapper calls from VST3 setBusArrangements). Only while inactive.
+    {
+        const auto* cfg = ext<clap_plugin_audio_ports_config>(p, CLAP_EXT_AUDIO_PORTS_CONFIG);
+        const auto* conf = ext<clap_plugin_configurable_audio_ports>(p, CLAP_EXT_CONFIGURABLE_AUDIO_PORTS);
+        clap_audio_ports_config c0{}, c1{};
+        check(cfg && cfg->count(p) == 2 && cfg->get(p, 0, &c0) && cfg->get(p, 1, &c1) && c0.main_input_channel_count == 2 &&
+                  c1.main_input_channel_count == 1 && c1.main_output_channel_count == 1 && !std::strcmp(c1.name, "Mono"),
+              "two port layouts: Stereo and Mono");
+        clap_audio_port_info mi{}, mo{}, ms{};
+        check(cfg->select(p, 1) && ports->get(p, 0, true, &mi) && ports->get(p, 0, false, &mo) && ports->get(p, 1, true, &ms) &&
+                  mi.channel_count == 1 && mo.channel_count == 1 && ms.channel_count == 1 &&
+                  !std::strcmp(mi.port_type, CLAP_PORT_MONO),
+              "selecting Mono makes the main pair and the side chain mono");
+        // Mono processing: a flat EQ passes the one channel through unchanged.
+        check(p->activate(p, 48000.0, 1, 4096) && p->start_processing(p), "activate in mono");
+        check(!cfg->select(p, 0), "the layout cannot change while active");
+        std::vector<float> mIn(256), mOut(256, 9.0f);
+        for (size_t i = 0; i < mIn.size(); ++i) mIn[i] = std::sin(0.05f * static_cast<float>(i));
+        float* mi1[1] = {mIn.data()};
+        float* mo1[1] = {mOut.data()};
+        clap_audio_buffer mib{}, mob{};
+        mib.data32 = mi1, mib.channel_count = 1;
+        mob.data32 = mo1, mob.channel_count = 1;
+        clap_input_events noIn{nullptr, [](const clap_input_events*) -> uint32_t { return 0; },
+                               [](const clap_input_events*, uint32_t) -> const clap_event_header* { return nullptr; }};
+        clap_output_events noOut{nullptr, [](const clap_output_events*, const clap_event_header*) { return true; }};
+        clap_process mp{};
+        mp.steady_time = -1, mp.frames_count = 256;
+        mp.audio_inputs = &mib, mp.audio_outputs = &mob, mp.audio_inputs_count = mp.audio_outputs_count = 1;
+        mp.in_events = &noIn, mp.out_events = &noOut;
+        check(p->process(p, &mp) == CLAP_PROCESS_CONTINUE && mIn == mOut, "mono pass-through is bit-exact");
+        p->stop_processing(p);
+        p->deactivate(p);
+        auto req = [](bool in, uint32_t idx, uint32_t ch) {
+            clap_audio_port_configuration_request r{};
+            r.is_input = in, r.port_index = idx, r.channel_count = ch;
+            r.port_type = ch == 1 ? CLAP_PORT_MONO : CLAP_PORT_STEREO;
+            return r;
+        };
+        const clap_audio_port_configuration_request stereo[3] = {req(true, 0, 2), req(true, 1, 2), req(false, 0, 2)};
+        const clap_audio_port_configuration_request mixed[2] = {req(true, 0, 1), req(false, 0, 2)};
+        const clap_audio_port_configuration_request wide[1] = {req(false, 0, 6)};
+        check(conf && !conf->can_apply_configuration(p, mixed, 2) && !conf->can_apply_configuration(p, wide, 1),
+              "configurable ports refuse mono in / stereo out and more than two channels");
+        check(conf->can_apply_configuration(p, stereo, 3) && conf->apply_configuration(p, stereo, 3) &&
+                  ports->get(p, 0, true, &mi) && mi.channel_count == 2 && ports->get(p, 1, true, &ms) && ms.channel_count == 2,
+              "configurable ports switch back to stereo");
+    }
+
     // 3. Pass-through, separate buffers, odd block size.
     const uint32_t n = 333;
     check(p->activate(p, 48000.0, 1, 4096) && p->start_processing(p), "activate and start processing");
