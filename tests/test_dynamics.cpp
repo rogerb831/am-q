@@ -350,3 +350,30 @@ TEST_CASE("Dynamics lanes: cost report (24 bands, 1 s at 48 kHz)" * doctest::ski
     std::printf("  dB chain, scalar: %.2f %% of one core; SSE2 pairs: %.2f %%; AVX2 quads: %.2f %%%s\n", 100.0 * run(false),
                 100.0 * run(true), 100.0 * runAvx(), amq::dsp::cpuHasAvx2() ? "" : " (no AVX2: scalar fallback)");
 }
+
+TEST_CASE("Dynamics lanes: a lane set step gives the same bits as each lane through the scalar kernel") {
+    std::mt19937 rng(77);
+    for (int trial = 0; trial < 12; ++trial) {
+        const size_t count = 1 + static_cast<size_t>(trial * 7 % 23);  // odd counts exercise the scalar tail
+        amq::dsp::GainLaneSet set;
+        set.resize(count);
+        std::vector<amq::dsp::GainLane> ref;
+        for (size_t i = 0; i < count; ++i) {
+            auto L = makeLane(rng, (i + trial) % 3 != 0, i % 4 ? 5.5 : 0.0, i % 2 ? -9.0 : 14.0);
+            L.tiltDb = i % 3 == 0 ? 0.0 : 1.5 * (static_cast<double>(i) - 4.0);
+            set.setLane(i, L);
+            ref.push_back(L);
+        }
+        for (int step = 0; step < 200; ++step) {
+            const auto env = envelope(rng, static_cast<uint32_t>(count) + 3);
+            amq::dsp::gainLanesStep(set, env.data(), count);
+            for (size_t i = 0; i < count; ++i) {
+                double x = env[i];
+                amq::dsp::gainLaneScalar(ref[i], &x, 1);
+                const auto L = set.lane(i);
+                REQUIRE((L.zy == ref[i].zy && L.ref == ref[i].ref && L.refCount == ref[i].refCount && L.fy == ref[i].fy &&
+                         L.sy == ref[i].sy));
+            }
+        }
+    }
+}

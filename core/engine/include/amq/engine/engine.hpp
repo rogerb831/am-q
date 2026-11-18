@@ -420,6 +420,15 @@ private:
     bool activeSpectral_ = false;
     SpectralStage spectral_;
     std::array<SpectralBandConfig, params::kBandCount> spectralCfg_{};
+    // A spectral band's centre and span from its inputs, kept while the inputs are bitwise the same:
+    // readDynamics runs at every parameter read, and exp2 and the span's bandwidth cost far more
+    // than comparing the inputs (the stage reads the config once per FFT frame).
+    struct SpanMemo {
+        std::array<double, 7> key{};  // f, q, shape, SC mode, SC low, SC high, sample rate
+        bool valid = false;
+        double hz = 0.0, lo = 0.0, hi = 0.0;
+    };
+    std::array<SpanMemo, params::kBandCount> spanMemo_{};
     std::vector<double> inCopy_;  // kMaxChannels * maxFrames: this piece's input (spectral side chain)
     [[nodiscard]] int requestedConfig() const noexcept {
         return static_cast<int>(requestedMode()) * 16 + (requestedSpectral() ? 8 : 0) + requestedResolution();

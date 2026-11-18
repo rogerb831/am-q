@@ -26,6 +26,7 @@
 // FFT-path latency (dsp/latency.hpp). Everything is allocated in prepare(); process() is real-time
 // safe.
 
+#include "amq/dsp/dynamics_lanes.hpp"
 #include "amq/dsp/fft.hpp"
 #include "amq/dsp/latency.hpp"
 #include "amq/dsp/spectral_grid.hpp"
@@ -85,6 +86,13 @@ private:
         std::array<double, 3> gridKey{-1, -1, -1};
         std::vector<Analysis> a, old;   // kSpectralMaxBands each
         std::vector<double> level;      // kSpectralMaxBands
+        // The analysis bands' dB chain as a lane set (dsp/dynamics_lanes.hpp). While live, it holds
+        // the state and a[i] is stale; it is written back to a[i] before anything else touches them
+        // (a grid rebuild, the auto threshold's warm-up, new timing).
+        dsp::GainLaneSet lanes;           // kSpectralMaxBands
+        bool lanesLive = false;
+        double timingKa = -1.0, timingKr = -1.0;  // the timing knobs the lanes were loaded with
+        std::array<double, 6> laneKey{};  // the per-lane settings last written: range, threshold, auto, tilt, centre, rebuilds
         std::vector<float> relDb;       // n/2 + 1
         int relLo = 1, relHi = 0;       // the bins where |relDb| > 1e-9 dB (the apply loop's range)
         std::vector<int> binBand;       // n/2 + 1: the lower of the two bands weighting a bin
@@ -117,7 +125,9 @@ private:
     std::array<std::vector<double>, 10> magCache_;
     std::array<bool, 10> magValid_{};
     const std::vector<double>& detectorMagnitudes(int src, int detect) noexcept;
-    std::array<BandState, params::kBandCount> band_;
+    // On the heap (sized at construction, never in process): 24 band states inline made the engine
+    // large enough to overflow a 1 MB stack where two engines are locals (tests do that).
+    std::vector<BandState> band_ = std::vector<BandState>(params::kBandCount);
     uint64_t rebuilds_ = 0;
 };
 

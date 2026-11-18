@@ -75,5 +75,5 @@ Per bin, the gain reduction is interpolated with the same weights and divided by
 | Density and frequency sweeps during noise | Rebuild many times; output stays finite and bounded |
 
 **CPU** (`tests/engine/test_cpu.cpp`, Medium, 48 kHz):
-- One spectral band at Density 100 adds about 1.4 % of a core.
-- All 24 bands spectral at Density 100 take 11 %. Whether all-spectral sessions get their own CPU budget is an area 07 open question.
+- One spectral band at Density 100 takes 1.90 % of a core in the 24-band session (2026-11-18).
+- All 24 bands spectral at Density 100 take 2.90 % (11 % before the 2026-11-18 optimisations, area 07), inside the 3 % budget.

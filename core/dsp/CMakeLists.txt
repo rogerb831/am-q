@@ -10,15 +10,17 @@ add_library(amq_dsp STATIC
     src/nonuniform_convolver.cpp
     src/realtime_design.cpp
     src/dynamics_avx2.cpp
+    src/dynamics_lanes.cpp
+    src/spectral_apply_avx2.cpp
 )
-# The AVX2 dynamics kernel: AVX2 for this file only, selected at run time (cpuHasAvx2), with no
+# The AVX2 kernels (dynamics, spectral apply): AVX2 for these files only, selected at run time (cpuHasAvx2), with no
 # fused multiply-adds so it gives the scalar kernel's bits.
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "AMD64|x86_64|x86|i686" OR CMAKE_GENERATOR_PLATFORM MATCHES "x64|Win32")
-    set_source_files_properties(src/dynamics_avx2.cpp PROPERTIES COMPILE_DEFINITIONS AMQ_DYN_AVX2_BUILD)
+    set_source_files_properties(src/dynamics_avx2.cpp src/spectral_apply_avx2.cpp PROPERTIES COMPILE_DEFINITIONS AMQ_DYN_AVX2_BUILD)
     if(MSVC)
-        set_source_files_properties(src/dynamics_avx2.cpp PROPERTIES COMPILE_OPTIONS "/arch:AVX2;/fp:precise")
+        set_source_files_properties(src/dynamics_avx2.cpp src/spectral_apply_avx2.cpp PROPERTIES COMPILE_OPTIONS "/arch:AVX2;/fp:precise")
     else()
-        set_source_files_properties(src/dynamics_avx2.cpp PROPERTIES COMPILE_OPTIONS "-mavx2;-ffp-contract=off")
+        set_source_files_properties(src/dynamics_avx2.cpp src/spectral_apply_avx2.cpp PROPERTIES COMPILE_OPTIONS "-mavx2;-ffp-contract=off")
     endif()
 endif()
 add_library(amq::dsp ALIAS amq_dsp)

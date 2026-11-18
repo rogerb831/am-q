@@ -4,7 +4,7 @@
 // filters differ); everything after it is the same arithmetic for every band:
 //
 //   level = detectorLevelDb(env)
-//   thr   = auto ? referenceEnvelope(level) - min(|range|, 30) : threshold
+//   thr   = (auto ? referenceEnvelope(level) - min(|range|, 30) : threshold) + tilt
 //   gr    = gainComputerDb(level - thr, knee, cap)
 //   out   = final(max(fast(gr), slow(gr)))          (BandDynamics)
 //   w     = min(out / cap, 1)
@@ -16,6 +16,7 @@
 #include "amq/dsp/dynamics.hpp"
 
 #include <cstdint>
+#include <vector>
 
 #if defined(__SSE2__) || defined(_M_X64) || (defined(_M_IX86_FP) && _M_IX86_FP >= 2)
 #include <emmintrin.h>
@@ -27,6 +28,9 @@ namespace amq::dsp {
 struct GainLane {
     bool autoThr = true;
     double thresholdDb = -20.0, offsetDb = 0.0;  // offset = min(|range|, 30): the auto threshold gap
+    // Added to the threshold after it is formed: 0 for a dynamic band (x + 0 leaves x, so the bits
+    // do not change), Spectral Tilt's offset for a spectral analysis band (area 07).
+    double tiltDb = 0.0;
     double kneeDb = 6.0, capDb = 0.0, inv = 0.0;  // cap = |range|; inv = 1 / cap
     double ref = kRefFloorDb, refSlow = 0.0, refWarm = 0.0;
     uint64_t refCount = 0, refWarmSamples = 0;
@@ -73,6 +77,7 @@ inline void gainLaneScalar(GainLane& L, double* buf, uint32_t n) noexcept {
             }
             thr = L.ref - L.offsetDb;
         }
+        thr += L.tiltDb;
         const double over = level - thr;
         double gr;  // gainComputerDb
         if (L.kneeDb > 0.0 && std::abs(over) < 0.5 * L.kneeDb) {
@@ -132,6 +137,7 @@ inline void gainLanePair(GainLane& A, GainLane& B, double* bufA, double* bufB, u
     };
     const __m128d autoM = bmask(A.autoThr, B.autoThr);
     const __m128d threshold = pd(A.thresholdDb, B.thresholdDb), offset = pd(A.offsetDb, B.offsetDb);
+    const __m128d tilt = pd(A.tiltDb, B.tiltDb);
     const __m128d knee = pd(A.kneeDb, B.kneeDb), halfKnee = _mm_mul_pd(_mm_set1_pd(0.5), knee);
     const __m128d twoKnee = _mm_mul_pd(_mm_set1_pd(2.0), knee);
     const __m128d kneeOn = _mm_cmpgt_pd(knee, _mm_setzero_pd());
@@ -159,7 +165,7 @@ inline void gainLanePair(GainLane& A, GainLane& B, double* bufA, double* bufB, u
         const int u = _mm_movemask_pd(upd);
         if ((u & 1) && A.refCount < A.refWarmSamples) ++A.refCount;
         if ((u & 2) && B.refCount < B.refWarmSamples) ++B.refCount;
-        const __m128d thr = sel(autoM, _mm_sub_pd(ref, offset), threshold);
+        const __m128d thr = _mm_add_pd(sel(autoM, _mm_sub_pd(ref, offset), threshold), tilt);
         // Gain computer.
         const __m128d over = _mm_sub_pd(level, thr);
         const __m128d inKnee = _mm_and_pd(kneeOn, _mm_cmplt_pd(vabs(over), halfKnee));
@@ -190,6 +196,51 @@ inline void gainLanePair(GainLane& A, GainLane& B, double* bufA, double* bufB, u
 }
 
 // Four bands in AVX2 lanes (core/dsp/src/dynamics_avx2.cpp, built with AVX2 for that file only).
+// Many lanes, one step each: the spectral stage's analysis bands run the same chain once per
+// frame (area 07). The state is a structure of arrays, so a step loads whole vectors instead of
+// gathering fields from separate lanes. Lane i of a step gives the same bits as gainLaneScalar on
+// lane(i) with one sample (tests/test_dynamics.cpp).
+struct GainLaneSet {
+    std::vector<double> thresholdDb, offsetDb, tiltDb, kneeDb, capDb, inv;
+    std::vector<double> ref, refSlow, refWarm, fy, fa, fr, sy, sa, sr, zy, za, zr;
+    std::vector<uint64_t> refCount, refWarmSamples;
+    std::vector<uint8_t> autoThr;
+
+    void resize(size_t n) {
+        for (auto* v : {&thresholdDb, &offsetDb, &tiltDb, &kneeDb, &capDb, &inv, &ref, &refSlow, &refWarm, &fy, &fa, &fr, &sy,
+                        &sa, &sr, &zy, &za, &zr})
+            v->assign(n, 0.0);
+        refCount.assign(n, 0), refWarmSamples.assign(n, 0), autoThr.assign(n, 0);
+    }
+    [[nodiscard]] GainLane lane(size_t i) const noexcept {
+        GainLane L;
+        L.autoThr = autoThr[i] != 0, L.thresholdDb = thresholdDb[i], L.offsetDb = offsetDb[i], L.tiltDb = tiltDb[i];
+        L.kneeDb = kneeDb[i], L.capDb = capDb[i], L.inv = inv[i];
+        L.ref = ref[i], L.refSlow = refSlow[i], L.refWarm = refWarm[i], L.refCount = refCount[i], L.refWarmSamples = refWarmSamples[i];
+        L.fy = fy[i], L.fa = fa[i], L.fr = fr[i], L.sy = sy[i], L.sa = sa[i], L.sr = sr[i], L.zy = zy[i], L.za = za[i], L.zr = zr[i];
+        return L;
+    }
+    void setLane(size_t i, const GainLane& L) noexcept {
+        autoThr[i] = L.autoThr ? 1 : 0, thresholdDb[i] = L.thresholdDb, offsetDb[i] = L.offsetDb, tiltDb[i] = L.tiltDb;
+        kneeDb[i] = L.kneeDb, capDb[i] = L.capDb, inv[i] = L.inv;
+        ref[i] = L.ref, refSlow[i] = L.refSlow, refWarm[i] = L.refWarm, refCount[i] = L.refCount, refWarmSamples[i] = L.refWarmSamples;
+        fy[i] = L.fy, fa[i] = L.fa, fr[i] = L.fr, sy[i] = L.sy, sa[i] = L.sa, sr[i] = L.sr, zy[i] = L.zy, za[i] = L.za, zr[i] = L.zr;
+    }
+    // The state and timing coefficients of lane i from / to the object chain it stands for.
+    void load(size_t i, const ReferenceEnvelope& r, BandDynamics& d) noexcept {
+        GainLane L = lane(i);
+        L.load(r, d);
+        setLane(i, L);
+    }
+    void store(size_t i, ReferenceEnvelope& r, BandDynamics& d) const noexcept { lane(i).store(r, d); }
+};
+
+// One step of lanes [0, count): env[i] is lane i's side-chain envelope. Afterwards zy[i] holds its
+// gain reduction in dB (the final stage's value). AVX2 four lanes at a time where the CPU has it.
+void gainLanesStep(GainLaneSet& s, const double* env, size_t count) noexcept;
+// The AVX2 part of a step (call only when cpuHasAvx2() is true): lanes [0, 4k), returning 4k.
+size_t gainLanesStepAvx2(GainLaneSet& s, const double* env, size_t count) noexcept;
+
 // Call only when cpuHasAvx2() is true; same bits as gainLaneScalar.
 [[nodiscard]] bool cpuHasAvx2() noexcept;
 void gainLaneQuadAvx2(GainLane* const L[4], double* const buf[4], uint32_t n) noexcept;

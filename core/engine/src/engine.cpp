@@ -1050,8 +1050,6 @@ void Engine::readDynamics(int b, uint64_t sample, bool reset, double f, double g
         d.on = false;
         return;
     }
-    const double hz = std::exp2(f);
-    const double qv = params::qFromPosition(q);
     if (activeSpectral_ && table_.value(params::bandParam(b, BandField::Spectral)) >= 0.5) {
         // Spectral band (area 07): the stage runs its dynamics; its static shape stays here.
         d.on = false;
@@ -1068,12 +1066,21 @@ void Engine::readDynamics(int b, uint64_t sample, bool reset, double f, double g
         sc.attackKnob = table_.value(params::bandParam(b, BandField::Attack));
         sc.releaseKnob = table_.value(params::bandParam(b, BandField::Release));
         sc.density = table_.value(params::bandParam(b, BandField::SpectralDensity));
+        const std::array<double, 7> spanKey{f, q, static_cast<double>(shape), table_.value(params::bandParam(b, BandField::ScMode)),
+                                            table_.value(params::bandParam(b, BandField::ScLow)),
+                                            table_.value(params::bandParam(b, BandField::ScHigh)), sampleRate_};
+        auto& memo = spanMemo_[static_cast<size_t>(b)];
+        if (memo.valid && memo.key == spanKey) {
+            sc.centreHz = memo.hz, sc.lo = memo.lo, sc.hi = memo.hi;
+        } else {
+        const double hz = std::exp2(f);
+        const double qv = params::qFromPosition(q);
         sc.centreHz = hz;
         // Span (area 07 R1): Free mode follows SC Low / SC High; otherwise the band's region.
         double lo = dsp::kSpectralSpanMinHz, hi = dsp::kSpectralSpanMaxHz;
-        if (table_.value(params::bandParam(b, BandField::ScMode)) >= 0.5) {
-            lo = std::exp2(table_.value(params::bandParam(b, BandField::ScLow)));
-            hi = std::exp2(table_.value(params::bandParam(b, BandField::ScHigh)));
+        if (spanKey[3] >= 0.5) {
+            lo = std::exp2(spanKey[4]);
+            hi = std::exp2(spanKey[5]);
         } else {
             switch (static_cast<dsp::Shape>(shape)) {
                 case dsp::Shape::LowShelf:
@@ -1092,10 +1099,14 @@ void Engine::readDynamics(int b, uint64_t sample, bool reset, double f, double g
         hi = std::min({hi, dsp::kSpectralSpanMaxHz, 0.45 * sampleRate_});
         lo = std::clamp(lo, dsp::kSpectralSpanMinHz, hi * 0.5);
         sc.lo = lo, sc.hi = hi;
+        memo.key = spanKey, memo.valid = true, memo.hz = hz, memo.lo = lo, memo.hi = hi;
+        }
         sc.staticIn = DesignInputs{sampleRate_, f, g, q, shape, slope};
         sc.dynIn = DesignInputs{sampleRate_, f, std::clamp(g + range, -30.0, 30.0), q, shape, slope};
         return;
     }
+    const double hz = std::exp2(f);
+    const double qv = params::qFromPosition(q);
     if (!d.on || reset) {  // starting: from rest, the reference warms up again (area 07 R9)
         d.core.reset();
         d.ref.reset();

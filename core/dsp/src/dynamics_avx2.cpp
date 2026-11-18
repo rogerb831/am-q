@@ -85,7 +85,7 @@ void gainLaneQuadAvx2(GainLane* const L[4], double* const buf[4], uint32_t n) no
     GainLane &A = *L[0], &B = *L[1], &C = *L[2], &D = *L[3];
     auto v4 = [&](double GainLane::*f) { return set4(A.*f, B.*f, C.*f, D.*f); };
     const __m256d autoM = mask4(A.autoThr, B.autoThr, C.autoThr, D.autoThr);
-    const __m256d threshold = v4(&GainLane::thresholdDb), offset = v4(&GainLane::offsetDb);
+    const __m256d threshold = v4(&GainLane::thresholdDb), offset = v4(&GainLane::offsetDb), tilt = v4(&GainLane::tiltDb);
     const __m256d knee = v4(&GainLane::kneeDb);
     const __m256d halfKnee = _mm256_mul_pd(_mm256_set1_pd(0.5), knee);
     const __m256d twoKnee = _mm256_mul_pd(_mm256_set1_pd(2.0), knee);
@@ -116,7 +116,7 @@ void gainLaneQuadAvx2(GainLane* const L[4], double* const buf[4], uint32_t n) no
         const int u = _mm256_movemask_pd(upd);
         for (int k = 0; k < 4; ++k)
             if ((u >> k & 1) && warm[k]) ++lanes[k]->refCount;
-        const __m256d thr = sel(autoM, _mm256_sub_pd(ref, offset), threshold);
+        const __m256d thr = _mm256_add_pd(sel(autoM, _mm256_sub_pd(ref, offset), threshold), tilt);
         const __m256d over = _mm256_sub_pd(level, thr);
         const __m256d inKnee = _mm256_and_pd(kneeOn, _mm256_cmp_pd(vabs(over), halfKnee, _CMP_LT_OQ));
         const __m256d uu = _mm256_add_pd(over, halfKnee);
@@ -143,8 +143,60 @@ void gainLaneQuadAvx2(GainLane* const L[4], double* const buf[4], uint32_t n) no
     for (int k = 0; k < 4; ++k) lanes[k]->zy = t[k];
 }
 
+// Lanes [begin, begin + 4k) of a GainLaneSet, one step: gainLaneQuadAvx2's operations with the
+// state read from and written to the arrays.
+size_t gainLanesStepAvx2(GainLaneSet& s, const double* env, size_t count) noexcept {
+    const __m256d zero = _mm256_setzero_pd();
+    const __m256d inf = _mm256_set1_pd(std::numeric_limits<double>::infinity());
+    const __m256d floorRef = _mm256_set1_pd(kRefFloorDb);
+    size_t i = 0;
+    for (; i + 3 < count; i += 4) {
+        auto ld = [&](const std::vector<double>& v) { return _mm256_loadu_pd(v.data() + i); };
+        const __m256d autoM = mask4(s.autoThr[i] != 0, s.autoThr[i + 1] != 0, s.autoThr[i + 2] != 0, s.autoThr[i + 3] != 0);
+        const __m256d threshold = ld(s.thresholdDb), offset = ld(s.offsetDb), tilt = ld(s.tiltDb), knee = ld(s.kneeDb);
+        const __m256d halfKnee = _mm256_mul_pd(_mm256_set1_pd(0.5), knee);
+        const __m256d twoKnee = _mm256_mul_pd(_mm256_set1_pd(2.0), knee);
+        const __m256d kneeOn = _mm256_cmp_pd(knee, zero, _CMP_GT_OQ);
+        const __m256d cap = ld(s.capDb);
+        const __m256d capPos = sel(_mm256_cmp_pd(cap, zero, _CMP_GT_OQ), cap, zero);  // std::max(cap, 0.0)
+        __m256d ref = ld(s.ref), fy = ld(s.fy), sy = ld(s.sy), zy = ld(s.zy);
+        const __m256d e = _mm256_loadu_pd(env + i);
+        __m256d level = sel(_mm256_cmp_pd(e, _mm256_set1_pd(3.1622776601683795e-8), _CMP_GT_OQ),
+                            _mm256_mul_pd(_mm256_set1_pd(6.020599913279624), log2pd(e)), _mm256_set1_pd(kLevelFloorDb));
+        level = sel(_mm256_cmp_pd(e, inf, _CMP_EQ_OQ), inf, level);
+        const __m256d upd = _mm256_and_pd(autoM, _mm256_cmp_pd(_mm256_sub_pd(level, level), zero, _CMP_EQ_OQ));
+        bool warm[4];
+        for (int k = 0; k < 4; ++k) warm[k] = s.refCount[i + k] < s.refWarmSamples[i + k];
+        const __m256d c = sel(mask4(warm[0], warm[1], warm[2], warm[3]), ld(s.refWarm), ld(s.refSlow));
+        __m256d next = sel(_mm256_cmp_pd(level, ref, _CMP_GT_OQ), level, _mm256_add_pd(ref, _mm256_mul_pd(c, _mm256_sub_pd(level, ref))));
+        next = sel(_mm256_cmp_pd(next, floorRef, _CMP_LT_OQ), floorRef, next);
+        ref = sel(upd, next, ref);
+        const int u = _mm256_movemask_pd(upd);
+        for (int k = 0; k < 4; ++k)
+            if ((u >> k & 1) && warm[k]) ++s.refCount[i + k];
+        const __m256d thr = _mm256_add_pd(sel(autoM, _mm256_sub_pd(ref, offset), threshold), tilt);
+        const __m256d over = _mm256_sub_pd(level, thr);
+        const __m256d inKnee = _mm256_and_pd(kneeOn, _mm256_cmp_pd(vabs(over), halfKnee, _CMP_LT_OQ));
+        const __m256d uu = _mm256_add_pd(over, halfKnee);
+        const __m256d g1 = _mm256_div_pd(_mm256_mul_pd(uu, uu), twoKnee);
+        const __m256d g2 = sel(_mm256_cmp_pd(over, zero, _CMP_GT_OQ), over, zero);
+        __m256d gr = sel(inKnee, g1, g2);
+        gr = sel(_mm256_cmp_pd(capPos, gr, _CMP_LT_OQ), capPos, gr);
+        const __m256d a = smooth(gr, fy, ld(s.fa), ld(s.fr));
+        const __m256d b = smooth(gr, sy, ld(s.sa), ld(s.sr));
+        const __m256d m = sel(_mm256_cmp_pd(a, b, _CMP_LT_OQ), b, a);
+        smooth(m, zy, ld(s.za), ld(s.zr));
+        _mm256_storeu_pd(s.ref.data() + i, ref);
+        _mm256_storeu_pd(s.fy.data() + i, fy);
+        _mm256_storeu_pd(s.sy.data() + i, sy);
+        _mm256_storeu_pd(s.zy.data() + i, zy);
+    }
+    return i;
+}
+
 #else
 
+size_t gainLanesStepAvx2(GainLaneSet&, const double*, size_t) noexcept { return 0; }
 bool cpuHasAvx2() noexcept { return false; }
 void gainLaneQuadAvx2(GainLane* const L[4], double* const buf[4], uint32_t n) noexcept {
     for (int k = 0; k < 4; ++k) gainLaneScalar(*L[k], buf[k], n);

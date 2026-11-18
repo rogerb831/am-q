@@ -1,6 +1,7 @@
 #include "amq/engine/spectral.hpp"
 
 #include "amq/dsp/analog_prototype.hpp"
+#include "amq/dsp/spectral_apply.hpp"
 #include "amq/engine/band_response.hpp"
 
 #include <algorithm>
@@ -42,6 +43,8 @@ bool SpectralStage::prepare(double sampleRate, uint32_t maxFrames, int resolutio
             b.a.assign(dsp::kSpectralMaxBands, Analysis{});
             b.old.assign(dsp::kSpectralMaxBands, Analysis{});
             b.level.assign(dsp::kSpectralMaxBands, 0.0);
+            b.lanes.resize(dsp::kSpectralMaxBands);
+            b.lanesLive = false;
             b.relDb.assign(static_cast<size_t>(bins_), 0.0f);
             b.binBand.assign(static_cast<size_t>(bins_), 0);
             b.binWeight.assign(static_cast<size_t>(bins_), 1.0f);
@@ -64,7 +67,7 @@ double SpectralStage::grDb(int band) const noexcept {
     const auto& b = band_[static_cast<size_t>(band)];
     if (!b.was) return 0.0;
     double m = 0.0;
-    for (int i = 0; i < b.grid.count; ++i) m = std::max(m, b.a[static_cast<size_t>(i)].gr);
+    for (int i = 0; i < b.grid.count; ++i) m = std::max(m, b.lanesLive ? b.lanes.zy[static_cast<size_t>(i)] : b.a[static_cast<size_t>(i)].gr);
     return m;
 }
 
@@ -150,6 +153,7 @@ void SpectralStage::frame(const std::array<SpectralBandConfig, params::kBandCoun
                 bandFrame(b, c);
             } else {
                 band_[static_cast<size_t>(b)].was = false;
+                band_[static_cast<size_t>(b)].lanesLive = false;
             }
         }
     }
@@ -224,7 +228,22 @@ void SpectralStage::bandFrame(int b, const SpectralBandConfig& c) noexcept {
     // Grid: rebuild at this frame boundary when Density or the span changes (area 08 R3). Each new
     // analysis band starts from the nearest old one (R5).
     const std::array<double, 3> key{c.lo, c.hi, c.density};
-    if (key != st.gridKey || !st.was) {
+    const double ka = c.autoThr ? dsp::kDefaultTimingKnob : c.attackKnob;
+    const double kr = c.autoThr ? dsp::kDefaultTimingKnob : c.releaseKnob;
+    const bool rebuild = key != st.gridKey || !st.was;
+    // New timing: the knobs differ from those the lanes were loaded with (a band's centre only
+    // changes with its grid, which rebuilds).
+    const bool timing = !rebuild && (ka != st.timingKa || kr != st.timingKr);
+    const bool objects = rebuild || timing || (c.autoThr && !st.autoWas);
+    if (objects && st.lanesLive) {
+        for (int i = 0; i < st.grid.count; ++i) {
+            auto& an = st.a[static_cast<size_t>(i)];
+            st.lanes.store(static_cast<size_t>(i), an.ref, an.core);
+            an.gr = st.lanes.zy[static_cast<size_t>(i)];
+        }
+        st.lanesLive = false;
+    }
+    if (rebuild) {
         const bool continuing = st.was && st.grid.count > 0;
         st.oldGrid = st.grid;
         std::swap(st.a, st.old);
@@ -296,22 +315,42 @@ void SpectralStage::bandFrame(int b, const SpectralBandConfig& c) noexcept {
         st.level[static_cast<size_t>(ia)] = std::max(st.level[static_cast<size_t>(ia)], wa * m);
         st.level[static_cast<size_t>(ib)] = std::max(st.level[static_cast<size_t>(ib)], (1.0 - wa) * m);
     }
-    // Per analysis band: threshold, gain computer, smoothing (at frame rate).
-    for (int i = 0; i < st.grid.count; ++i) {
-        auto& an = st.a[static_cast<size_t>(i)];
-        const double fc = st.grid.centreHz[static_cast<size_t>(i)];
-        const double ka = c.autoThr ? dsp::kDefaultTimingKnob : c.attackKnob;
-        const double kr = c.autoThr ? dsp::kDefaultTimingKnob : c.releaseKnob;
-        if (const std::array<double, 3> t{ka, kr, fc}; t != an.timing) {
-            an.timing = t;
-            an.core.setTimes(dsp::attackSeconds(ka, fc), dsp::spectralReleaseSeconds(kr, fc));
+    // Per analysis band: threshold, gain computer, smoothing (at frame rate). The dB chain is the
+    // dynamic EQ's (level, auto reference, knee, dual release, final stage), so it runs in the
+    // GainLane kernels across analysis bands, with the same operations in the same order as the
+    // object chain (tests/test_dynamics.cpp). The final stage's value is the reduction in dB.
+    const int na = st.grid.count;
+    if (!st.lanesLive) {  // the objects changed (or the band just started): new timing, then load
+        for (int i = 0; i < na; ++i) {
+            auto& an = st.a[static_cast<size_t>(i)];
+            const double fc = st.grid.centreHz[static_cast<size_t>(i)];
+            if (const std::array<double, 3> t{ka, kr, fc}; t != an.timing) {
+                an.timing = t;
+                an.core.setTimes(dsp::attackSeconds(ka, fc), dsp::spectralReleaseSeconds(kr, fc));
+            }
+            st.lanes.load(static_cast<size_t>(i), an.ref, an.core);
         }
-        const double level = dsp::detectorLevelDb(st.level[static_cast<size_t>(i)]);
-        double thr = c.autoThr ? dsp::autoThresholdDb(an.ref.process(level), c.rangeDb) : c.thresholdDb;
-        if (c.tilt) thr += dsp::kTiltDbPerOctave * std::log2(fc / c.centreHz);
-        const double knee = dsp::kneeWidthDb(st.grid.widthOct[static_cast<size_t>(i)], c.rangeDb);
-        an.gr = an.core.process(dsp::gainComputerDb(level - thr, knee, cap));
+        st.lanesLive = true;
+        st.timingKa = ka, st.timingKr = kr;
+        st.laneKey[5] = -1.0;  // settings below are rewritten
     }
+    // Per-lane settings, rewritten only when they change (the tilt offsets cost a log2 each).
+    const std::array<double, 6> lk{c.rangeDb, c.thresholdDb, c.autoThr ? 1.0 : 0.0, c.tilt ? c.centreHz : 0.0,
+                                   0.0, static_cast<double>(rebuilds_)};
+    if (lk != st.laneKey) {
+        st.laneKey = lk;
+        const double offset = std::min(cap, dsp::kAutoOffsetCapDb);
+        for (int i = 0; i < na; ++i) {
+            const auto ii = static_cast<size_t>(i);
+            const double fc = st.grid.centreHz[ii];
+            st.lanes.autoThr[ii] = c.autoThr ? 1 : 0, st.lanes.thresholdDb[ii] = c.thresholdDb, st.lanes.offsetDb[ii] = offset;
+            st.lanes.tiltDb[ii] = c.tilt ? dsp::kTiltDbPerOctave * std::log2(fc / c.centreHz) : 0.0;
+            st.lanes.kneeDb[ii] = dsp::kneeWidthDb(st.grid.widthOct[ii], c.rangeDb);
+            st.lanes.capDb[ii] = cap, st.lanes.inv[ii] = 1.0 / cap;
+        }
+    }
+    dsp::gainLanesStep(st.lanes, st.level.data(), static_cast<size_t>(na));
+    const double* grDb = st.lanes.zy.data();
     // Apply: interpolate the reduction to bins and scale the band's relative response.
     // Bins where the band's relative response is flat (|relDb| <= 1e-9 dB) would add nothing, so the
     // loop covers relLo..relHi only.
@@ -320,11 +359,20 @@ void SpectralStage::bandFrame(int b, const SpectralBandConfig& c) noexcept {
     int nc = 0;
     for (int comp = 0; comp < 4; ++comp)
         if (c.apply & (1u << comp)) comps[nc++] = gainDb_[static_cast<size_t>(comp)].data();
-    for (int k = st.relLo; k <= st.relHi; ++k) {
+    int k = st.relLo;
+    static const bool avx2 = dsp::cpuHasAvx2();
+    if (avx2 && nc > 0) {  // four bins at a time, the same bits per bin (dsp/spectral_apply.hpp)
+        dsp::SpectralApplyArgs args;
+        args.band = st.binBand.data(), args.weight = st.binWeight.data(), args.relDb = st.relDb.data();
+        args.grDb = grDb, args.last = last, args.inv = inv, args.nc = nc;
+        for (int j = 0; j < nc; ++j) args.comps[j] = comps[j];
+        k = dsp::spectralApplyAvx2(args, k, st.relHi);
+    }
+    for (; k <= st.relHi; ++k) {
         const int ia = st.binBand[static_cast<size_t>(k)];
         const int ib = std::min(ia + 1, last);
         const double wa = st.binWeight[static_cast<size_t>(k)];
-        const double frac = (wa * st.a[static_cast<size_t>(ia)].gr + (1.0 - wa) * st.a[static_cast<size_t>(ib)].gr) * inv;
+        const double frac = (wa * grDb[ia] + (1.0 - wa) * grDb[ib]) * inv;
         if (frac <= 0.0) continue;
         const double db = std::min(frac, 1.0) * st.relDb[static_cast<size_t>(k)];
         for (int j = 0; j < nc; ++j) comps[j][k] += db;
