@@ -86,6 +86,7 @@ private:
         std::vector<Analysis> a, old;   // kSpectralMaxBands each
         std::vector<double> level;      // kSpectralMaxBands
         std::vector<float> relDb;       // n/2 + 1
+        int relLo = 1, relHi = 0;       // the bins where |relDb| > 1e-9 dB (the apply loop's range)
         std::vector<int> binBand;       // n/2 + 1: the lower of the two bands weighting a bin
         std::vector<float> binWeight;   // n/2 + 1: its weight (the next band gets 1 - w)
         DesignInputs relStatic, relDyn;
@@ -111,6 +112,11 @@ private:
     std::array<std::vector<std::complex<float>>, 6> spec_;  // spectra of the six rings
     std::array<std::vector<double>, 4> gainDb_;              // per bin: L, R, M, S
     std::vector<double> scMag_;                               // per bin: detector magnitude
+    // Detector magnitudes are the same for every band with the same source and detect mode: computed
+    // once per frame for each (source: internal / external) x (mode 0-4) that a band uses.
+    std::array<std::vector<double>, 10> magCache_;
+    std::array<bool, 10> magValid_{};
+    const std::vector<double>& detectorMagnitudes(int src, int detect) noexcept;
     std::array<BandState, params::kBandCount> band_;
     uint64_t rebuilds_ = 0;
 };

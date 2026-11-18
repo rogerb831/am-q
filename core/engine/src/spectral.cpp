@@ -37,6 +37,7 @@ bool SpectralStage::prepare(double sampleRate, uint32_t maxFrames, int resolutio
         for (auto& s : spec_) s.assign(static_cast<size_t>(bins_), {});
         for (auto& g : gainDb_) g.assign(static_cast<size_t>(bins_), 0.0);
         scMag_.assign(static_cast<size_t>(bins_), 0.0);
+        for (auto& m : magCache_) m.assign(static_cast<size_t>(bins_), 0.0);
         for (auto& b : band_) {
             b.a.assign(dsp::kSpectralMaxBands, Analysis{});
             b.old.assign(dsp::kSpectralMaxBands, Analysis{});
@@ -114,6 +115,11 @@ void SpectralStage::process(double* const* w, const double* const* input, const 
     }
 }
 
+namespace {
+// 10^(dB / 20) as exp(dB ln10 / 20): the same value to rounding, and cheaper than pow.
+inline float dbToGain(double db) noexcept { return static_cast<float>(std::exp(db * 0.11512925464970229)); }
+}  // namespace
+
 void SpectralStage::frame(const std::array<SpectralBandConfig, params::kBandCount>& cfg, uint32_t channels,
                           bool external) noexcept {
     // Windowed frames of the last n_ samples of each needed ring, oldest first.
@@ -137,6 +143,7 @@ void SpectralStage::frame(const std::array<SpectralBandConfig, params::kBandCoun
             transform(4);
             transform(5);
         }
+        magValid_.fill(false);  // this frame's spectra: magnitudes recomputed on first use
         for (int b = 0; b < params::kBandCount; ++b) {
             const auto& c = cfg[static_cast<size_t>(b)];
             if (c.on) {
@@ -153,12 +160,12 @@ void SpectralStage::frame(const std::array<SpectralBandConfig, params::kBandCoun
     for (int k = 0; k < bins_ && !ms; ++k) ms = gainDb_[2][static_cast<size_t>(k)] != 0.0 || gainDb_[3][static_cast<size_t>(k)] != 0.0;
     for (int k = 0; k < bins_; ++k) {
         const auto kk = static_cast<size_t>(k);
-        if (gainDb_[0][kk] != 0.0) sl[kk] *= static_cast<float>(std::pow(10.0, gainDb_[0][kk] / 20.0));
-        if (gainDb_[1][kk] != 0.0) sr[kk] *= static_cast<float>(std::pow(10.0, gainDb_[1][kk] / 20.0));
+        if (gainDb_[0][kk] != 0.0) sl[kk] *= dbToGain(gainDb_[0][kk]);
+        if (gainDb_[1][kk] != 0.0) sr[kk] *= dbToGain(gainDb_[1][kk]);
         if (ms) {
             std::complex<float> m = 0.5f * (sl[kk] + sr[kk]), s = 0.5f * (sl[kk] - sr[kk]);
-            if (gainDb_[2][kk] != 0.0) m *= static_cast<float>(std::pow(10.0, gainDb_[2][kk] / 20.0));
-            if (gainDb_[3][kk] != 0.0) s *= static_cast<float>(std::pow(10.0, gainDb_[3][kk] / 20.0));
+            if (gainDb_[2][kk] != 0.0) m *= dbToGain(gainDb_[2][kk]);
+            if (gainDb_[3][kk] != 0.0) s *= dbToGain(gainDb_[3][kk]);
             sl[kk] = m + s;
             sr[kk] = m - s;
         }
@@ -176,6 +183,35 @@ void SpectralStage::frame(const std::array<SpectralBandConfig, params::kBandCoun
         std::copy(ola.begin() + hop_, ola.end(), ola.begin());
         std::fill(ola.end() - hop_, ola.end(), 0.0f);
     }
+}
+
+const std::vector<double>& SpectralStage::detectorMagnitudes(int src, int detect) noexcept {
+    const size_t key = static_cast<size_t>(src * 5 + std::clamp(detect, 0, 4));
+    auto& out = magCache_[key];
+    if (magValid_[key]) return out;
+    magValid_[key] = true;
+    const auto& xl = spec_[static_cast<size_t>(src ? 4 : 2)];
+    const auto& xr = spec_[static_cast<size_t>(src ? 5 : 3)];
+    // |z| as sqrt(re^2 + im^2): std::abs on a complex is a slower hypot, and these magnitudes are
+    // far from overflow.
+    auto mag = [](std::complex<float> z) {
+        const double re = z.real(), im = z.imag();
+        return std::sqrt(re * re + im * im);
+    };
+    for (int k = 0; k < bins_; ++k) {
+        const auto kk = static_cast<size_t>(k);
+        double m = 0.0;
+        switch (detect) {
+            case 0: m = std::max(mag(xl[kk]), mag(xr[kk])); break;  // linked
+            case 1: m = mag(xl[kk]); break;
+            case 2: m = mag(xr[kk]); break;
+            case 3: m = mag(0.5f * (xl[kk] + xr[kk])); break;
+            case 4: m = mag(0.5f * (xl[kk] - xr[kk])); break;
+            default: break;
+        }
+        out[kk] = m * magNorm_;
+    }
+    return out;
 }
 
 void SpectralStage::bandFrame(int b, const SpectralBandConfig& c) noexcept {
@@ -236,28 +272,17 @@ void SpectralStage::bandFrame(int b, const SpectralBandConfig& c) noexcept {
             const double r = std::abs(pd.evaluateHz(hz)) / std::max(std::abs(ps.evaluateHz(hz)), 1e-30);
             st.relDb[static_cast<size_t>(k)] = static_cast<float>(20.0 * std::log10(std::max(r, 1e-15)));
         }
+        st.relLo = bins_, st.relHi = 0;
+        for (int k = 1; k < bins_; ++k)
+            if (std::abs(st.relDb[static_cast<size_t>(k)]) > 1e-9f) st.relLo = std::min(st.relLo, k), st.relHi = k;
         st.relStatic = c.staticIn;
         st.relDyn = c.dynIn;
         st.relValid = true;
     }
 
-    // Detector magnitudes per bin, encoded to the placement.
-    const int src = c.external ? 4 : 2;
-    const auto& xl = spec_[static_cast<size_t>(src)];
-    const auto& xr = spec_[static_cast<size_t>(src + 1)];
-    for (int k = 0; k < bins_; ++k) {
-        const auto kk = static_cast<size_t>(k);
-        double m = 0.0;
-        switch (c.detect) {
-            case 0: m = std::max(std::abs(xl[kk]), std::abs(xr[kk])); break;  // linked
-            case 1: m = std::abs(xl[kk]); break;
-            case 2: m = std::abs(xr[kk]); break;
-            case 3: m = std::abs(0.5f * (xl[kk] + xr[kk])); break;
-            case 4: m = std::abs(0.5f * (xl[kk] - xr[kk])); break;
-            default: break;
-        }
-        scMag_[kk] = m * magNorm_;
-    }
+    // Detector magnitudes per bin, encoded to the placement (shared by bands with the same source
+    // and mode).
+    const auto& mag = detectorMagnitudes(c.external ? 1 : 0, c.detect);
     // Levels: the largest weighted bin magnitude per analysis band, over the span.
     std::fill(st.level.begin(), st.level.begin() + st.grid.count, 0.0);
     const int k0 = std::max(1, static_cast<int>(std::floor(c.lo / binHz)));
@@ -267,7 +292,7 @@ void SpectralStage::bandFrame(int b, const SpectralBandConfig& c) noexcept {
         const int ia = st.binBand[static_cast<size_t>(k)];
         const int ib = std::min(ia + 1, last);
         const double wa = st.binWeight[static_cast<size_t>(k)];
-        const double m = scMag_[static_cast<size_t>(k)];
+        const double m = mag[static_cast<size_t>(k)];
         st.level[static_cast<size_t>(ia)] = std::max(st.level[static_cast<size_t>(ia)], wa * m);
         st.level[static_cast<size_t>(ib)] = std::max(st.level[static_cast<size_t>(ib)], (1.0 - wa) * m);
     }
@@ -288,16 +313,21 @@ void SpectralStage::bandFrame(int b, const SpectralBandConfig& c) noexcept {
         an.gr = an.core.process(dsp::gainComputerDb(level - thr, knee, cap));
     }
     // Apply: interpolate the reduction to bins and scale the band's relative response.
+    // Bins where the band's relative response is flat (|relDb| <= 1e-9 dB) would add nothing, so the
+    // loop covers relLo..relHi only.
     const double inv = 1.0 / cap;
-    for (int k = 1; k < bins_; ++k) {
+    double* comps[4];
+    int nc = 0;
+    for (int comp = 0; comp < 4; ++comp)
+        if (c.apply & (1u << comp)) comps[nc++] = gainDb_[static_cast<size_t>(comp)].data();
+    for (int k = st.relLo; k <= st.relHi; ++k) {
         const int ia = st.binBand[static_cast<size_t>(k)];
         const int ib = std::min(ia + 1, last);
         const double wa = st.binWeight[static_cast<size_t>(k)];
         const double frac = (wa * st.a[static_cast<size_t>(ia)].gr + (1.0 - wa) * st.a[static_cast<size_t>(ib)].gr) * inv;
         if (frac <= 0.0) continue;
         const double db = std::min(frac, 1.0) * st.relDb[static_cast<size_t>(k)];
-        for (int comp = 0; comp < 4; ++comp)
-            if (c.apply & (1u << comp)) gainDb_[static_cast<size_t>(comp)][static_cast<size_t>(k)] += db;
+        for (int j = 0; j < nc; ++j) comps[j][k] += db;
     }
 }
 
