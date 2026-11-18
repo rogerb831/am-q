@@ -180,7 +180,7 @@ Area 13 requires that double-clicking a band opens Am-Q's inline editor, not a s
   - a separator;
   - the preset list, grouped by folder as submenus, with the current preset checked.
 
-The preset system itself is area 21's. This menu only presents it. Built 2026-11-18 without the search field (editor-spec §8 Presets).
+The preset system itself is area 21's. This menu only presents it. Built 2026-11-18, the search field included (editor-spec §8 Presets).
 
 ### 4.11 EQ Match mode
 

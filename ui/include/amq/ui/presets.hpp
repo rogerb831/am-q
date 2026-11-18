@@ -40,6 +40,11 @@ inline constexpr const char* kInitPresetName = "Init";
 // last. Returns -1 for an empty list.
 [[nodiscard]] int stepPreset(int count, int current, int direction) noexcept;
 
+// The preset menu's search (editor-spec-graph §4.10): the indices into list whose name or category
+// contains every space-separated word of query, ignoring ASCII case, in list order. An empty query
+// matches everything.
+[[nodiscard]] std::vector<int> filterPresets(const std::vector<PresetEntry>& list, const std::string& query);
+
 // A preset name that is safe as a file name: trims, replaces \ / : * ? " < > | and control
 // characters with '-', and falls back to "Preset" when nothing is left.
 [[nodiscard]] std::string sanitizePresetName(const std::string& name);

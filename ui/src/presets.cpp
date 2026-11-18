@@ -82,6 +82,25 @@ int stepPreset(int count, int current, int direction) noexcept {
     return ((current + (direction > 0 ? 1 : -1)) % count + count) % count;
 }
 
+std::vector<int> filterPresets(const std::vector<PresetEntry>& list, const std::string& query) {
+    std::vector<std::string> words;
+    const std::string q = lower(query);
+    for (size_t i = 0; i < q.size();) {
+        const size_t j = q.find(' ', i);
+        const size_t e = j == std::string::npos ? q.size() : j;
+        if (e > i) words.push_back(q.substr(i, e - i));
+        i = e + 1;
+    }
+    std::vector<int> out;
+    for (size_t i = 0; i < list.size(); ++i) {
+        const std::string hay = lower(list[i].name) + " " + lower(list[i].category);
+        bool all = true;
+        for (const auto& w : words) all = all && hay.find(w) != std::string::npos;
+        if (all) out.push_back(static_cast<int>(i));
+    }
+    return out;
+}
+
 std::string sanitizePresetName(const std::string& name) {
     std::string s;
     for (unsigned char c : name) s += (c < 32 || std::string("\\/:*?\"<>|").find(static_cast<char>(c)) != std::string::npos) ? '-' : static_cast<char>(c);

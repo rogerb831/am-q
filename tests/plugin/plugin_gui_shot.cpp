@@ -322,7 +322,11 @@ int main(int argc, char** argv) {
     // The preset menu (editor-spec-graph §4.10).
     click(W / 2, 22);
     shot("15-preset-menu");
-    escape();
+    for (const wchar_t ch : std::wstring(L"in")) PostMessageW(gChild, WM_CHAR, ch, 1);  // the search field
+    pump(100);
+    shot("15b-preset-search");
+    escape();  // clears the search
+    escape();  // closes the menu
     // Interface zoom 150 % at 1280x760: open Settings, pick 150 % in the INTERFACE panel. This host
     // refuses resize requests, so the layout space shrinks to 853x507 instead.
     W = 1280, H = 760;

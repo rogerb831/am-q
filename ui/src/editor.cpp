@@ -334,10 +334,14 @@ public:
         return true;
     }
     // A menu anchored at a point (right-click) or under/over a rectangle (selects).
+    // A search callback gives the menu a focused search field at the top (the preset menu,
+    // editor-spec-graph §4.10): while it holds text, the menu shows the entries the callback returns.
+    using MenuSearch = std::function<std::vector<Entry>(const std::string&)>;
     void openMenu(std::string caption, float width, std::vector<Entry> items, std::function<void(int)> pick, Rect anchor,
-                  bool atPoint) {
+                  bool atPoint, MenuSearch search = {}) {
         caption_ = std::move(caption), width_ = width, items_ = std::move(items), pick_ = std::move(pick);
-        anchor_ = anchor, atPoint_ = atPoint;
+        anchor_ = anchor, atPoint_ = atPoint, search_ = std::move(search);
+        query_.clear(), kb_ = -1;
         show(Pop::Menu);
     }
     void openPopover(Pop p, Rect anchor, int band = -1) {
@@ -459,8 +463,14 @@ public:
     }
     void mouseUp(const visage::MouseEvent&) override { x_.endDrag(); }
 
-    bool receivesTextInput() override { return pop_ == Pop::Inline; }
+    bool receivesTextInput() override { return pop_ == Pop::Inline || (pop_ == Pop::Menu && search_); }
     void textInput(const std::string& t) override {
+        if (pop_ == Pop::Menu && search_) {
+            query_ += t;
+            sub_ = -1, kb_ = 0;
+            redraw();
+            return;
+        }
         if (pop_ != Pop::Inline || fields_.empty()) return;
         auto& f = fields_[static_cast<size_t>(field_)];
         if (fresh_) f.text.clear(), fresh_ = false;
@@ -472,10 +482,12 @@ public:
         if (pop_ == Pop::None) return false;
         const auto k = e.keyCode();
         if (k == visage::KeyCode::Escape) {
-            if (sub_ >= 0 && pop_ == Pop::Menu) sub_ = -1, redraw();
+            if (pop_ == Pop::Menu && search_ && !query_.empty()) query_.clear(), kb_ = -1, redraw();  // clear first
+            else if (sub_ >= 0 && pop_ == Pop::Menu) sub_ = -1, redraw();
             else close();
             return true;
         }
+        if (pop_ == Pop::Menu && search_) return searchKey(e);
         if (pop_ != Pop::Inline) return false;  // menus: other keys pass on (area 15)
         auto& f = fields_[static_cast<size_t>(field_)];
         if (k == visage::KeyCode::Backspace) {
@@ -502,6 +514,76 @@ public:
     }
 
 private:
+    // The entries the menu shows now: the search results while the field holds text.
+    [[nodiscard]] std::vector<Entry> shownItems() const {
+        if (search_ && !query_.empty()) {
+            auto v = search_(query_);
+            constexpr size_t kMaxResults = 12;  // a flat result list stays a menu, not a page
+            if (v.size() > kMaxResults) {
+                const size_t more = v.size() - kMaxResults;
+                v.resize(kMaxResults);
+                Entry e;
+                e.label = std::to_string(more) + " more: keep typing", e.enabled = false;
+                v.push_back(e);
+            }
+            if (v.empty()) {
+                Entry none;
+                none.label = "No matching presets", none.enabled = false;
+                v.push_back(none);
+            }
+            return v;
+        }
+        return items_;
+    }
+    // The keyboard-highlighted item: kb_ 0 is the first pickable item (just after typing), n > 0 is
+    // item n - 1, -1 is none.
+    [[nodiscard]] int kbItem(const std::vector<Entry>& items) const {
+        if (kb_ < 0) return -1;
+        if (kb_ == 0) {
+            for (size_t i = 0; i < items.size(); ++i)
+                if (items[i].enabled && items[i].sub.empty()) return static_cast<int>(i);
+            return -1;
+        }
+        return kb_ - 1 < static_cast<int>(items.size()) ? kb_ - 1 : -1;
+    }
+    // Keys for a searchable menu: its field takes every key (area 15 R4). Up and Down move the
+    // keyboard highlight over the enabled items, Enter picks it, Backspace edits the text.
+    bool searchKey(const visage::KeyEvent& e) {
+        const auto k = e.keyCode();
+        const auto items = shownItems();
+        std::vector<int> pickable;
+        for (size_t i = 0; i < items.size(); ++i)
+            if (items[i].enabled && items[i].sub.empty()) pickable.push_back(static_cast<int>(i));
+        if (k == visage::KeyCode::Backspace) {
+            if (!query_.empty()) {
+                size_t n = query_.size() - 1;
+                while (n > 0 && (static_cast<unsigned char>(query_[n]) & 0xc0) == 0x80) --n;
+                query_.erase(n);
+                kb_ = query_.empty() ? -1 : 0;
+            }
+        } else if (k == visage::KeyCode::Down || k == visage::KeyCode::Up) {
+            if (!pickable.empty()) {
+                const bool down = k == visage::KeyCode::Down;
+                const int cur = kbItem(items);
+                auto it = std::find(pickable.begin(), pickable.end(), cur);
+                const int n = static_cast<int>(pickable.size());
+                int pos = it == pickable.end() ? (down ? -1 : 0) : static_cast<int>(it - pickable.begin());
+                pos = ((pos + (down ? 1 : -1)) % n + n) % n;
+                kb_ = pickable[static_cast<size_t>(pos)] + 1;
+            }
+        } else if (k == visage::KeyCode::Return || k == visage::KeyCode::KPEnter) {
+            const int i = kbItem(items);
+            if (i >= 0) {
+                auto pick = pick_;
+                const int id = items[static_cast<size_t>(i)].id;
+                close();
+                if (pick) pick(id);
+                return true;
+            }
+        }
+        redraw();
+        return true;
+    }
     void finishClose() {
         closing_ = false;
         pop_ = Pop::None, sub_ = -1, hover_ = -1;
@@ -540,6 +622,9 @@ private:
         r.y = std::clamp(r.y, 16.0f, std::max(16.0f, H - 16.0f - h));
         return r;
     }
+    MenuSearch search_;
+    std::string query_;
+    int kb_ = -1;  // see kbItem
     void addHit(Rect r, int kind, int arg = 0, params::ParamIndex id = 0) { hits_.push_back({r, kind, arg, id}); }
     [[nodiscard]] bool hovered(int kind, int arg = 0) const {
         if (hover_ < 0) return false;
@@ -557,6 +642,19 @@ private:
             text(c, F.semi12, caption, r.x + 16.0f, y + 6.0f, r.w - 32.0f, 14.0f, tok::inkMuted);
             y += 26.0f;
         }
+        const int kbI = level == 0 && search_ ? kbItem(items) : -1;
+        if (level == 0 && search_) {  // the search field, focused while the menu is open
+            const Rect fr{r.x + 8.0f, y + 2.0f, r.w - 16.0f, 28.0f};
+            c.setColor(tok::accent);
+            c.roundedRectangle(fr.x - 2.0f, fr.y - 2.0f, fr.w + 4.0f, fr.h + 4.0f, 8.0f);
+            c.setColor(tok::surface000);
+            c.roundedRectangle(fr.x, fr.y, fr.w, fr.h, 6.0f);
+            if (query_.empty()) text(c, F.label13, "Search presets", fr.x + 10.0f, fr.y, fr.w - 20.0f, fr.h, tok::inkMuted);
+            else text(c, F.label13, query_, fr.x + 10.0f, fr.y, fr.w - 20.0f, fr.h, tok::ink);
+            c.setColor(tok::ink);
+            c.fill(fr.x + 10.0f + (query_.empty() ? 0.0f : textWidth(F.label13, query_) + 1.0f), fr.y + 7.0f, 1.0f, 14.0f);
+            y += 38.0f;
+        }
         for (size_t i = 0; i < items.size(); ++i) {
             const auto& it = items[i];
             if (it.separatorBefore && i > 0) {
@@ -568,7 +666,8 @@ private:
             const bool parent = !it.sub.empty();
             const int kind = parent ? kSubParent : kMenuItem;
             const int arg = parent ? static_cast<int>(i) + 1000 * level : it.id;
-            const bool hl = it.enabled && (hovered(kind, arg) || (parent && level == 0 && sub_ == static_cast<int>(i)));
+            const bool hl = it.enabled && (hovered(kind, arg) || (parent && level == 0 && sub_ == static_cast<int>(i)) ||
+                                           static_cast<int>(i) == kbI);
             if (hl) {
                 c.setColor(tok::surface300);
                 c.roundedRectangle(ir.x, ir.y, ir.w, ir.h, 6.0f);
@@ -587,17 +686,21 @@ private:
             y += 30.0f;
         }
     }
-    static float menuHeight(const std::string& caption, const std::vector<Entry>& items) {
-        float h = 12.0f + (caption.empty() ? 0.0f : 26.0f);
+    static float menuHeight(const std::string& caption, const std::vector<Entry>& items, bool search = false) {
+        float h = 12.0f + (caption.empty() ? 0.0f : 26.0f) + (search ? 38.0f : 0.0f);
         for (size_t i = 0; i < items.size(); ++i) h += 30.0f + (items[i].separatorBefore && i > 0 ? 9.0f : 0.0f);
         return h;
     }
     void drawMenu(visage::Canvas& c) {
-        const Rect r = place(width_, menuHeight(caption_, items_), false);
+        const auto items = shownItems();
+        // A searchable menu keeps its unfiltered height while searching, so it does not jump.
+        const bool searchable = static_cast<bool>(search_);
+        const float mh = std::max(menuHeight(caption_, items, searchable), searchable ? menuHeight(caption_, items_, true) : 0.0f);
+        const Rect r = place(width_, mh, false);
         subAnchor_ = {};
-        drawMenuPanel(c, r, caption_, items_, 0);
-        if (sub_ >= 0 && sub_ < static_cast<int>(items_.size()) && !items_[static_cast<size_t>(sub_)].sub.empty()) {
-            const auto& s = items_[static_cast<size_t>(sub_)];
+        drawMenuPanel(c, r, caption_, items, 0);
+        if (sub_ >= 0 && sub_ < static_cast<int>(items.size()) && !items[static_cast<size_t>(sub_)].sub.empty()) {
+            const auto& s = items[static_cast<size_t>(sub_)];
             const float w = s.slopeGrid ? 236.0f : 176.0f;
             const float h = s.slopeGrid ? slopeHeight() : menuHeight("", s.sub);
             Rect sr{r.right() + 4.0f, subAnchor_.y - 6.0f, w, h};
@@ -2765,7 +2868,16 @@ private:
                 loadPreset(list_[static_cast<size_t>(id - 1000)]);
             }
             x_.redrawAll();
-        }, anchor, false);
+        }, anchor, false, [this, cur](const std::string& q) {
+            std::vector<Entry> found;
+            for (const int i : filterPresets(list_, q)) {
+                const auto& p = list_[static_cast<size_t>(i)];
+                Entry e;
+                e.id = 1000 + i, e.label = p.name, e.hint = p.category, e.radio = true, e.checked = i == cur;
+                found.push_back(e);
+            }
+            return found;
+        });
     }
     std::vector<PresetEntry> list_;
     bool presetMenuOpen_ = false;

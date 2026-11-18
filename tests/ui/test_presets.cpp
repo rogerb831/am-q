@@ -72,3 +72,17 @@ TEST_CASE("Presets: stepping wraps; names are made file-safe; writes replace who
     std::error_code ec;
     fs::remove_all(root, ec);
 }
+
+TEST_CASE("Presets: search matches every word in the name or category, ignoring case") {
+    std::vector<ui::PresetEntry> list(4);
+    list[0].name = "Init";
+    list[1].name = "Bright Vocal", list[1].category = "Vocals";
+    list[2].name = "Warm Bass", list[2].category = "Mix";
+    list[3].name = "Vocal Rider", list[3].category = "Mix";
+    CHECK(ui::filterPresets(list, "").size() == 4);
+    CHECK(ui::filterPresets(list, "  ").size() == 4);
+    CHECK(ui::filterPresets(list, "VOCAL") == std::vector<int>{1, 3});
+    CHECK(ui::filterPresets(list, "mix vocal") == std::vector<int>{3});
+    CHECK(ui::filterPresets(list, "vocals") == std::vector<int>{1});  // the category
+    CHECK(ui::filterPresets(list, "drums").empty());
+}
