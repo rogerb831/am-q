@@ -42,6 +42,7 @@ public:
     const analysis::SpectrumSnapshot* pullSpectrum() noexcept override { return in_.pullSpectrum(); }
     void setEditSource(params::ParamSource s) override { in_.setEditSource(s); }
     MatchHost* matchHost() noexcept override { return in_.matchHost(); }
+    PresetHost* presetHost() noexcept override { return in_.presetHost(); }
     [[nodiscard]] double sampleRate() const noexcept override { return in_.sampleRate(); }
 
     // Explicit grouping (nests; the outermost end commits). The label names the step in menus.

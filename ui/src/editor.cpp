@@ -16,6 +16,7 @@
 #include "amq/ui/graph_accessible.hpp"
 #include "amq/ui/graph_model.hpp"
 #include "amq/ui/key_dispatcher.hpp"
+#include "amq/ui/presets.hpp"
 #include "amq/ui/snapshot_poller.hpp"
 
 #include "editor_theme.hpp"
@@ -82,7 +83,7 @@ struct Hit {
 enum HitKind : int {
     kNone = 0,
     // Top bar
-    kUndo, kRedo, kPreset, kEqMatch, kSettings, kHelp, kOverflow,
+    kUndo, kRedo, kPreset, kPresetPrev, kPresetNext, kEqMatch, kSettings, kHelp, kOverflow,
     // Status bar
     kBands, kProcessing, kAnalyzer, kFreeze, kToggle, kDragValue, kOutputMenu,
     // Band panel
@@ -232,6 +233,9 @@ std::string tipFor(const Ctx& x, const Hit& h) {
     auto g = [](GlobalParam p) { return params::globalParam(p); };
     switch (h.kind) {
         case kUndo: return "Undo (Ctrl+Z)";
+        case kPreset: return "Presets";
+        case kPresetPrev: return "Previous preset";
+        case kPresetNext: return "Next preset";
         case kRedo: return "Redo (Ctrl+Shift+Z)";
         case kSettings: return "Interface and analyzer settings";
         case kHelp: return x.hintMode ? "Hide the gesture hints" : "Show the gesture hints";
@@ -2530,17 +2534,20 @@ public:
             }
         }
         // Centre: preset (the preset system is area 21's; name only for now).
-        const std::string name = "Untitled";
-        const bool edited = x_.c.canUndo();
+        PresetHost* ph = x_.c.presetHost();
+        const std::string name = ph ? ph->currentName() : std::string("Untitled");
+        const bool edited = ph ? ph->edited() : x_.c.canUndo();
         const float pw = std::max(L.presetMinW, textWidth(F.preset15, name) + (edited ? 8.0f + textWidth(F.caption12, "(edited)") : 0.0f) + 32.0f);
         const float px = (width() - pw) * 0.5f;
         if (!x_.matchMode) {
             if (!L.hidePrevNext) {
-                iconButton(c, {px - 32.0f, cy - 14.0f, 28.0f, 28.0f}, icons::prev, {false, false, false, false});
-                iconButton(c, {px + pw + 4.0f, cy - 14.0f, 28.0f, 28.0f}, icons::next, {false, false, false, false});
+                button(c, {px - 32.0f, cy - 14.0f, 28.0f, 28.0f}, icons::prev, kPresetPrev, ph != nullptr);
+                button(c, {px + pw + 4.0f, cy - 14.0f, 28.0f, 28.0f}, icons::next, kPresetNext, ph != nullptr);
             }
-            c.setColor(tok::surface300);
-            c.roundedRectangle(px, cy - 16.0f, pw, 32.0f, 8.0f);
+            const Rect pr{px, cy - 16.0f, pw, 32.0f};
+            c.setColor(hov(kPreset) || o_.kind() == Pop::Menu && presetMenuOpen_ ? tok::surface400 : tok::surface300);
+            c.roundedRectangle(pr.x, pr.y, pr.w, pr.h, 8.0f);
+            if (ph) add(pr, kPreset);
         }
         {
             const float nw = textWidth(F.preset15, name), ew = edited ? 8.0f + textWidth(F.caption12, "(edited)") : 0.0f;
@@ -2600,6 +2607,9 @@ public:
         const Hit hit = hits_[static_cast<size_t>(h)];
         switch (hit.kind) {
             case kUndo: x_.c.undo(); break;
+            case kPresetPrev:
+            case kPresetNext: stepPreset(hit.kind == kPresetNext ? 1 : -1); break;
+            case kPreset: openPresetMenu(hit.r); return;
             case kRedo: x_.c.redo(); break;
             case kHelp: x_.hintMode = !x_.hintMode; break;
             case kSettings: o_.openPopover(Pop::Settings, hit.r); break;
@@ -2629,6 +2639,108 @@ public:
     }
 
 private:
+    // Presets (editor-spec-graph §4.10, P-28; ui/presets.hpp).
+    [[nodiscard]] int currentPresetIndex(const std::vector<PresetEntry>& list) const {
+        PresetHost* ph = x_.c.presetHost();
+        if (!ph) return -1;
+        const auto path = ph->currentPath();
+        for (size_t i = 0; i < list.size(); ++i) {
+            std::error_code ec;
+            if (path.empty() ? list[i].builtIn() && list[i].name == ph->currentName()
+                             : !list[i].builtIn() && std::filesystem::equivalent(list[i].path, path, ec))
+                return static_cast<int>(i);
+        }
+        return -1;
+    }
+    void loadPreset(const PresetEntry& e) {
+        PresetHost* ph = x_.c.presetHost();
+        std::string err;
+        if (ph && !ph->loadPreset(e, &err)) showError(err);
+        x_.redrawAll();
+    }
+    void stepPreset(int dir) {
+        PresetHost* ph = x_.c.presetHost();
+        if (!ph) return;
+        const auto list = scanPresets(ph->folder());
+        const int k = ui::stepPreset(static_cast<int>(list.size()), currentPresetIndex(list), dir);
+        if (k >= 0) loadPreset(list[static_cast<size_t>(k)]);
+    }
+    void saveAs() {
+        PresetHost* ph = x_.c.presetHost();
+        if (!ph) return;
+        const std::string path = pickPresetSavePath(ph->folder(), sanitizePresetName(ph->currentName()));
+        if (path.empty()) return;
+        std::string err;
+        const std::u8string u(path.begin(), path.end());
+        if (!ph->savePreset(std::filesystem::path(u), &err)) showError(err);
+        x_.redrawAll();
+    }
+    void showError(const std::string& msg) {
+        x_.hoverTip(msg, presetRect_);
+        x_.tipShown = true;
+        if (x_.tipChanged) x_.tipChanged();
+    }
+    void openPresetMenu(Rect anchor) {
+        PresetHost* ph = x_.c.presetHost();
+        if (!ph) return;
+        list_ = scanPresets(ph->folder());
+        const int cur = currentPresetIndex(list_);
+        std::vector<Entry> items;
+        auto cmd = [&](int id, const char* label, bool enabled, bool sep = false) {
+            Entry e;
+            e.id = id, e.label = label, e.enabled = enabled, e.separatorBefore = sep;
+            items.push_back(e);
+        };
+        const bool fileBacked = !ph->currentPath().empty();
+        cmd(1, "Save", true);
+        cmd(2, "Save As\xE2\x80\xA6", true);
+        cmd(3, "Revert", ph->edited() && (fileBacked || cur >= 0));
+        bool first = true;
+        for (size_t i = 0; i < list_.size(); ++i) {
+            const auto& p = list_[i];
+            Entry e;
+            e.id = 1000 + static_cast<int>(i), e.label = p.name, e.radio = true, e.checked = static_cast<int>(i) == cur;
+            if (p.category.empty()) {
+                e.separatorBefore = first;
+                first = false;
+                items.push_back(e);
+                continue;
+            }
+            auto parent = std::find_if(items.begin(), items.end(), [&](const Entry& x) { return !x.sub.empty() && x.label == p.category; });
+            if (parent == items.end()) {
+                Entry folder;
+                folder.label = p.category, folder.separatorBefore = first;
+                first = false;
+                items.push_back(folder);
+                parent = items.end() - 1;
+            }
+            parent->sub.push_back(e);
+        }
+        presetMenuOpen_ = true;
+        presetRect_ = anchor;
+        o_.openMenu("", 280.0f, items, [this, cur](int id) {
+            presetMenuOpen_ = false;
+            PresetHost* host = x_.c.presetHost();
+            if (!host) return;
+            if (id == 1) {
+                const auto path = host->currentPath();
+                std::string err;
+                if (path.empty()) saveAs();
+                else if (!host->savePreset(path, &err)) showError(err);
+            } else if (id == 2) {
+                saveAs();
+            } else if (id == 3) {
+                if (cur >= 0) loadPreset(list_[static_cast<size_t>(cur)]);
+            } else if (id >= 1000 && static_cast<size_t>(id - 1000) < list_.size()) {
+                loadPreset(list_[static_cast<size_t>(id - 1000)]);
+            }
+            x_.redrawAll();
+        }, anchor, false);
+    }
+    std::vector<PresetEntry> list_;
+    bool presetMenuOpen_ = false;
+    Rect presetRect_;
+
     void add(Rect r, int kind) { hits_.push_back({r, kind, 0, 0}); }
     [[nodiscard]] bool hov(int kind) const { return hover_.kind == kind; }
     void button(visage::Canvas& c, Rect r, const std::string& svg, int kind, bool enabled) {

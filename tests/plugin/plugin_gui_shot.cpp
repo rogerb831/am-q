@@ -303,6 +303,10 @@ int main(int argc, char** argv) {
         click(xOf(1820), yOf(4.5));
         shot(name);
     }
+    // The preset menu (editor-spec-graph §4.10).
+    click(W / 2, 22);
+    shot("15-preset-menu");
+    escape();
     // Interface zoom 150 % at 1280x760: open Settings, pick 150 % in the INTERFACE panel. This host
     // refuses resize requests, so the layout space shrinks to 853x507 instead.
     W = 1280, H = 760;

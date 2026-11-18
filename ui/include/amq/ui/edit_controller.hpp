@@ -8,6 +8,7 @@
 #include "amq/analysis/snapshot.hpp"
 #include "amq/params/parameter_table.hpp"
 #include "amq/ui/match_host.hpp"
+#include "amq/ui/presets.hpp"
 
 namespace amq::ui {
 
@@ -36,6 +37,8 @@ public:
     virtual void setEditSource(params::ParamSource) {}
     // EQ Match (areas 16-20), or nullptr when the host side has none.
     virtual MatchHost* matchHost() noexcept { return nullptr; }
+    // Presets (ui/presets.hpp), or nullptr when the host side has none.
+    virtual PresetHost* presetHost() noexcept { return nullptr; }
     // The session sample rate, for the latency and FFT-size readouts (0 when not active).
     [[nodiscard]] virtual double sampleRate() const noexcept { return 0.0; }
 };

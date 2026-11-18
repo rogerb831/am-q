@@ -23,7 +23,9 @@
 
 #include <atomic>
 #include <cstdint>
+#include <filesystem>
 #include <memory>
+#include <mutex>
 
 namespace amq::ui {
 class Editor;
@@ -51,6 +53,7 @@ public:
     void endEdit(params::ParamIndex index) override;
     void setEditSource(params::ParamSource s) override { editSource_ = s; }
     ui::MatchHost* matchHost() noexcept override { return &match_; }
+    ui::PresetHost* presetHost() noexcept override { return &presets_; }
     [[nodiscard]] double sampleRate() const noexcept override { return engine_.sampleRate(); }
 
 protected:
@@ -188,6 +191,30 @@ private:
     uint32_t guiLogicalW_ = 1280, guiLogicalH_ = 720;  // main thread
     // Interface zoom (editor-spec P-7): editor state saved after the parameter pairs.
     std::atomic<double> guiZoom_{1.0};
+
+    // Presets (ui/presets.hpp): a preset file is the state chunk. The name and path of the current
+    // preset are saved in the editor trailer; any change other than a preset or state load marks it
+    // edited (non-automatable display settings do not).
+    class PresetBridge : public ui::PresetHost, public params::ParameterListener {
+    public:
+        explicit PresetBridge(AmqPlugin& p) : p_(p) {}
+        bool loadPreset(const ui::PresetEntry& e, std::string* error) override;
+        bool savePreset(const std::filesystem::path& path, std::string* error) override;
+        std::string currentName() const override;
+        std::filesystem::path currentPath() const override;
+        bool edited() const override { return edited_; }
+        void parameterChanged(params::ParamIndex i, double, params::ParamSource source) override;
+        // State trailer (any thread; the name and path are copied under the lock).
+        void setCurrent(const std::string& name, const std::string& pathUtf8, bool edited);
+        void current(std::string& name, std::string& pathUtf8) const;
+        bool loading = false;  // a preset load is in progress: its changes do not mark edited
+
+    private:
+        AmqPlugin& p_;
+        mutable std::mutex m_;
+        std::string name_ = ui::kInitPresetName, path_;
+        bool edited_ = false;
+    } presets_{*this};
 };
 
 }  // namespace amq::plugin

@@ -98,6 +98,15 @@ The chunk is little-endian:
 
 Version 1 (the Phase 1 skeleton) had no pairs and still loads, as all defaults.
 
+An optional editor trailer follows the pairs. Older readers stop before it, and a chunk without one loads with the editor defaults:
+
+1. `u32 magic` = "AMQE";
+2. `u32 version` = 2;
+3. `f64 zoom` (interface scale, 1 to 3);
+4. version 2 adds the current preset: `u32 length` and the UTF-8 name, then `u32 length` and the UTF-8 path ("" for a built-in or an unsaved state).
+
+A preset file (`.amqpreset`, area 21) is this chunk, as the plugin saves it. Loading a preset keeps the open editor's zoom and takes the file's values only.
+
 On load:
 - unknown ids are ignored;
 - missing ids take their defaults;

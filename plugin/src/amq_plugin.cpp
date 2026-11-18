@@ -27,9 +27,10 @@ const char* const kFeatures[] = {CLAP_PLUGIN_FEATURE_AUDIO_EFFECT, CLAP_PLUGIN_F
 //   u32 magic "AMQS", u32 version, u32 pair count, then per pair u32 host id + f64 plain value.
 // Little-endian. Version 1 was the skeleton (no pairs); version 2 adds the pairs. On load,
 // unknown ids are ignored and missing ids take their defaults, so old sessions keep loading.
-// An optional editor-state trailer follows the pairs: u32 magic "AMQE", u32 version 1, f64 zoom
-// (editor-spec P-7). Loaders that stop after the pairs ignore it; a chunk without it keeps the
-// current zoom.
+// An optional editor-state trailer follows the pairs: u32 magic "AMQE", u32 version, f64 zoom
+// (editor-spec P-7); version 2 adds u32 length + UTF-8 bytes of the current preset's name, then
+// of its path (ui/presets.hpp). Loaders that stop after the pairs ignore it; a chunk without it
+// keeps the current zoom and preset.
 constexpr uint32_t kStateMagic = 0x53514D41;  // "AMQS"
 constexpr uint32_t kStateVersion = 2;
 constexpr size_t kHeaderBytes = 12;
@@ -108,9 +109,10 @@ const clap_plugin_descriptor AmqPlugin::descriptor = {
 AmqPlugin::AmqPlugin(const clap_host* host) : PluginBase(&descriptor, host) {
     // Refined band designs (R12) come from a worker thread started in activate().
     engine_.setDesignMode(engine::DesignMode::Thread);
+    table_.addListener(&presets_);  // marks the current preset edited
 }
 
-AmqPlugin::~AmqPlugin() = default;
+AmqPlugin::~AmqPlugin() { table_.removeListener(&presets_); }
 
 bool AmqPlugin::onMainThreadNow() const noexcept {
     return !_host.canUseThreadCheck() || _host.isMainThread();
@@ -485,9 +487,19 @@ bool AmqPlugin::stateSave(const clap_ostream* stream) noexcept {
     }
     uint8_t trailer[kEditorBytes];
     putU32(trailer, kEditorMagic);
-    putU32(trailer + 4, 1);
+    putU32(trailer + 4, 2);
     putF64(trailer + 8, guiZoom_.load());
-    return writeAll(stream, trailer, kEditorBytes);
+    if (!writeAll(stream, trailer, kEditorBytes)) return false;
+    std::string name, path;
+    presets_.current(name, path);
+    for (const std::string* t : {&name, &path}) {
+        uint8_t len[4];
+        putU32(len, static_cast<uint32_t>(std::min<size_t>(t->size(), 4096)));
+        if (!writeAll(stream, len, 4) ||
+            !writeAll(stream, reinterpret_cast<const uint8_t*>(t->data()), std::min<size_t>(t->size(), 4096)))
+            return false;
+    }
+    return true;
 }
 
 // Any thread. Values go through the setter with source Preset; the host rescan and editor
@@ -514,6 +526,22 @@ bool AmqPlugin::stateLoad(const clap_istream* stream) noexcept {
             const double z = getF64(trailer + 8);
             for (double k : ui::Editor::kZooms)
                 if (std::abs(z - k) < 1e-6) guiZoom_.store(k);
+            if (getU32(trailer + 4) >= 2 && !presets_.loading) {  // a host recall restores the preset name
+                std::array<std::string, 2> text;
+                bool ok = true;
+                for (auto& t : text) {
+                    uint8_t len[4];
+                    ok = ok && readAll(stream, len, 4);
+                    const uint32_t n = ok ? getU32(len) : 0;
+                    if (!ok || n > 4096) {
+                        ok = false;
+                        break;
+                    }
+                    t.resize(n);
+                    ok = n == 0 || readAll(stream, reinterpret_cast<uint8_t*>(t.data()), n);
+                }
+                if (ok) presets_.setCurrent(text[0], text[1], false);
+            }
         }
     }
     // One batch (area 09 R15, area 21 R14): the audio thread applies every value at the start of its
@@ -613,6 +641,111 @@ bool AmqPlugin::guiSetSize(uint32_t width, uint32_t height) noexcept {
     ui::Editor::constrainHostSize(&width, &height, editor_->hostScale(), editor_->zoom());
     editor_->setHostSize(width, height);
     return true;
+}
+
+// ---------------------------------------------------------------------------
+// Presets (main thread)
+// ---------------------------------------------------------------------------
+
+namespace {
+struct VecOut {
+    std::vector<uint8_t> bytes;
+    clap_ostream s{this, [](const clap_ostream* o, const void* d, uint64_t n) -> int64_t {
+                       auto* self = static_cast<VecOut*>(o->ctx);
+                       const auto* b = static_cast<const uint8_t*>(d);
+                       self->bytes.insert(self->bytes.end(), b, b + n);
+                       return static_cast<int64_t>(n);
+                   }};
+};
+struct VecIn {
+    const std::vector<uint8_t>* bytes = nullptr;
+    size_t pos = 0;
+    clap_istream s{this, [](const clap_istream* i, void* d, uint64_t n) -> int64_t {
+                       auto* self = static_cast<VecIn*>(i->ctx);
+                       const size_t k = std::min<size_t>(static_cast<size_t>(n), self->bytes->size() - self->pos);
+                       std::memcpy(d, self->bytes->data() + self->pos, k);
+                       self->pos += k;
+                       return static_cast<int64_t>(k);
+                   }};
+};
+std::string u8(const std::filesystem::path& p) {
+    const auto s = p.u8string();
+    return {s.begin(), s.end()};
+}
+}  // namespace
+
+bool AmqPlugin::PresetBridge::loadPreset(const ui::PresetEntry& e, std::string* error) {
+    std::vector<uint8_t> bytes;
+    if (e.builtIn()) {  // Init: every parameter at its default
+        bytes.resize(kHeaderBytes + params::kParamCount * kPairBytes);
+        putU32(bytes.data(), kStateMagic);
+        putU32(bytes.data() + 4, kStateVersion);
+        putU32(bytes.data() + 8, params::kParamCount);
+        const auto& specs = params::parameterSpecs();
+        for (params::ParamIndex i = 0; i < params::kParamCount; ++i) {
+            uint8_t* q = bytes.data() + kHeaderBytes + static_cast<size_t>(i) * kPairBytes;
+            putU32(q, specs[i].hostId);
+            putF64(q + 4, specs[i].def);
+        }
+    } else if (!ui::readFileBytes(e.path, bytes, error)) {
+        return false;
+    }
+    const double zoom = p_.guiZoom_.load();  // a preset never changes the interface zoom
+    VecIn in;
+    in.bytes = &bytes;
+    loading = true;
+    const bool ok = p_.stateLoad(&in.s);
+    loading = false;
+    p_.guiZoom_.store(zoom);
+    if (!ok) {
+        if (error) *error = "Not an Am-Q preset: " + u8(e.path.filename()) + ".";
+        return false;
+    }
+    p_.table_.dispatchNotifications();  // the load's own notifications, before the edited flag resets
+    setCurrent(e.name, e.builtIn() ? std::string() : u8(e.path), false);
+    return true;
+}
+
+bool AmqPlugin::PresetBridge::savePreset(const std::filesystem::path& path, std::string* error) {
+    std::filesystem::path p = path;
+    if (p.extension() != ui::kPresetExtension) p += ui::kPresetExtension;
+    setCurrent(u8(p.stem()), u8(p), false);  // the saved file carries its own name
+    VecOut out;
+    if (!p_.stateSave(&out.s)) {
+        if (error) *error = "Could not save the preset.";
+        return false;
+    }
+    return ui::writeFileBytes(p, out.bytes, error);
+}
+
+std::string AmqPlugin::PresetBridge::currentName() const {
+    std::lock_guard<std::mutex> l(m_);
+    return name_;
+}
+
+std::filesystem::path AmqPlugin::PresetBridge::currentPath() const {
+    std::lock_guard<std::mutex> l(m_);
+    const std::u8string s(path_.begin(), path_.end());
+    return std::filesystem::path(s);
+}
+
+void AmqPlugin::PresetBridge::setCurrent(const std::string& name, const std::string& pathUtf8, bool edited) {
+    std::lock_guard<std::mutex> l(m_);
+    name_ = name.empty() ? std::string(ui::kInitPresetName) : name;
+    path_ = pathUtf8;
+    edited_ = edited;
+}
+
+void AmqPlugin::PresetBridge::current(std::string& name, std::string& pathUtf8) const {
+    std::lock_guard<std::mutex> l(m_);
+    name = name_, pathUtf8 = path_;
+}
+
+void AmqPlugin::PresetBridge::parameterChanged(params::ParamIndex i, double, params::ParamSource source) {
+    if (loading || source == params::ParamSource::Preset) return;
+    const auto* s = params::specAt(i);
+    if (s && !s->automatable) return;  // display settings (analyzer, display range) are not "edits"
+    edited_ = true;
 }
 
 // ---------------------------------------------------------------------------

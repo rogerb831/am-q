@@ -14,7 +14,8 @@ add_library(amq_ui_model STATIC
     src/display_format.cpp
     src/editor_layout.cpp
     src/graph_accessible.cpp
-    src/editor_accessible.cpp)
+    src/editor_accessible.cpp
+    src/presets.cpp)
 add_library(amq::ui_model ALIAS amq_ui_model)
 target_include_directories(amq_ui_model PUBLIC include)
 target_link_libraries(amq_ui_model PUBLIC amq::params amq::dsp amq::analysis)
