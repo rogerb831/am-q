@@ -46,6 +46,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
+#include <limits>
 
 namespace amq::dsp {
 
@@ -105,9 +107,32 @@ inline constexpr double kAutoOffsetCapDb = 30.0;
 }
 
 // Detector level in dB of an absolute sample value, floored.
+// log2 for positive normal x, accurate to a few ulps, with scalar and SSE2 forms that give the
+// same bits (dynamics_lanes.hpp vectorises the detector across bands; std::log2 has no SIMD form).
+// x = m 2^e with m in [sqrt(1/2), sqrt(2)); log2 m = (2 / ln 2) atanh t, t = (m - 1) / (m + 1),
+// |t| <= 0.1716, summed to t^21 (error below 1e-17).
+inline constexpr double kLog2Series[11] = {  // 2 / ((2k + 1) ln 2)
+    2.8853900817779268, 0.9617966939259757, 0.5770780163555853, 0.41219858311113244,
+    0.3205988979753252, 0.2623081892525388, 0.2219530832136867, 0.19235933878519512,
+    0.16972882833987804, 0.15186263588304877, 0.1373995277037108};
+[[nodiscard]] inline double fastLog2(double x) noexcept {
+    uint64_t bits;
+    std::memcpy(&bits, &x, sizeof bits);
+    int e = static_cast<int>((bits >> 52) & 0x7ff) - 1023;
+    bits = (bits & 0x000fffffffffffffull) | 0x3ff0000000000000ull;
+    double m;
+    std::memcpy(&m, &bits, sizeof m);
+    if (m > 1.4142135623730951) m *= 0.5, e += 1;
+    const double t = (m - 1.0) / (m + 1.0), t2 = t * t;
+    double p = kLog2Series[10];
+    for (int k = 9; k >= 0; --k) p = p * t2 + kLog2Series[k];
+    return static_cast<double>(e) + t * p;
+}
+
 [[nodiscard]] inline double detectorLevelDb(double absValue) noexcept {
-    // 20 log10(x) = (20 log10 2) log2(x); log2 is the cheaper call.
-    return absValue > 3.1622776601683795e-8 ? 6.020599913279624 * std::log2(absValue) : kLevelFloorDb;  // -150 dB
+    // 20 log10(x) = (20 log10 2) log2(x).
+    if (absValue == std::numeric_limits<double>::infinity()) return absValue;
+    return absValue > 3.1622776601683795e-8 ? 6.020599913279624 * fastLog2(absValue) : kLevelFloorDb;  // -150 dB
 }
 
 [[nodiscard]] inline double autoThresholdDb(double referenceDb, double rangeDb) noexcept {
@@ -160,6 +185,12 @@ public:
     }
     [[nodiscard]] double value() const noexcept { return env_; }
     [[nodiscard]] bool warmingUp() const noexcept { return count_ < warmSamples_; }
+    // Block-wise state hand-off for the lane kernels (dynamics_lanes.hpp).
+    [[nodiscard]] uint64_t count() const noexcept { return count_; }
+    [[nodiscard]] uint64_t warmSamples() const noexcept { return warmSamples_; }
+    [[nodiscard]] double slowCoefficient() const noexcept { return cSlow_; }
+    [[nodiscard]] double warmCoefficient() const noexcept { return cWarm_; }
+    void setState(double env, uint64_t count) noexcept { env_ = env, count_ = count; }
 
 private:
     double env_ = kRefFloorDb;
@@ -193,6 +224,9 @@ public:
         return final_.process(std::max(a, b));
     }
     [[nodiscard]] double value() const noexcept { return final_.value(); }
+    DbAttackRelease& fast() noexcept { return fast_; }
+    DbAttackRelease& slow() noexcept { return slow_; }
+    DbAttackRelease& finalStage() noexcept { return final_; }
 
 private:
     DbAttackRelease fast_, slow_, final_;

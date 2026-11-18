@@ -60,6 +60,8 @@ public:
     }
 
     [[nodiscard]] double value() const noexcept { return y_; }
+    // Block-wise state hand-off for the lane kernels (dynamics_lanes.hpp).
+    void setValue(double y) noexcept { y_ = y; }
     [[nodiscard]] double attackCoefficient() const noexcept { return ca_; }
     [[nodiscard]] double releaseCoefficient() const noexcept { return cr_; }
     [[nodiscard]] uint64_t coefficientUpdates() const noexcept { return updates_; }

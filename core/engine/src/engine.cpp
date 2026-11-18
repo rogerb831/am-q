@@ -1,5 +1,7 @@
 #include "amq/engine/engine.hpp"
 
+#include "amq/dsp/dynamics_lanes.hpp"
+
 #include "amq/engine/band_response.hpp"
 
 #include "amq/params/mappings.hpp"
@@ -1186,6 +1188,9 @@ void Engine::readDynamics(int b, uint64_t sample, bool reset, double f, double g
 // computer, smoothing, and the blend weight per sample (area 06, area 07 R7-R10).
 void Engine::runDynamics(const double* const* w, const float* const* sc, uint32_t numSc, uint32_t outCh,
                          uint32_t off, uint32_t n) noexcept {
+    std::array<int, params::kBandCount> lanes{};
+    std::array<dsp::GainLane, params::kBandCount> laneState{};
+    uint32_t count = 0;
     for (int b = 0; b < params::kBandCount; ++b) {
         auto& d = bands_[static_cast<size_t>(b)].dyn;
         if (!d.on) continue;
@@ -1194,7 +1199,6 @@ void Engine::runDynamics(const double* const* w, const float* const* sc, uint32_
         const double inv = 1.0 / cap;
         const bool ext = d.external;
         const bool haveExt = ext && sc && numSc > 0 && sc[0];
-        double gr = d.grDb;
         for (uint32_t i = 0; i < n; ++i) {
             double l = 0.0, r = 0.0;
             if (!ext) {
@@ -1227,12 +1231,25 @@ void Engine::runDynamics(const double* const* w, const float* const* sc, uint32_
             }
             double env = d.peak[0].process(ea);
             if (two) env = std::max(env, d.peak[1].process(ec));  // linked: the louder channel (R10)
-            const double level = dsp::detectorLevelDb(env);
-            const double thr = d.autoThr ? dsp::autoThresholdDb(d.ref.process(level), d.rangeDb) : d.thresholdDb;
-            gr = d.core.process(dsp::gainComputerDb(level - thr, d.kneeDb, cap));
-            wt[i] = std::min(gr * inv, 1.0);
+            wt[i] = env;  // the dB chain below turns it into the weight
         }
-        d.grDb = gr;
+        lanes[count] = b;
+        auto& L = laneState[count++];
+        L.autoThr = d.autoThr, L.thresholdDb = d.thresholdDb, L.offsetDb = std::min(cap, dsp::kAutoOffsetCapDb);
+        L.kneeDb = d.kneeDb, L.capDb = cap, L.inv = inv;
+        L.load(d.ref, d.core);
+    }
+    // The dB-domain chain is the same arithmetic for every band: two bands per SSE2 step
+    // (dynamics_lanes.hpp; bit-identical to running them one by one).
+    uint32_t k = 0;
+    for (; k + 1 < count; k += 2)
+        dsp::gainLanePair(laneState[k], laneState[k + 1], dynW_.data() + static_cast<size_t>(lanes[k]) * maxFrames_ + off,
+                          dynW_.data() + static_cast<size_t>(lanes[k + 1]) * maxFrames_ + off, n);
+    if (k < count) dsp::gainLaneScalar(laneState[k], dynW_.data() + static_cast<size_t>(lanes[k]) * maxFrames_ + off, n);
+    for (uint32_t j = 0; j < count; ++j) {
+        auto& d = bands_[static_cast<size_t>(lanes[j])].dyn;
+        laneState[j].store(d.ref, d.core);
+        d.grDb = laneState[j].zy;
     }
 }
 

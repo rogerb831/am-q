@@ -191,3 +191,123 @@ TEST_CASE("Quadrature envelope of the band-pass side chain: flat on a tone at th
             CHECK(hi == doctest::Approx(0.5).epsilon(1e-4));
         }
 }
+
+#include "amq/dsp/dynamics_lanes.hpp"
+
+#include <random>
+#include <vector>
+
+TEST_CASE("fastLog2 matches std::log2 to a few ulps, and powers of two exactly") {
+    std::mt19937 rng(11);
+    std::uniform_real_distribution<double> u(-60.0, 60.0);
+    double worst = 0.0;
+    for (int i = 0; i < 200000; ++i) {
+        const double x = std::exp2(u(rng));
+        const double ref = std::log2(x);
+        worst = std::max(worst, std::abs(amq::dsp::fastLog2(x) - ref) / std::max(std::abs(ref), 1.0));
+    }
+    CHECK(worst < 1e-15);
+    for (int k = -40; k <= 40; ++k) CHECK(amq::dsp::fastLog2(std::ldexp(1.0, k)) == static_cast<double>(k));
+    CHECK(amq::dsp::detectorLevelDb(0.0) == amq::dsp::kLevelFloorDb);
+    CHECK(amq::dsp::detectorLevelDb(1.0) == 0.0);
+}
+
+namespace {
+amq::dsp::GainLane makeLane(std::mt19937& rng, bool autoThr, double knee, double range) {
+    using namespace amq::dsp;
+    ReferenceEnvelope r;
+    r.prepare(48000.0);
+    BandDynamics d;
+    d.prepare(48000.0);
+    std::uniform_real_distribution<double> u(0.0, 1.0);
+    d.setTimes(attackSeconds(100.0 * u(rng), 1000.0), releaseSeconds(100.0 * u(rng)));
+    GainLane L;
+    L.load(r, d);
+    L.autoThr = autoThr, L.thresholdDb = -30.0 * u(rng), L.offsetDb = std::min(std::abs(range), kAutoOffsetCapDb);
+    L.kneeDb = knee, L.capDb = std::abs(range), L.inv = 1.0 / std::abs(range);
+    L.refCount = static_cast<uint64_t>(30000 * u(rng));  // some lanes still warming up
+    return L;
+}
+std::vector<double> envelope(std::mt19937& rng, uint32_t n) {
+    std::uniform_real_distribution<double> u(-120.0, 6.0);
+    std::vector<double> e(n);
+    for (auto& v : e) v = std::pow(10.0, u(rng) / 20.0);
+    e[n / 3] = 0.0;  // below the detector floor
+    return e;
+}
+}  // namespace
+
+TEST_CASE("Dynamics lanes: the SSE2 pair gives the same bits as two scalar lanes") {
+    std::mt19937 rng(21);
+    for (int trial = 0; trial < 40; ++trial) {
+        const uint32_t n = 1 + static_cast<uint32_t>(trial * 37 % 500);
+        auto A = makeLane(rng, trial % 2 == 0, trial % 3 ? 6.0 : 0.0, trial % 2 ? -6.0 : 12.0);
+        auto B = makeLane(rng, trial % 4 < 2, 4.5, -18.0);
+        auto ea = envelope(rng, n), eb = envelope(rng, n);
+        auto sa = A, sb = B;
+        auto xa = ea, xb = eb;
+        amq::dsp::gainLanePair(A, B, ea.data(), eb.data(), n);
+        amq::dsp::gainLaneScalar(sa, xa.data(), n);
+        amq::dsp::gainLaneScalar(sb, xb.data(), n);
+        CHECK(ea == xa);
+        CHECK(eb == xb);
+        CHECK((A.ref == sa.ref && A.refCount == sa.refCount && A.fy == sa.fy && A.sy == sa.sy && A.zy == sa.zy));
+        CHECK((B.ref == sb.ref && B.refCount == sb.refCount && B.zy == sb.zy));
+    }
+}
+
+TEST_CASE("Dynamics lanes: the scalar lane equals the object chain it replaces") {
+    using namespace amq::dsp;
+    std::mt19937 rng(5);
+    for (bool autoThr : {true, false}) {
+        ReferenceEnvelope r;
+        r.prepare(48000.0);
+        BandDynamics d;
+        d.prepare(48000.0);
+        d.setTimes(attackSeconds(30.0, 500.0), releaseSeconds(70.0));
+        const double range = -9.0, knee = kneeWidthDb(1.0, range), thrDb = -24.0;
+        GainLane L;
+        L.load(r, d);
+        L.autoThr = autoThr, L.thresholdDb = thrDb, L.offsetDb = std::min(std::abs(range), kAutoOffsetCapDb);
+        L.kneeDb = knee, L.capDb = std::abs(range), L.inv = 1.0 / std::abs(range);
+        auto e = envelope(rng, 3000);
+        std::vector<double> expect(e.size());
+        for (size_t i = 0; i < e.size(); ++i) {
+            const double level = detectorLevelDb(e[i]);
+            const double thr = autoThr ? autoThresholdDb(r.process(level), range) : thrDb;
+            expect[i] = std::min(d.process(gainComputerDb(level - thr, knee, std::abs(range))) * (1.0 / std::abs(range)), 1.0);
+        }
+        gainLaneScalar(L, e.data(), static_cast<uint32_t>(e.size()));
+        CHECK(e == expect);
+        CHECK(L.ref == r.value());
+        CHECK(L.zy == d.value());
+    }
+}
+
+#include <chrono>
+#include <cstdio>
+
+TEST_CASE("Dynamics lanes: cost report (24 bands, 1 s at 48 kHz)" * doctest::skip()) {
+    std::mt19937 rng(3);
+    std::vector<amq::dsp::GainLane> lanes;
+    for (int b = 0; b < 24; ++b) lanes.push_back(makeLane(rng, true, 6.0, -6.0));
+    std::vector<std::vector<double>> env;
+    for (int b = 0; b < 24; ++b) env.push_back(envelope(rng, 64));
+    auto run = [&](bool pairs) {
+        auto L = lanes;
+        std::vector<double> buf(64);
+        const auto t0 = std::chrono::steady_clock::now();
+        for (int blk = 0; blk < 750; ++blk)
+            for (int b = 0; b < 24; b += pairs ? 2 : 1) {
+                auto a = env[b];
+                if (pairs) {
+                    auto c = env[b + 1];
+                    amq::dsp::gainLanePair(L[b], L[b + 1], a.data(), c.data(), 64);
+                } else {
+                    amq::dsp::gainLaneScalar(L[b], a.data(), 64);
+                }
+            }
+        return std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+    };
+    std::printf("  dB chain, scalar: %.2f %% of one core; SSE2 pairs: %.2f %%\n", 100.0 * run(false), 100.0 * run(true));
+}
