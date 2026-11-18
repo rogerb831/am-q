@@ -36,8 +36,8 @@ button:focus-visible{outline:2px solid #ffb81c;outline-offset:2px}
         <button class="amq-icon" aria-label="Redo"><svg viewBox="0 0 16 16"><path d="M11 3 L14 6 L11 9"></path><path d="M14 6 H6 A4 4 0 0 0 6 14 H9"></path></svg></button>
       </div>
       <div style="display: flex; align-items: center; gap: 4px;">
-        <button class="chip on" aria-pressed="true">A</button>
-        <button class="chip" aria-pressed="false">B</button>
+        <button class="chip on" aria-pressed="true" title="A/B compare: pending decision" style="outline: 1px dashed #a5a3ad; outline-offset: 2px;">A</button>
+        <button class="chip" aria-pressed="false" title="A/B compare: pending decision" style="outline: 1px dashed #a5a3ad; outline-offset: 2px;">B</button>
         <button class="amq-icon" aria-label="Copy A to B"><svg viewBox="0 0 16 16"><path d="M3 8 H12"></path><path d="M9 5 L12 8 L9 11"></path></svg></button>
       </div>
     </div>
@@ -55,8 +55,8 @@ button:focus-visible{outline:2px solid #ffb81c;outline-offset:2px}
         EQ Match
       </a>
       <a href="Analyzer.dc.html" class="amq-icon" aria-label="Interface and analyzer settings"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.2"></circle><path d="M8 1.5 V3.5 M8 12.5 V14.5 M1.5 8 H3.5 M12.5 8 H14.5 M3.4 3.4 L4.8 4.8 M11.2 11.2 L12.6 12.6 M3.4 12.6 L4.8 11.2 M11.2 4.8 L12.6 3.4"></path></svg></a>
-      <button class="amq-icon" aria-label="Full screen"><svg viewBox="0 0 16 16"><path d="M2 6 V2 H6 M10 2 H14 V6 M14 10 V14 H10 M6 14 H2 V10"></path></svg></button>
-      <button class="amq-icon" aria-label="Help"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"></circle><path d="M6.5 6.2 A1.6 1.6 0 1 1 8.6 7.7 C8 8 8 8.6 8 9.2"></path><path d="M8 11.5 V11.6"></path></svg></button>
+      <button class="amq-icon" aria-label="Full screen (pending decision)" title="Full screen: pending decision" style="outline: 1px dashed #a5a3ad; outline-offset: 1px;"><svg viewBox="0 0 16 16"><path d="M2 6 V2 H6 M10 2 H14 V6 M14 10 V14 H10 M6 14 H2 V10"></path></svg></button>
+      <a href="Hints.dc.html" class="amq-icon" aria-label="Help: show hints" title="Hint mode"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"></circle><path d="M6.5 6.2 A1.6 1.6 0 1 1 8.6 7.7 C8 8 8 8.6 8 9.2"></path><path d="M8 11.5 V11.6"></path></svg></a>
     </div>
   </header>
 
@@ -71,23 +71,25 @@ button:focus-visible{outline:2px solid #ffb81c;outline-offset:2px}
       <path d="M0 489 L8 462 L17 439 L25 433 L34 418 L42 403 L51 382 L59 358 L67 356 L76 353 L84 322 L93 306 L101 279 L110 277 L118 258 L126 230 L135 220 L143 186 L152 157 L160 157 L169 155 L177 135 L185 105 L194 95 L202 89 L211 87 L219 99 L228 104 L236 100 L244 95 L253 98 L261 99 L270 99 L278 91 L287 89 L295 95 L303 75 L312 69 L320 70 L329 75 L337 71 L346 72 L354 83 L362 98 L371 100 L379 104 L388 101 L396 115 L405 114 L413 117 L421 129 L430 129 L438 119 L447 112 L455 117 L464 119 L472 140 L480 152 L489 146 L497 154 L506 169 L514 170 L523 167 L531 165 L539 173 L548 178 L556 180 L565 173 L573 176 L582 183 L590 185 L598 202 L607 215 L615 205 L624 190 L632 189 L641 195 L649 207 L657 206 L666 192 L674 186 L683 190 L691 183 L700 197 L708 200 L716 189 L725 193 L733 201 L742 213 L750 216 L759 207 L767 229 L775 225 L784 222 L792 219 L801 222 L809 223 L818 234 L826 242 L834 255 L843 279 L851 275 L860 280 L868 290 L877 287 L885 286 L893 290 L902 295 L910 293 L919 290 L927 288 L936 291 L944 308 L952 315 L961 323 L969 317 L978 304 L986 296 L995 289 L1003 284 L1011 297 L1020 289 L1028 289 L1037 307 L1045 324 L1054 338 L1062 327 L1070 335 L1079 346 L1087 339 L1096 364 L1104 399 L1113 431 L1121 452 L1129 487 L1138 520 L1146 540 L1155 573 L1163 612 L1172 627 L1180 627" fill="none" stroke="#7c7a84" stroke-width="1"></path>
       <path d="M0 336 H1180" stroke="#8f8d96" stroke-width="1"></path>
 
-      <path d="M0 1029 L8 1002 L17 968 L25 933 L34 899 L42 864 L51 830 L59 796 L67 761 L76 727 L84 693 L93 659 L101 625 L110 591 L118 558 L126 526 L135 495 L143 466 L152 439 L160 415 L169 394 L177 378 L185 365 L194 356 L202 349 L211 344 L219 341 L228 339 L236 338 L253 337 L287 336 L0 336 Z" fill="#c4ee3c" fill-opacity="{{fo.b1}}"></path>
-      <path d="M118 336 L194 337 L236 339 L261 340 L278 341 L295 343 L312 345 L329 348 L337 351 L346 353 L354 356 L362 360 L371 364 L379 369 L388 375 L396 382 L405 388 L413 393 L421 396 L430 396 L438 393 L447 388 L455 382 L464 376 L472 370 L480 365 L489 360 L497 356 L506 353 L514 351 L523 349 L531 347 L539 345 L556 343 L573 341 L598 340 L624 338 L657 337 L733 336 Z" fill="#ff4d4d" fill-opacity="{{fo.b2}}"></path>
-      <path d="M337 336 L421 335 L464 333 L497 332 L523 330 L539 329 L548 328 L556 327 L565 326 L573 325 L582 323 L590 322 L598 320 L607 318 L615 316 L624 314 L632 312 L641 309 L649 306 L657 303 L666 299 L674 295 L683 291 L691 287 L700 283 L708 278 L716 274 L725 270 L733 266 L742 263 L750 260 L759 259 L767 258 L775 259 L784 260 L792 263 L801 266 L809 270 L818 274 L826 279 L834 283 L843 288 L851 292 L860 296 L868 300 L877 303 L885 307 L893 310 L902 313 L910 315 L919 317 L927 320 L936 321 L944 323 L952 325 L961 326 L978 328 L995 330 L1011 332 L1037 333 L1062 334 L1096 335 L1104 336 Z" fill="#3aa0ff" fill-opacity="{{fo.b3}}"></path>
-      <path d="M708 336 L767 337 L784 338 L792 339 L801 340 L809 341 L818 343 L826 346 L834 351 L843 360 L851 372 L860 379 L868 370 L877 358 L885 350 L893 345 L902 342 L910 340 L927 339 L944 338 L986 337 L1003 336 Z" fill="#d84cf2" fill-opacity="{{fo.b4}}"></path>
-      <path d="M843 336 L885 335 L902 334 L919 333 L927 332 L936 330 L944 329 L952 327 L961 325 L969 323 L978 320 L986 317 L995 314 L1003 310 L1011 306 L1020 302 L1028 299 L1037 295 L1045 293 L1054 290 L1062 288 L1070 287 L1079 286 L1096 285 L1104 284 L1180 284 L1180 336 Z" fill="#7d62ff" fill-opacity="{{fo.b5}}"></path>
+      <path d="M0 700 L8 700 L17 700 L25 700 L34 700 L42 700 L51 700 L59 700 L67 700 L76 700 L84 700 L93 700 L101 700 L110 700 L118 670 L126 621 L135 575 L143 531 L152 490 L160 454 L169 423 L177 398 L185 379 L194 365 L202 355 L211 349 L219 344 L228 341 L236 339 L244 338 L253 337 L261 337 L270 337 L278 336 L1180 336 L1180 336 L0 336 Z" fill="#c4ee3c" fill-opacity="{{fo.b1}}"></path>
+      <path d="M0 336 L93 336 L101 337 L110 337 L118 337 L126 337 L135 337 L143 337 L152 337 L160 337 L169 337 L177 337 L185 338 L194 338 L202 338 L211 338 L219 339 L228 339 L236 339 L244 340 L253 340 L261 341 L270 342 L278 343 L287 344 L295 345 L303 346 L312 348 L320 350 L329 352 L337 355 L346 358 L354 362 L362 367 L371 372 L379 379 L388 387 L396 395 L405 403 L413 409 L421 413 L430 414 L438 410 L447 403 L455 395 L464 387 L472 380 L480 373 L489 367 L497 362 L506 358 L514 355 L523 352 L531 350 L539 348 L548 346 L556 345 L565 344 L573 343 L582 342 L590 341 L598 340 L607 340 L615 339 L624 339 L632 339 L641 338 L649 338 L657 338 L666 338 L674 337 L683 337 L691 337 L700 337 L708 337 L716 337 L725 337 L733 337 L742 337 L750 337 L759 336 L1180 336 L1180 336 L0 336 Z" fill="#ff4d4d" fill-opacity="{{fo.b2}}"></path>
+      <path d="M0 336 L312 336 L320 335 L329 335 L337 335 L346 335 L354 335 L362 335 L371 335 L379 335 L388 335 L396 334 L405 334 L413 334 L421 334 L430 334 L438 333 L447 333 L455 333 L464 332 L472 332 L480 331 L489 331 L497 330 L506 329 L514 328 L523 327 L531 326 L539 325 L548 324 L556 322 L565 321 L573 319 L582 317 L590 315 L598 312 L607 310 L615 307 L624 303 L632 299 L641 295 L649 291 L657 286 L666 281 L674 275 L683 269 L691 263 L700 256 L708 250 L716 243 L725 237 L733 231 L742 226 L750 222 L759 220 L767 219 L775 220 L784 222 L792 226 L801 231 L809 237 L818 243 L826 250 L834 257 L843 263 L851 270 L860 276 L868 282 L877 287 L885 292 L893 297 L902 301 L910 305 L919 308 L927 311 L936 314 L944 317 L952 319 L961 321 L969 323 L978 324 L986 326 L995 327 L1003 328 L1011 329 L1020 330 L1028 331 L1037 332 L1045 333 L1054 333 L1062 334 L1070 334 L1079 334 L1087 335 L1096 335 L1104 335 L1113 336 L1172 336 L1180 335 L1180 336 L0 336 Z" fill="#3aa0ff" fill-opacity="{{fo.b3}}"></path>
+      <path d="M0 336 L683 336 L691 337 L700 337 L708 337 L716 337 L725 337 L733 337 L742 337 L750 337 L759 338 L767 338 L775 339 L784 339 L792 340 L801 341 L809 343 L818 346 L826 351 L834 358 L843 372 L851 390 L860 401 L868 388 L877 369 L885 357 L893 349 L902 345 L910 343 L919 341 L927 340 L936 339 L944 338 L952 338 L961 338 L969 337 L978 337 L986 337 L995 337 L1003 337 L1011 336 L1180 336 L1180 336 L0 336 Z" fill="#d84cf2" fill-opacity="{{fo.b4}}"></path>
+      <path d="M0 336 L834 336 L843 335 L851 335 L860 335 L868 335 L877 334 L885 334 L893 333 L902 333 L910 332 L919 331 L927 329 L936 328 L944 326 L952 323 L961 320 L969 316 L978 312 L986 308 L995 302 L1003 297 L1011 291 L1020 285 L1028 280 L1037 275 L1045 271 L1054 267 L1062 265 L1070 262 L1079 261 L1087 260 L1096 259 L1104 258 L1113 258 L1121 258 L1129 258 L1138 258 L1146 258 L1155 258 L1163 258 L1172 258 L1180 258 L1180 336 L0 336 Z" fill="#7d62ff" fill-opacity="{{fo.b5}}"></path>
 
-      <path d="M0 1029 L8 1002 L17 968 L25 933 L34 899 L42 864 L51 830 L59 796 L67 761 L76 727 L84 693 L93 659 L101 625 L110 591 L118 558 L126 526 L135 495 L143 466 L152 439 L160 415 L169 394 L177 378 L185 365 L194 356 L202 349 L211 344 L219 341 L228 339 L236 338 L253 337 L287 336" fill="none" stroke="#c4ee3c" stroke-width="1.5"></path>
-      <path d="M118 336 L194 337 L236 339 L261 340 L278 341 L295 343 L312 345 L329 348 L337 351 L346 353 L354 356 L362 360 L371 364 L379 369 L388 375 L396 382 L405 388 L413 393 L421 396 L430 396 L438 393 L447 388 L455 382 L464 376 L472 370 L480 365 L489 360 L497 356 L506 353 L514 351 L523 349 L531 347 L539 345 L556 343 L573 341 L598 340 L624 338 L657 337 L733 336" fill="none" stroke="#ff4d4d" stroke-width="1.5"></path>
-      <path d="M337 336 L421 335 L464 333 L497 332 L523 330 L539 329 L548 328 L556 327 L565 326 L573 325 L582 323 L590 322 L598 320 L607 318 L615 316 L624 314 L632 312 L641 309 L649 306 L657 303 L666 299 L674 295 L683 291 L691 287 L700 283 L708 278 L716 274 L725 270 L733 266 L742 263 L750 260 L759 259 L767 258 L775 259 L784 260 L792 263 L801 266 L809 270 L818 274 L826 279 L834 283 L843 288 L851 292 L860 296 L868 300 L877 303 L885 307 L893 310 L902 313 L910 315 L919 317 L927 320 L936 321 L944 323 L952 325 L961 326 L978 328 L995 330 L1011 332 L1037 333 L1062 334 L1096 335 L1104 336" fill="none" stroke="#3aa0ff" stroke-width="1.5"></path>
-      <path d="M708 336 L767 337 L784 338 L792 339 L801 340 L809 341 L818 343 L826 346 L834 351 L843 360 L851 372 L860 379 L868 370 L877 358 L885 350 L893 345 L902 342 L910 340 L927 339 L944 338 L986 337 L1003 336" fill="none" stroke="#d84cf2" stroke-width="1.5"></path>
-      <path d="M843 336 L885 335 L902 334 L919 333 L927 332 L936 330 L944 329 L952 327 L961 325 L969 323 L978 320 L986 317 L995 314 L1003 310 L1011 306 L1020 302 L1028 299 L1037 295 L1045 293 L1054 290 L1062 288 L1070 287 L1079 286 L1096 285 L1104 284 L1180 284" fill="none" stroke="#7d62ff" stroke-width="1.5"></path>
+      <path d="M0 700 L8 700 L17 700 L25 700 L34 700 L42 700 L51 700 L59 700 L67 700 L76 700 L84 700 L93 700 L101 700 L110 700 L118 670 L126 621 L135 575 L143 531 L152 490 L160 454 L169 423 L177 398 L185 379 L194 365 L202 355 L211 349 L219 344 L228 341 L236 339 L244 338 L253 337 L261 337 L270 337 L278 336 L1180 336" fill="none" stroke="#c4ee3c" stroke-width="1.5"></path>
+      <path d="M0 336 L93 336 L101 337 L110 337 L118 337 L126 337 L135 337 L143 337 L152 337 L160 337 L169 337 L177 337 L185 338 L194 338 L202 338 L211 338 L219 339 L228 339 L236 339 L244 340 L253 340 L261 341 L270 342 L278 343 L287 344 L295 345 L303 346 L312 348 L320 350 L329 352 L337 355 L346 358 L354 362 L362 367 L371 372 L379 379 L388 387 L396 395 L405 403 L413 409 L421 413 L430 414 L438 410 L447 403 L455 395 L464 387 L472 380 L480 373 L489 367 L497 362 L506 358 L514 355 L523 352 L531 350 L539 348 L548 346 L556 345 L565 344 L573 343 L582 342 L590 341 L598 340 L607 340 L615 339 L624 339 L632 339 L641 338 L649 338 L657 338 L666 338 L674 337 L683 337 L691 337 L700 337 L708 337 L716 337 L725 337 L733 337 L742 337 L750 337 L759 336 L1180 336" fill="none" stroke="#ff4d4d" stroke-width="1.5"></path>
+      <path d="M0 336 L312 336 L320 335 L329 335 L337 335 L346 335 L354 335 L362 335 L371 335 L379 335 L388 335 L396 334 L405 334 L413 334 L421 334 L430 334 L438 333 L447 333 L455 333 L464 332 L472 332 L480 331 L489 331 L497 330 L506 329 L514 328 L523 327 L531 326 L539 325 L548 324 L556 322 L565 321 L573 319 L582 317 L590 315 L598 312 L607 310 L615 307 L624 303 L632 299 L641 295 L649 291 L657 286 L666 281 L674 275 L683 269 L691 263 L700 256 L708 250 L716 243 L725 237 L733 231 L742 226 L750 222 L759 220 L767 219 L775 220 L784 222 L792 226 L801 231 L809 237 L818 243 L826 250 L834 257 L843 263 L851 270 L860 276 L868 282 L877 287 L885 292 L893 297 L902 301 L910 305 L919 308 L927 311 L936 314 L944 317 L952 319 L961 321 L969 323 L978 324 L986 326 L995 327 L1003 328 L1011 329 L1020 330 L1028 331 L1037 332 L1045 333 L1054 333 L1062 334 L1070 334 L1079 334 L1087 335 L1096 335 L1104 335 L1113 336 L1172 336 L1180 335" fill="none" stroke="#3aa0ff" stroke-width="1.5"></path>
+      <path d="M0 336 L683 336 L691 337 L700 337 L708 337 L716 337 L725 337 L733 337 L742 337 L750 337 L759 338 L767 338 L775 339 L784 339 L792 340 L801 341 L809 343 L818 346 L826 351 L834 358 L843 372 L851 390 L860 401 L868 388 L877 369 L885 357 L893 349 L902 345 L910 343 L919 341 L927 340 L936 339 L944 338 L952 338 L961 338 L969 337 L978 337 L986 337 L995 337 L1003 337 L1011 336 L1180 336" fill="none" stroke="#d84cf2" stroke-width="1.5"></path>
+      <path d="M0 336 L834 336 L843 335 L851 335 L860 335 L868 335 L877 334 L885 334 L893 333 L902 333 L910 332 L919 331 L927 329 L936 328 L944 326 L952 323 L961 320 L969 316 L978 312 L986 308 L995 302 L1003 297 L1011 291 L1020 285 L1028 280 L1037 275 L1045 271 L1054 267 L1062 265 L1070 262 L1079 261 L1087 260 L1096 259 L1104 258 L1113 258 L1121 258 L1129 258 L1138 258 L1146 258 L1155 258 L1163 258 L1172 258 L1180 258" fill="none" stroke="#7d62ff" stroke-width="1.5"></path>
+      <path d="M0 336 L59 336 L67 337 L76 337 L84 337 L93 337 L101 337 L110 337 L118 337 L126 337 L135 337 L143 337 L152 338 L160 338 L169 338 L177 338 L185 339 L194 339 L202 339 L211 340 L219 340 L228 341 L236 342 L244 342 L253 343 L261 344 L270 346 L278 347 L287 348 L295 350 L303 353 L312 355 L320 358 L329 362 L337 366 L346 371 L354 378 L362 385 L371 394 L379 405 L388 417 L396 430 L405 442 L413 453 L421 460 L430 460 L438 454 L447 443 L455 431 L464 418 L472 406 L480 395 L489 386 L497 378 L506 372 L514 367 L523 362 L531 358 L539 355 L548 353 L556 351 L565 349 L573 347 L582 346 L590 344 L598 343 L607 342 L615 342 L624 341 L632 340 L641 340 L649 339 L657 339 L666 339 L674 338 L683 338 L691 338 L700 338 L708 337 L716 337 L725 337 L733 337 L742 337 L750 337 L759 337 L767 337 L775 337 L784 337 L792 336 L1180 336" fill="none" stroke="#ff4d4d" stroke-width="1" stroke-dasharray="3 2" opacity="{{live.b2}}"></path>
+      <path d="M0 336 L649 336 L657 337 L666 337 L674 337 L683 337 L691 337 L700 337 L708 337 L716 337 L725 338 L733 338 L742 338 L750 339 L759 339 L767 340 L775 341 L784 342 L792 343 L801 346 L809 349 L818 354 L826 361 L834 375 L843 397 L851 429 L860 448 L868 424 L877 393 L885 372 L893 359 L902 352 L910 348 L919 345 L927 343 L936 341 L944 340 L952 339 L961 339 L969 338 L978 338 L986 338 L995 337 L1003 337 L1011 337 L1020 337 L1028 337 L1037 336 L1180 336" fill="none" stroke="#d84cf2" stroke-width="1" stroke-dasharray="3 2" opacity="{{live.b4}}"></path>
 
-      <path d="M0 1029 L8 1002 L17 968 L25 933 L34 899 L42 865 L51 830 L59 796 L67 761 L76 727 L84 693 L93 659 L101 625 L110 592 L118 559 L126 527 L135 496 L143 466 L152 440 L160 416 L169 395 L177 379 L185 366 L194 357 L202 350 L211 346 L219 343 L228 342 L236 341 L244 340 L253 340 L261 340 L270 341 L278 341 L287 342 L295 343 L303 344 L312 345 L320 346 L329 348 L337 350 L346 353 L354 356 L362 359 L371 364 L379 369 L388 374 L396 381 L405 387 L413 392 L421 395 L430 395 L438 392 L447 386 L455 380 L464 373 L472 367 L480 361 L489 357 L497 352 L506 349 L514 346 L523 343 L531 340 L539 338 L548 336 L556 334 L565 332 L573 330 L582 328 L590 326 L598 324 L607 322 L615 319 L624 317 L632 314 L641 311 L649 308 L657 304 L666 301 L674 297 L683 293 L691 288 L700 284 L708 279 L716 275 L725 271 L733 267 L742 264 L750 261 L759 260 L767 260 L775 261 L784 263 L792 266 L801 270 L809 275 L818 281 L826 288 L834 298 L843 311 L851 328 L860 339 L868 333 L877 324 L885 319 L893 317 L902 317 L910 317 L919 317 L927 318 L936 318 L944 318 L952 317 L961 316 L969 315 L978 313 L986 311 L995 308 L1003 305 L1011 302 L1020 299 L1028 296 L1037 293 L1045 290 L1054 288 L1062 287 L1070 286 L1079 285 L1087 284 L1180 284" fill="none" stroke="#ffb81c" stroke-width="2"></path>
+      <path d="M0 700 L8 700 L17 700 L25 700 L34 700 L42 700 L51 700 L59 700 L67 700 L76 700 L84 700 L93 700 L101 700 L110 700 L118 670 L126 622 L135 575 L143 532 L152 491 L160 455 L169 425 L177 400 L185 381 L194 367 L202 357 L211 351 L219 347 L228 344 L236 343 L244 342 L253 342 L261 342 L270 342 L278 343 L287 343 L295 345 L303 346 L312 347 L320 349 L329 351 L337 354 L346 357 L354 361 L362 366 L371 371 L379 378 L388 385 L396 393 L405 401 L413 407 L421 411 L430 411 L438 407 L447 400 L455 392 L464 383 L472 375 L480 368 L489 362 L497 356 L506 351 L514 347 L523 344 L531 340 L539 337 L548 334 L556 331 L565 329 L573 326 L582 323 L590 320 L598 317 L607 314 L615 310 L624 306 L632 302 L641 298 L649 293 L657 288 L666 283 L674 277 L683 271 L691 264 L700 258 L708 251 L716 244 L725 238 L733 233 L742 228 L750 224 L759 222 L767 221 L775 223 L784 226 L792 230 L801 236 L809 244 L818 253 L826 264 L834 279 L843 298 L851 324 L860 340 L868 332 L877 319 L885 311 L893 308 L902 307 L910 307 L919 308 L927 308 L936 309 L944 309 L952 308 L961 307 L969 304 L978 302 L986 298 L995 294 L1003 290 L1011 285 L1020 280 L1028 275 L1037 271 L1045 268 L1054 265 L1062 262 L1070 261 L1079 259 L1087 259 L1096 258 L1104 258 L1113 258 L1121 258 L1129 258 L1138 258 L1146 258 L1155 258 L1163 258 L1172 258 L1180 258" fill="none" stroke="#ffb81c" stroke-width="2"></path>
 
       <g font-family="Inter, sans-serif" font-size="12" font-weight="500">
         <g fill="#ffb81c" text-anchor="end">
-          <text x="1210" y="28">+18</text><text x="1210" y="132">+12</text><text x="1210" y="236">+6</text><text x="1210" y="340">0</text><text x="1210" y="444">−6</text><text x="1210" y="548">−12</text><text x="1210" y="652">−18</text>
+          <text x="1210" y="28">+12</text><text x="1210" y="132">+8</text><text x="1210" y="236">+4</text><text x="1210" y="340">0</text><text x="1210" y="444">−4</text><text x="1210" y="548">−8</text><text x="1210" y="652">−12</text>
         </g>
         <g fill="#8c8a93" text-anchor="end">
           <text x="1246" y="97">−10</text><text x="1246" y="167">−20</text><text x="1246" y="236">−30</text><text x="1246" y="305">−40</text><text x="1246" y="375">−50</text><text x="1246" y="444">−60</text><text x="1246" y="513">−70</text><text x="1246" y="583">−80</text>
@@ -108,12 +110,12 @@ button:focus-visible{outline:2px solid #ffb81c;outline-offset:2px}
       <button class="hbtn" style="left: {{r.hx}}px; top: {{r.hy}}px; width: 14px; height: 14px; background: #17161a; box-shadow: inset 0 0 0 2px {{r.color}}, 0 2px 6px rgba(0,0,0,0.6);" aria-label="{{r.aria}}" title="{{r.aria}}"></button>
     </sc-for>
     <sc-for list="{{bands}}" as="b" hint-placeholder-count="5">
-      <button class="hbtn" style="left: {{b.left}}px; top: {{b.top}}px; width: {{b.size}}px; height: {{b.size}}px; background: {{b.color}}; box-shadow: {{b.ring}};" aria-label="{{b.aria}}" aria-pressed="{{b.selected}}" onClick="{{b.pick}}" title="{{b.aria}}"></button>
+      <button class="hbtn" style="left: {{b.left}}px; top: {{b.top}}px; width: {{b.size}}px; height: {{b.size}}px; background: {{b.color}}; box-shadow: {{b.ring}};" aria-label="{{b.aria}}" aria-pressed="{{b.selected}}" onClick="{{b.pick}}" title="{{b.tip}}"></button>
     </sc-for>
 
     <div class="amq-readout" style="position: absolute; left: {{sel.rx}}px; top: {{sel.ry}}px; box-shadow: 0 0 0 1px #3d3c43;">
       <span class="dot" style="background: {{sel.color}};"></span>
-      <span>{{sel.freq}}</span><span style="color: var(--ink-muted);">·</span><span>{{sel.gain}}</span><span style="color: var(--ink-muted);">·</span><span>{{sel.q}}</span>
+      <span>{{sel.freq}}</span><sc-if value="{{sel.hasGain}}" hint-placeholder-val="{{true}}"><span style="color: var(--ink-muted);">·</span><span>{{sel.gain}}</span></sc-if><span style="color: var(--ink-muted);">·</span><span>{{sel.q}}</span>
     </div>
 
     <!-- Band panel -->
@@ -121,8 +123,9 @@ button:focus-visible{outline:2px solid #ffb81c;outline-offset:2px}
       <div style="display: flex; align-items: center; gap: 24px;">
         <div style="display: flex; flex-direction: column; gap: 8px; width: 148px;">
           <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="width: 10px; height: 10px; border-radius: 9999px; background: {{sel.color}};"></span>
-            <span style="font: 600 13px/16px var(--font-sans);">Band #{{sel.n}}</span>
+            <span style="width: 10px; height: 10px; border-radius: 9999px; background: {{sel.color}}; flex-shrink: 0;"></span>
+            <span style="font: 600 13px/16px var(--font-sans); white-space: nowrap;">Band #{{sel.n}}</span>
+            <sc-if value="{{multi}}" hint-placeholder-val="{{false}}"><span style="font: 400 12px/16px var(--font-sans); color: var(--ink-muted); white-space: nowrap;">(multiple)</span></sc-if>
             <span style="flex-grow: 1;"></span>
             <button class="amq-icon" aria-label="Band enabled" aria-pressed="true" title="Enable/disable band (Alt-click the handle)"><svg viewBox="0 0 16 16"><path d="M8 2 V8"></path><path d="M4.5 4.5 A5 5 0 1 0 11.5 4.5"></path></svg></button>
           </div>
@@ -153,19 +156,23 @@ button:focus-visible{outline:2px solid #ffb81c;outline-offset:2px}
         </div>
 
         <sc-if value="{{sel.dyn}}" hint-placeholder-val="{{false}}">
-          <div style="display: flex; align-items: flex-end; gap: 12px; padding-left: 24px; box-shadow: -1px 0 0 #3d3c43;">
-            <sc-for list="{{dknobs}}" as="k" hint-placeholder-count="4">
-              <div class="amq-knob">
-                <svg width="{{k.size}}" height="{{k.size}}" viewBox="{{k.vb}}" style="filter: drop-shadow(0 4px 10px rgba(0,0,0,0.5));" aria-hidden="true">
-                  <circle class="face" cx="{{k.c}}" cy="{{k.c}}" r="{{k.fr}}"></circle>
-                  <path class="track" d="{{k.track}}" stroke-width="{{k.sw}}"></path>
-                  <path class="value" d="{{k.arc}}" stroke-width="{{k.sw}}"></path>
-                  <path class="tick" d="{{k.tick}}" stroke-width="2"></path>
-                </svg>
-                <span class="lbl">{{k.label}}</span>
-                <span class="val">{{k.val}}</span>
-              </div>
-            </sc-for>
+          <div style="display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding-left: 24px; box-shadow: -1px 0 0 #3d3c43;">
+            <button class="chip {{sel.autoClass}}" aria-pressed="{{sel.auto}}" onClick="{{toggleAuto}}" title="Auto threshold: follows the band's own level">Auto</button>
+            <div style="display: flex; align-items: flex-end; gap: 12px;">
+              <sc-for list="{{dknobs}}" as="k" hint-placeholder-count="4">
+                <div class="amq-knob" style="opacity: {{k.op}};">
+                  <svg width="{{k.size}}" height="{{k.size}}" viewBox="{{k.vb}}" style="filter: drop-shadow(0 4px 10px rgba(0,0,0,0.5));" aria-hidden="true">
+                    <circle class="face" cx="{{k.c}}" cy="{{k.c}}" r="{{k.fr}}"></circle>
+                    <path class="track" d="{{k.track}}" stroke-width="{{k.sw}}"></path>
+                    <path class="value" d="{{k.arc}}" stroke-width="{{k.sw}}"></path>
+                    <path d="{{k.gr}}" fill="none" stroke="{{k.grc}}" stroke-width="2" stroke-linecap="round"></path>
+                    <path class="tick" d="{{k.tick}}" stroke-width="2"></path>
+                  </svg>
+                  <span class="lbl">{{k.label}}</span>
+                  <span class="val">{{k.val}}</span>
+                </div>
+              </sc-for>
+            </div>
           </div>
           <div style="display: flex; flex-direction: column; gap: 8px; width: 148px;">
             <span style="font: 600 12px/14px var(--font-sans); letter-spacing: 0.06em; color: var(--ink-muted);">SIDE CHAIN</span>
@@ -174,20 +181,27 @@ button:focus-visible{outline:2px solid #ffb81c;outline-offset:2px}
               <button class="chip" style="height: 28px; flex-grow: 1;" aria-pressed="false">Ext</button>
               <button class="amq-icon" aria-label="Listen to side chain" title="Listen"><svg viewBox="0 0 16 16"><path d="M3 10 V8 A5 5 0 0 1 13 8 V10"></path><rect x="2" y="10" width="3" height="4" rx="1"></rect><rect x="11" y="10" width="3" height="4" rx="1"></rect></svg></button>
             </div>
-            <button class="amq-select" style="min-width: 0; width: 148px; height: 28px;" aria-label="Side-chain filter">
+            <a href="States.dc.html" class="amq-select" style="min-width: 0; width: 148px; height: 28px; text-decoration: none; box-sizing: border-box;" aria-label="Side-chain filter">
               <span>{{sel.scMode}}</span><span style="color: var(--ink-muted); font-size: 12px;">{{sel.scRange}}</span>
               <svg class="chev" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5 L6 7.5 L9 4.5"></path></svg>
-            </button>
+            </a>
             <sc-if value="{{sel.spectral}}" hint-placeholder-val="{{false}}">
               <button class="chip on" style="height: 28px; width: 148px;" aria-pressed="true">Spectral Tilt</button>
             </sc-if>
           </div>
         </sc-if>
 
-        <div style="display: flex; flex-direction: column; gap: 8px; width: 148px;">
-          <button class="amq-select" style="min-width: 0; width: 148px;" aria-label="Stereo placement">
+        <div style="display: flex; flex-direction: column; gap: 8px; width: 148px; position: relative;">
+          <sc-if value="{{plOpen}}" hint-placeholder-val="{{false}}">
+            <div role="menu" aria-label="Placement" class="amq-panel" style="position: absolute; left: 0; bottom: 124px; width: 148px; padding: 6px; display: flex; flex-direction: column; box-sizing: border-box;">
+              <sc-for list="{{places}}" as="o" hint-placeholder-count="5">
+                <button role="menuitemradio" aria-checked="{{o.on}}" onClick="{{o.pick}}" style="display: flex; align-items: center; gap: 10px; height: 30px; padding: 0 10px; border: 0; border-radius: 6px; background: {{o.bg}}; color: #eceaf0; font: 500 13px/16px var(--font-sans); text-align: left;"><span style="width: 14px; height: 14px; border-radius: 9999px; box-shadow: {{o.ring}}; flex-shrink: 0;"></span>{{o.name}}</button>
+              </sc-for>
+            </div>
+          </sc-if>
+          <button class="amq-select" style="min-width: 0; width: 148px;" aria-label="Placement" aria-haspopup="menu" aria-expanded="{{plOpen}}" onClick="{{togglePl}}">
             <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="6" cy="8" r="4"></circle><circle cx="10" cy="8" r="4"></circle></svg>
-            <span>{{sel.stereo}}</span>
+            <span>{{sel.place}}</span>
             <svg class="chev" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5 L6 7.5 L9 4.5"></path></svg>
           </button>
           <div style="display: flex; gap: 4px;">
@@ -195,12 +209,11 @@ button:focus-visible{outline:2px solid #ffb81c;outline-offset:2px}
             <button class="chip {{sel.specClass}}" style="height: 32px; flex-grow: 1;" aria-pressed="{{sel.spectral}}" onClick="{{toggleSpec}}">Spectral</button>
           </div>
           <div style="display: flex; gap: 4px; justify-content: flex-end;">
-            <button class="amq-icon" aria-label="Solo band"><svg viewBox="0 0 16 16"><path d="M3 10 V8 A5 5 0 0 1 13 8 V10"></path><rect x="2" y="10" width="3" height="4" rx="1"></rect><rect x="11" y="10" width="3" height="4" rx="1"></rect></svg></button>
+            <a href="States.dc.html" class="amq-icon" aria-label="Solo band" title="Solo"><svg viewBox="0 0 16 16"><path d="M3 10 V8 A5 5 0 0 1 13 8 V10"></path><rect x="2" y="10" width="3" height="4" rx="1"></rect><rect x="11" y="10" width="3" height="4" rx="1"></rect></svg></a>
             <button class="amq-icon" aria-label="Delete band"><svg viewBox="0 0 16 16"><path d="M4 4 L12 12 M12 4 L4 12"></path></svg></button>
           </div>
         </div>
       </div>
-
     </section>
   </main>
 
@@ -233,7 +246,7 @@ button:focus-visible{outline:2px solid #ffb81c;outline-offset:2px}
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":760}}'>
 class Component extends DCLogic {
-  constructor(p) { super(p); this.state = { sel: 2, dyn: { 1: true, 3: true }, spec: { 3: true } }; }
+  constructor(p) { super(p); this.state = { sel: [2], focus: 2, dyn: { 1: true, 3: true }, spec: { 3: true }, auto: { 1: true, 2: true, 3: false, 4: true }, place: {}, plOpen: false }; }
   pt(c, r, d) { const a = d * Math.PI / 180; return [c + r * Math.sin(a), c - r * Math.cos(a)]; }
   arc(c, r, d0, d1) {
     if (Math.abs(d1 - d0) < 0.5) return '';
@@ -241,50 +254,66 @@ class Component extends DCLogic {
     const large = Math.abs(d1 - d0) > 180 ? 1 : 0, sweep = d1 > d0 ? 1 : 0;
     return 'M' + p0[0].toFixed(1) + ' ' + p0[1].toFixed(1) + ' A' + r + ' ' + r + ' 0 ' + large + ' ' + sweep + ' ' + p1[0].toFixed(1) + ' ' + p1[1].toFixed(1);
   }
-  knob(label, val, n, size, bip) {
+  knob(label, val, n, size, bip, opt) {
+    const o = opt || {};
     const c = size / 2, sw = size > 70 ? 4 : 3, r = c - sw / 2 - 1, d = -135 + 270 * n, fr = r - sw - 3;
     const t0 = this.pt(c, fr * 0.3, d), t1 = this.pt(c, fr - 4, d);
-    return { label, val, size, vb: '0 0 ' + size + ' ' + size, c, fr, sw,
+    const gr = o.gr ? this.arc(c, r - sw - 1, 0, Math.max(-135, Math.min(135, o.gr / 30 * 135))) : '';
+    return { label, val, size, vb: '0 0 ' + size + ' ' + size, c, fr, sw, op: o.dim ? 0.35 : 1, gr, grc: o.color || 'none',
       track: this.arc(c, r, -135, 135), arc: bip ? this.arc(c, r, 0, d) : this.arc(c, r, -135, d),
       tick: 'M' + t0[0].toFixed(1) + ' ' + t0[1].toFixed(1) + ' L' + t1[0].toFixed(1) + ' ' + t1[1].toFixed(1) };
   }
   renderVals() {
     const G = { bell: 'M1 12 C5 12 6 4 8 4 C10 4 11 12 15 12', lc: 'M1 14 C4 14 5 4 9 4 L15 4', hs: 'M1 11 L6 11 C9 11 9 5 12 5 L15 5' };
     const B = [
-      { n: 1, shape: 'Low Cut', glyph: G.lc, slope: '24 dB/oct', freq: '32 Hz', gain: '0.0 dB', q: 'Q 0.71', stereo: 'Stereo', color: '#c4ee3c', hx: 171, hy: 388, fn: 0.145, gn: 0.5, qn: 0.454, range: '', rn: 0.5, g: 0, r: -3, scMode: 'Band', scRange: '20–45 Hz' },
-      { n: 2, shape: 'Bell', glyph: G.bell, slope: '12 dB/oct', freq: '180 Hz', gain: '−3.5 dB', q: 'Q 1.40', stereo: 'Mid', color: '#ff4d4d', hx: 426, hy: 397, fn: 0.361, gn: 0.442, qn: 0.546, range: '−3.0 dB', rn: 0.45, g: -3.5, r: -3, scMode: 'Band', scRange: '120–270 Hz' },
-      { n: 3, shape: 'Bell', glyph: G.bell, slope: '12 dB/oct', freq: '1.82 kHz', gain: '+4.5 dB', q: 'Q 0.71', stereo: 'Stereo', color: '#3aa0ff', hx: 767, hy: 258, fn: 0.65, gn: 0.575, qn: 0.454, range: '+3.0 dB', rn: 0.55, g: 4.5, r: 3, scMode: 'Band', scRange: '0.9–3.6 kHz' },
-      { n: 4, shape: 'Bell', glyph: G.bell, slope: '12 dB/oct', freq: '3.40 kHz', gain: '−2.5 dB', q: 'Q 4.00', stereo: 'Side', color: '#d84cf2', hx: 859, hy: 379, fn: 0.727, gn: 0.458, qn: 0.688, range: '−4.0 dB', rn: 0.433, g: -2.5, r: -4, scMode: 'Free', scRange: '2.5–6.0 kHz' },
-      { n: 5, shape: 'High Shelf', glyph: G.hs, slope: '12 dB/oct', freq: '9.00 kHz', gain: '+3.0 dB', q: 'Q 0.71', stereo: 'Stereo', color: '#7d62ff', hx: 1003, hy: 284, fn: 0.85, gn: 0.55, qn: 0.454, range: '', rn: 0.5, g: 3, r: -3, scMode: 'Band', scRange: '6.0–14 kHz' }
+      { n: 1, shape: 'Low Cut', glyph: G.lc, slope: '24 dB/oct', freq: '32 Hz', gain: '', q: 'Q 0.71', place: 'Stereo', color: '#c4ee3c', hx: 171, hy: 336, fn: 0.145, gn: 0.5, qn: 0.454, hasGain: false, g: 0, r: 0, range: '', rn: 0.5, gr: 0, scMode: 'Band', scRange: '20–45 Hz' },
+      { n: 2, shape: 'Bell', glyph: G.bell, slope: '12 dB/oct', freq: '180 Hz', gain: '−3.0 dB', q: 'Q 1.40', place: 'Mid', color: '#ff4d4d', hx: 426, hy: 414, fn: 0.361, gn: 0.45, qn: 0.546, hasGain: true, g: -3, r: -2, range: '−2.0 dB', rn: 0.467, gr: -1.8, scMode: 'Band', scRange: '120–270 Hz' },
+      { n: 3, shape: 'Bell', glyph: G.bell, slope: '12 dB/oct', freq: '1.82 kHz', gain: '+4.5 dB', q: 'Q 0.71', place: 'Stereo', color: '#3aa0ff', hx: 767, hy: 219, fn: 0.65, gn: 0.575, qn: 0.454, hasGain: true, g: 4.5, r: 3, range: '+3.0 dB', rn: 0.55, gr: 1.2, scMode: 'Band', scRange: '0.9–3.6 kHz' },
+      { n: 4, shape: 'Bell', glyph: G.bell, slope: '12 dB/oct', freq: '3.40 kHz', gain: '−2.5 dB', q: 'Q 4.00', place: 'Side', color: '#d84cf2', hx: 859, hy: 401, fn: 0.727, gn: 0.458, qn: 0.688, hasGain: true, g: -2.5, r: -2.5, range: '−2.5 dB', rn: 0.458, gr: -1.8, scMode: 'Free', scRange: '2.5–6.0 kHz' },
+      { n: 5, shape: 'High Shelf', glyph: G.hs, slope: '12 dB/oct', freq: '9.00 kHz', gain: '+3.0 dB', q: 'Q 0.71', place: 'Stereo', color: '#7d62ff', hx: 1003, hy: 258, fn: 0.85, gn: 0.55, qn: 0.454, hasGain: true, g: 3, r: -3, range: '−3.0 dB', rn: 0.45, gr: 0, scMode: 'Band', scRange: '6.0–14 kHz' }
     ];
-    const s = this.state.sel, cur = B[s];
-    const dyn = !!this.state.dyn[s], spectral = dyn && !!this.state.spec[s];
+    const st = this.state, sel = st.sel, s = st.focus, cur = B[s];
+    const dyn = !!st.dyn[s], spectral = dyn && !!st.spec[s], auto = st.auto[s] !== false;
+    const place = st.place[s] || cur.place;
     const bands = B.map((b, i) => {
-      const on = i === s, size = on ? 22 : 18;
+      const on = sel.indexOf(i) >= 0, size = on ? 22 : 18;
       return { color: b.color, size, left: b.hx - size / 2, top: b.hy - size / 2, selected: on ? 'true' : 'false',
         ring: on ? '0 0 0 3px #eceaf0, 0 0 0 5px #17161a, 0 2px 8px rgba(0,0,0,0.6)' : '0 0 0 2px #17161a, 0 2px 6px rgba(0,0,0,0.6)',
-        aria: 'Band ' + b.n + ', ' + b.shape + ', ' + b.freq, pick: () => this.setState({ sel: i }) };
+        aria: 'Band ' + b.n + ', ' + b.shape + ', ' + b.freq, tip: '#' + b.n + ' ' + b.shape + ' (Shift-click adds to the selection)',
+        pick: (e) => {
+          if (e && e.shiftKey) {
+            const has = sel.indexOf(i) >= 0;
+            const next = has ? sel.filter((x) => x !== i) : sel.concat([i]);
+            this.setState({ sel: next.length ? next : [i], focus: has && next.length ? next[next.length - 1] : i, plOpen: false });
+          } else this.setState({ sel: [i], focus: i, plOpen: false });
+        } };
     });
-    const ranges = B.filter((b, i) => !!this.state.dyn[i] && b.shape !== 'Low Cut').map((b) => {
-      const y2 = 336 - (b.g + b.r) * 17.333, top = Math.min(b.hy, y2);
-      return { x: b.hx, top, h: Math.abs(y2 - b.hy), hx: b.hx - 7, hy: y2 - 7, color: b.color, aria: 'Band ' + b.n + ' dynamic range ' + (b.range || '') };
+    const ranges = B.filter((b, i) => !!st.dyn[i] && b.hasGain && b.r !== 0).map((b) => {
+      const y2 = 336 - (b.g + b.r) * 26, top = Math.min(b.hy, y2);
+      return { x: b.hx, top, h: Math.abs(y2 - b.hy), hx: b.hx - 7, hy: y2 - 7, color: b.color, aria: 'Band ' + b.n + ' dynamic range ' + b.range };
     });
-    const fo = {}; B.forEach((b, i) => { fo['b' + (i + 1)] = i === s ? 0.55 : 0.38; });
-    const dk = [
-      this.knob('Range', cur.range || '−6.0 dB', cur.rn, 48, true),
-      this.knob('Threshold', 'Auto', 1, 48, false),
-      this.knob('Attack', '50 %', 0.5, 48, false),
-      this.knob('Release', '50 %', 0.5, 48, false)
-    ];
+    const fo = {}; B.forEach((b, i) => { fo['b' + (i + 1)] = sel.indexOf(i) >= 0 ? 0.55 : 0.38; });
+    const dk = [];
+    if (cur.hasGain) dk.push(this.knob('Range', cur.range, cur.rn, 48, true, { gr: cur.gr, color: cur.color }));
+    dk.push(this.knob('Threshold', auto ? 'Auto' : '−24 dBFS', auto ? 1 : 0.73, 48, false, { dim: auto }));
+    dk.push(this.knob('Attack', '50 %', 0.5, 48, false, { dim: auto }));
+    dk.push(this.knob('Release', '50 %', 0.5, 48, false, { dim: auto }));
     if (spectral) dk.push(this.knob('Density', '50 %', 0.5, 48, false));
+    const knobs = [this.knob('Freq', cur.freq, cur.fn, 64, false)];
+    if (cur.hasGain) knobs.push(this.knob('Gain', cur.gain, cur.gn, 88, true));
+    knobs.push(this.knob('Q', cur.q, cur.qn, 64, false));
+    const places = ['Stereo', 'Left', 'Right', 'Mid', 'Side'].map((name) => ({ name, on: name === place ? 'true' : 'false',
+      bg: name === place ? '#2b2a30' : 'transparent', ring: name === place ? 'inset 0 0 0 4px #ffb81c' : 'inset 0 0 0 1.5px #a5a3ad',
+      pick: () => this.setState({ place: Object.assign({}, st.place, { [s]: name }), plOpen: false }) }));
     return {
-      bands, fo, ranges,
-      sel: Object.assign({}, cur, { dyn, spectral, dynClass: dyn ? 'on' : '', specClass: spectral ? 'on' : '',
-        rx: Math.min(cur.hx + 18, 1000), ry: cur.hy - 44 }),
-      knobs: [ this.knob('Freq', cur.freq, cur.fn, 64, false), this.knob('Gain', cur.gain, cur.gn, 88, true), this.knob('Q', cur.q, cur.qn, 64, false) ],
-      dknobs: dk,
-      toggleDyn: () => this.setState({ dyn: Object.assign({}, this.state.dyn, { [s]: !dyn }) }),
-      toggleSpec: () => this.setState({ dyn: Object.assign({}, this.state.dyn, { [s]: true }), spec: Object.assign({}, this.state.spec, { [s]: !spectral }) })
+      bands, fo, ranges, knobs, dknobs: dk, places, plOpen: st.plOpen, multi: sel.length > 1,
+      live: { b2: st.dyn[1] ? 0.8 : 0, b4: st.dyn[3] ? 0.8 : 0 },
+      sel: Object.assign({}, cur, { dyn, spectral, auto, place, autoClass: auto ? 'on' : '', dynClass: dyn ? 'on' : '', specClass: spectral ? 'on' : '',
+        rx: cur.hx + 18 > 1000 ? cur.hx - 200 : cur.hx + 18, ry: cur.hy - 44 }),
+      togglePl: () => this.setState({ plOpen: !st.plOpen }),
+      toggleAuto: () => this.setState({ auto: Object.assign({}, st.auto, { [s]: !auto }) }),
+      toggleDyn: () => this.setState({ dyn: Object.assign({}, st.dyn, { [s]: !dyn }) }),
+      toggleSpec: () => this.setState({ dyn: Object.assign({}, st.dyn, { [s]: true }), spec: Object.assign({}, st.spec, { [s]: !spectral }) })
     };
   }
 }

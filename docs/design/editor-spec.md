@@ -3,12 +3,14 @@
 This spec is written from the Am-Q design canvas in [`reference/`](reference/). It gives the GUI engineer enough detail to rebuild every board without opening the HTML.
 
 - **Status:** draft, 2026-11-16. Area 12's task "Define the editor region map and the visual hierarchy" points here.
-- **Boards:** five boards, 1280×760 each, listed in `reference/canvas.json` in this order:
+- **Boards:** seven boards, 1280×760 each, listed in `reference/canvas.json` in this order (revised to match this spec on 2026-11-17):
   - **Main:** the editor, with the graph and the band panel.
   - **Match:** EQ Match.
   - **Processing:** the processing menu and the output menu.
   - **Analyzer:** analyzer and interface settings.
   - **Interactions:** multi-select, the band menu, the shape menu, the slope picker and the band list.
+  - **States:** solo, the inline value editor, the side-chain filter popover and the one-band menu.
+  - **Hints:** hint mode, and the band panel's compact and strip modes.
 - **Tokens:** `reference/ds/am-q/tokens.json` and `reference/ds/am-q/components/bundle.css`. These files replace `docs/design/spike-reference/` as the design source. The spike copy stays where it is for history.
 
 The spec is split into three files:
@@ -420,7 +422,7 @@ Each conflict lists what the boards show, what `docs/plan` (or the parameter tab
 | C-14 | Wheel modifiers | Ctrl gain, Alt range, Shift slope | R12: the fine modifier also scales wheel steps; Shift is the fine modifier (board) | Ctrl gain, Alt range, Ctrl+Alt slope, Shift fine (P-21). The code today uses Shift gain and Command slope, so it follows this table once confirmed |
 | C-15 | Space in the band list | "Space enables" | Area 15: every unlisted key, Space included, goes to the host; acceptance test "Space toggles the transport" | Plan wins: Space passes through. Enter toggles Enabled in the band list (P-23) |
 | C-16 | Band menu items | Enabled, Invert Gain, Make Dynamic, Make Spectral; Shape, Slope, Placement; Copy, Paste, Split, Delete | Area 14 R3 also lists a selection group and Cut; split is undefined (area 14 open question) | Cut and Select All added (P-15). Split is shown but disabled until the Product designer defines it |
-| C-17 | Non-token values | Radius 6 on menu items and segments; 48 px dynamics knobs; 0.6 opacity on un-applied EQ Match nodes; peak hold drawn in ink-muted | Tokens only (bundle.css says "every value is a token") | Used as drawn. Recommendation: add `radius-xs` 6, `size-knob-xs` 48 and `opacity-preview` 0.6 to tokens.json |
+| C-17 | Non-token values | Radius 6 on menu items and segments; 48 px dynamics knobs; 0.6 opacity on un-applied EQ Match nodes; peak hold drawn in ink-muted | Tokens only (bundle.css says "every value is a token") | Resolved 2026-11-17: the canvas's tokens.json now has `radius-xs` 6, `size-knob-xs` 48 and `opacity-preview` 0.6. The source design system does not have them yet |
 | C-18 | Placement choices | The panel shows Stereo, Mid, Side | `placement`: Stereo, Left, Right, Mid, Side | Plan wins: all five in the Placement select and submenu |
 | C-19 | Gainless shapes in the panel | A Low Cut band shows a Gain knob reading "0.0 dB" | Gain applies only to Bell, shelves and tilts (`shapeHasGain`, area 15 R8) | Plan wins: the Gain knob is hidden for gainless shapes (panels §2.3) |
 | C-20 | Bypassed band in the sum | The Interactions board's summed curve still includes bypassed band 2 | The GUI curve matches the DSP (area 12 R12); a disabled band does not process | The summed curve excludes disabled bands |

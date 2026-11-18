@@ -41,10 +41,10 @@ button:focus-visible{outline:2px solid #ffb81c;outline-offset:2px}
     <svg width="1280" height="672" viewBox="0 0 1280 672" style="position: absolute; left: 0; top: 0; opacity: 0.45;" aria-hidden="true">
       <g stroke="#26252b" stroke-width="1">
         <path d="M102 24 V648 M237 24 V648 M339 24 V648 M442 24 V648 M577 24 V648 M679 24 V648 M781 24 V648 M916 24 V648 M1018 24 V648 M1120 24 V648"></path>
-        <path d="M0 24 H1180 M0 128 H1180 M0 232 H1180 M0 440 H1180 M0 544 H1180 M0 648 H1180"></path>
+        <path d="M0 24 H1180 M0 76 H1180 M0 128 H1180 M0 180 H1180 M0 232 H1180 M0 284 H1180 M0 388 H1180 M0 440 H1180 M0 492 H1180 M0 544 H1180 M0 596 H1180 M0 648 H1180"></path>
       </g>
       <path d="M0 336 H1180" stroke="#8f8d96" stroke-width="1"></path>
-      <path d="M101 625 L118 559 L135 496 L152 440 L169 395 L185 366 L202 350 L219 343 L244 340 L270 341 L303 344 L329 348 L354 356 L379 369 L405 387 L421 395 L438 392 L464 373 L489 357 L514 346 L548 336 L582 328 L615 319 L649 308 L683 293 L716 275 L742 264 L767 260 L792 266 L818 281 L843 311 L860 339 L877 324 L902 317 L944 318 L978 313 L1011 302 L1045 290 L1087 284 L1180 284" fill="none" stroke="#ffb81c" stroke-width="2"></path>
+      <path d="M0 700 L8 700 L17 700 L25 700 L34 700 L42 700 L51 700 L59 700 L67 700 L76 700 L84 700 L93 700 L101 700 L110 700 L118 670 L126 622 L135 575 L143 532 L152 491 L160 455 L169 425 L177 400 L185 381 L194 367 L202 357 L211 351 L219 347 L228 344 L236 343 L244 342 L253 342 L261 342 L270 342 L278 343 L287 343 L295 345 L303 346 L312 347 L320 349 L329 351 L337 354 L346 357 L354 361 L362 366 L371 371 L379 378 L388 385 L396 393 L405 401 L413 407 L421 411 L430 411 L438 407 L447 400 L455 392 L464 383 L472 375 L480 368 L489 362 L497 356 L506 351 L514 347 L523 344 L531 340 L539 337 L548 334 L556 331 L565 329 L573 326 L582 323 L590 320 L598 317 L607 314 L615 310 L624 306 L632 302 L641 298 L649 293 L657 288 L666 283 L674 277 L683 271 L691 264 L700 258 L708 251 L716 244 L725 238 L733 233 L742 228 L750 224 L759 222 L767 221 L775 223 L784 226 L792 230 L801 236 L809 244 L818 253 L826 264 L834 279 L843 298 L851 324 L860 340 L868 332 L877 319 L885 311 L893 308 L902 307 L910 307 L919 308 L927 308 L936 309 L944 309 L952 308 L961 307 L969 304 L978 302 L986 298 L995 294 L1003 290 L1011 285 L1020 280 L1028 275 L1037 271 L1045 268 L1054 265 L1062 262 L1070 261 L1079 259 L1087 259 L1096 258 L1104 258 L1113 258 L1121 258 L1129 258 L1138 258 L1146 258 L1155 258 L1163 258 L1172 258 L1180 258" fill="none" stroke="#ffb81c" stroke-width="2"></path>
     </svg>
 
     <!-- Processing menu -->
@@ -52,16 +52,16 @@ button:focus-visible{outline:2px solid #ffb81c;outline-offset:2px}
       <span style="padding: 8px 10px 4px; font: 600 12px/14px var(--font-sans); letter-spacing: 0.06em; color: var(--ink-muted);">PROCESSING</span>
       <button class="item" aria-pressed="false"><span class="radio"></span><span style="flex-grow: 1;">Zero Latency</span><span style="color: var(--ink-muted);">0 smp</span></button>
       <button class="item on" aria-pressed="true"><span class="radio"></span><span style="flex-grow: 1; display: flex; flex-direction: column; gap: 2px;"><span>Natural Phase</span><span style="font: 400 12px/16px var(--font-sans); color: var(--ink-muted);">Analog-matched phase near Nyquist</span></span><span style="color: var(--ink-muted);">320 smp</span></button>
-      <button class="item" aria-pressed="false"><span class="radio"></span><span style="flex-grow: 1; display: flex; flex-direction: column; gap: 2px;"><span>Linear Phase</span><span style="font: 400 12px/16px var(--font-sans); color: var(--ink-muted);">No phase shift, pre-ringing on steep cuts</span></span><span style="color: var(--ink-muted);">[latency]</span></button>
+      <button class="item" aria-pressed="false"><span class="radio"></span><span style="flex-grow: 1; display: flex; flex-direction: column; gap: 2px;"><span>Linear Phase</span><span style="font: 400 12px/16px var(--font-sans); color: var(--ink-muted);">No phase shift, pre-ringing on steep cuts</span></span><span style="color: var(--ink-muted);">4,160 smp</span></button>
       <div style="padding: 8px 10px; display: flex; flex-direction: column; gap: 8px;">
-        <span style="font: 500 13px/16px var(--font-sans); color: var(--ink-muted);">Linear Phase resolution</span>
+        <span style="display: flex; flex-direction: column; gap: 2px;"><span style="font: 500 13px/16px var(--font-sans); color: var(--ink-muted);">Resolution</span><span style="font: 400 12px/16px var(--font-sans); color: var(--ink-muted);">Linear Phase, and spectral bands in every mode</span></span>
         <div role="group" aria-label="Resolution" style="display: flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--surface-000);">
-          <button class="seg">Low</button><button class="seg on" aria-pressed="true">Med</button><button class="seg">High</button><button class="seg">V. High</button><button class="seg">Max</button>
+          <button class="seg" aria-label="Low">Low</button><button class="seg on" aria-pressed="true" aria-label="Medium">Med</button><button class="seg" aria-label="High">High</button><button class="seg" aria-label="Very High">V. High</button><button class="seg" aria-label="Maximum">Max</button>
         </div>
-        <span style="font: 400 12px/16px var(--font-sans); color: var(--ink-muted);">Latency per resolution: [from area 02 latency function].</span>
+        <span style="font: 400 12px/16px var(--font-sans); color: var(--ink-muted);">Linear Phase latency: 2,112 · 4,160 · 8,256 · 16,448 · 65,600 smp</span>
       </div>
       <div style="height: 1px; background: var(--line-hairline); margin: 4px 0;"></div>
-      <span style="padding: 4px 10px; font: 400 12px/16px var(--font-sans); color: var(--ink-muted);">Spectral bands add FFT latency in every mode.</span>
+      <span style="padding: 4px 10px; font: 400 12px/16px var(--font-sans); color: var(--ink-muted);">While a spectral band is active, latency is at least the FFT latency at this resolution.</span>
     </section>
 
     <!-- Output menu -->
@@ -95,11 +95,11 @@ button:focus-visible{outline:2px solid #ffb81c;outline-offset:2px}
         <button class="chip on" aria-pressed="true">On</button>
       </div>
       <label for="gain-scale" style="display: flex; align-items: center; justify-content: space-between; font: 500 13px/16px var(--font-sans);"><span>Gain Scale</span><span style="color: var(--accent); font-weight: 600;">100 %</span></label>
-      <input id="gain-scale" type="range" min="-100" max="200" value="100" style="accent-color: #ffb81c;">
+      <input id="gain-scale" type="range" min="0" max="200" value="100" style="accent-color: #ffb81c;">
       <span style="font: 400 12px/16px var(--font-sans); color: var(--ink-muted);">Scales every band's gain and dynamic range together.</span>
       <div style="display: flex; align-items: center; justify-content: space-between;">
-        <span style="display: flex; flex-direction: column; gap: 2px;"><span style="font: 500 13px/16px var(--font-sans);">Solo Gain</span><span style="font: 400 12px/16px var(--font-sans); color: var(--ink-muted);">Level match while a band is soloed</span></span>
-        <button class="chip on" aria-pressed="true">On</button>
+        <span style="display: flex; flex-direction: column; gap: 2px;"><span style="font: 500 13px/16px var(--font-sans);">Solo Gain</span><span style="font: 400 12px/16px var(--font-sans); color: var(--ink-muted);">Audition level while a band is soloed</span></span>
+        <span class="amq-readout" title="Drag to change, double-click to type" style="cursor: ns-resize;">+0.0 dB</span>
       </div>
     </section>
   </main>

@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Am-Q states</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="ds/am-q/components/bundle.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap">
+<style>
+:root{--surface-000:#0d0d10;--surface-100:#17161a;--surface-200:#201f24;--surface-300:#2b2a30;--surface-400:#37363d;--line-grid:#26252b;--line-hairline:#3d3c43;--line-zero:#8f8d96;--ink:#eceaf0;--ink-muted:#a5a3ad;--ink-axis:#8c8a93;--ink-disabled:#5e5c66;--accent:#ffb81c;--accent-ink:#1a1305;--focus:#ffb81c;--analyzer-sc:#5b6e8a;--signal-clip:#ff3b30;--signal-solo:#2fe0b0;--font-sans:"Inter","Segoe UI",system-ui,sans-serif;--radius-sm:4px;--radius-md:8px;--radius-lg:16px;--size-bar:44px;--shadow-panel:0 16px 40px rgba(0,0,0,0.55),0 0 0 1px #3d3c43;--shadow-handle:0 0 0 2px #17161a,0 2px 6px rgba(0,0,0,0.6)}
+body{margin:0;background:#17161a}
+a{color:#ffb81c}a:hover{color:#ffc94d}
+button{font-family:inherit;cursor:pointer}
+button:focus-visible{outline:2px solid #ffb81c;outline-offset:2px}
+.tile{position:relative;background:#17161a;border-radius:8px;box-shadow:0 0 0 1px #26252b;overflow:hidden}
+.tcap{position:absolute;left:16px;top:14px;font:600 12px/14px "Inter",sans-serif;letter-spacing:0.06em;color:#a5a3ad}
+.chip{height:28px;padding:0 10px;border-radius:8px;border:0;background:#2b2a30;color:#eceaf0;font:600 13px/16px "Inter",sans-serif}
+.chip.on{background:#ffb81c;color:#1a1305}
+.seg{flex:1;height:28px;border:0;background:transparent;color:#a5a3ad;font:600 12px/14px "Inter",sans-serif;border-radius:6px}
+.seg.on{background:#37363d;color:#eceaf0}
+.fld{display:inline-block;min-width:64px;padding:2px 6px;border-radius:2px;background:#0d0d10;color:#eceaf0;font:600 13px/16px "Inter",sans-serif;font-variant-numeric:tabular-nums}
+.mi{display:flex;align-items:center;gap:10px;width:100%;height:30px;padding:0 10px;border:0;border-radius:6px;background:transparent;color:#eceaf0;font:500 13px/16px "Inter",sans-serif;text-align:left}
+.mi .k{margin-left:auto;color:#a5a3ad;font-size:12px}
+.mi svg{width:16px;height:16px;flex-shrink:0;fill:none;stroke:#eceaf0;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.mi.dis{color:#a5a3ad}
+.sep{height:1px;background:#3d3c43;margin:4px 6px}
+</style>
+</helmet>
+<div style="width: 1280px; height: 760px; box-sizing: border-box; padding: 24px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 24px; background: #0d0d10; color: var(--ink); font-family: var(--font-sans); font-variant-numeric: tabular-nums;">
+
+  <!-- Solo -->
+  <section class="tile" aria-label="Solo state">
+    <span class="tcap">SOLO · BAND #3 SOLOED, VERTICAL DRAG SETS SOLO GAIN</span>
+    <svg width="604" height="344" viewBox="0 0 604 344" style="position: absolute; left: 0; top: 0;" aria-hidden="true">
+      <path d="M0 96 H604 M0 148 H604 M0 252 H604 M0 304 H604 M120 40 V330 M300 40 V330 M480 40 V330" stroke="#26252b" stroke-width="1"></path>
+      <path d="M0 200 H604" stroke="#8f8d96" stroke-width="1"></path>
+      <path d="M0 200 C80 200 100 236 130 236 C160 236 180 200 260 200 Z" fill="#ff4d4d" fill-opacity="0.18"></path>
+      <path d="M0 200 C80 200 100 236 130 236 C160 236 180 200 260 200" fill="none" stroke="#ff4d4d" stroke-width="1.5" opacity="0.5"></path>
+      <path d="M380 200 C440 200 460 160 520 152 L604 150 L604 200 Z" fill="#7d62ff" fill-opacity="0.18"></path>
+      <path d="M380 200 C440 200 460 160 520 152 L604 150" fill="none" stroke="#7d62ff" stroke-width="1.5" opacity="0.5"></path>
+      <path d="M160 200 C250 200 260 110 300 110 C340 110 350 200 440 200 Z" fill="#3aa0ff" fill-opacity="0.55"></path>
+      <path d="M160 200 C250 200 260 110 300 110 C340 110 350 200 440 200" fill="none" stroke="#3aa0ff" stroke-width="1.5"></path>
+    </svg>
+    <span style="position: absolute; left: 289px; top: 99px; width: 22px; height: 22px; border-radius: 9999px; background: #3aa0ff; box-shadow: 0 0 0 3px #eceaf0, 0 0 0 5px #17161a, 0 2px 8px rgba(0,0,0,0.6);" title="Band 3, soloed"></span>
+    <span style="position: absolute; left: 309px; top: 95px; width: 6px; height: 6px; border-radius: 9999px; background: #2fe0b0;" aria-hidden="true"></span>
+    <span class="amq-readout" style="position: absolute; left: 318px; top: 64px; box-shadow: 0 0 0 1px #3d3c43;"><span class="dot" style="background: #2fe0b0;"></span>Solo Gain +2.0 dB</span>
+    <span style="position: absolute; left: 124px; top: 222px; width: 18px; height: 18px; border-radius: 9999px; background: #ff4d4d; box-shadow: var(--shadow-handle); opacity: 0.5;"></span>
+    <span style="position: absolute; left: 511px; top: 143px; width: 18px; height: 18px; border-radius: 9999px; background: #7d62ff; box-shadow: var(--shadow-handle); opacity: 0.5;"></span>
+    <div class="amq-panel" style="position: absolute; left: 16px; bottom: 16px; display: flex; align-items: center; gap: 12px; padding: 8px 12px;">
+      <span style="position: relative; display: inline-grid;">
+        <button class="amq-icon" aria-label="Solo on" aria-pressed="true" style="background: #2b2a30;"><svg viewBox="0 0 16 16" style="stroke: #ffb81c;"><path d="M3 10 V8 A5 5 0 0 1 13 8 V10"></path><rect x="2" y="10" width="3" height="4" rx="1"></rect><rect x="11" y="10" width="3" height="4" rx="1"></rect></svg></button>
+        <span style="position: absolute; right: 2px; top: 2px; width: 8px; height: 8px; border-radius: 9999px; background: #2fe0b0;" aria-hidden="true"></span>
+      </span>
+      <span style="font: 500 13px/16px var(--font-sans);">Solo on</span>
+      <span style="width: 1px; height: 20px; background: #3d3c43;"></span>
+      <span style="display: flex; align-items: center; gap: 8px; font: 500 13px/16px var(--font-sans);"><span style="color: var(--ink-muted); font: 600 10px/12px var(--font-sans); letter-spacing: 0.04em;">#3</span><span style="width: 10px; height: 10px; border-radius: 9999px; background: #3aa0ff;"></span>Bell · Solo<span style="width: 8px; height: 8px; border-radius: 9999px; background: #2fe0b0;"></span></span>
+    </div>
+  </section>
+
+  <!-- Inline value editor -->
+  <section class="tile" aria-label="Inline value editor">
+    <span class="tcap">INLINE VALUE EDITOR · DOUBLE-CLICK A NODE</span>
+    <svg width="604" height="344" viewBox="0 0 604 344" style="position: absolute; left: 0; top: 0;" aria-hidden="true">
+      <path d="M0 96 H604 M0 148 H604 M0 252 H604 M0 304 H604 M120 40 V330 M300 40 V330 M480 40 V330" stroke="#26252b" stroke-width="1"></path>
+      <path d="M0 200 H604" stroke="#8f8d96" stroke-width="1"></path>
+      <path d="M60 200 C150 200 160 130 200 130 C240 130 250 200 340 200 Z" fill="#3aa0ff" fill-opacity="0.55"></path>
+      <path d="M60 200 C150 200 160 130 200 130 C240 130 250 200 340 200" fill="none" stroke="#3aa0ff" stroke-width="1.5"></path>
+    </svg>
+    <span style="position: absolute; left: 189px; top: 119px; width: 22px; height: 22px; border-radius: 9999px; background: #3aa0ff; box-shadow: 0 0 0 3px #eceaf0, 0 0 0 5px #17161a, 0 2px 8px rgba(0,0,0,0.6);"></span>
+    <div role="group" aria-label="Edit band 3" style="position: absolute; left: 218px; top: 86px; display: flex; align-items: center; gap: 8px; padding: 3px 8px; border-radius: 4px; background: #201f24; box-shadow: 0 0 0 1px #3d3c43;">
+      <label style="display: flex; align-items: center; gap: 4px;"><span class="fld" style="box-shadow: 0 0 0 2px #ffb81c;"><span style="background: #3aa0ff; color: #0d0d10;">1.82 kHz</span></span></label>
+      <span style="color: var(--ink-muted);">·</span>
+      <span class="fld">+4.5 dB</span>
+      <span style="color: var(--ink-muted);">·</span>
+      <span class="fld">Q 0.71</span>
+    </div>
+    <div style="position: absolute; left: 380px; top: 72px; display: flex; flex-direction: column; gap: 6px; font: 400 12px/16px var(--font-sans); color: var(--ink-muted); width: 200px;">
+      <span>Enter commits · Tab next field · Esc cancels</span>
+      <span>Accepts 1.2k, 1200, 1.2 kHz, −3, +3 dB</span>
+    </div>
+    <div style="position: absolute; left: 16px; bottom: 16px; display: flex; gap: 24px; align-items: flex-end;">
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <span style="font: 600 12px/14px var(--font-sans); letter-spacing: 0.06em; color: var(--ink-muted);">INVALID TEXT</span>
+        <span class="fld" style="box-shadow: 0 0 0 2px #ff3b30;">4.5x dB</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 6px; align-items: center;">
+        <span style="font: 600 12px/14px var(--font-sans); letter-spacing: 0.06em; color: var(--ink-muted);">KNOB VALUE (CLICK)</span>
+        <span class="lbl" style="font: 600 12px/14px var(--font-sans); letter-spacing: 0.06em;">GAIN</span>
+        <span class="fld" style="box-shadow: 0 0 0 2px #ffb81c; color: #ffb81c; text-align: center;">+4.5 dB</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Side-chain filter popover -->
+  <section class="tile" aria-label="Side-chain filter popover">
+    <span class="tcap">SIDE-CHAIN FILTER · FREE MODE, BAND #4</span>
+    <svg width="604" height="344" viewBox="0 0 604 344" style="position: absolute; left: 0; top: 0;" aria-hidden="true">
+      <path d="M0 96 H604 M0 148 H604 M0 252 H604 M0 304 H604 M120 40 V330 M300 40 V330 M480 40 V330" stroke="#26252b" stroke-width="1"></path>
+      <rect x="250" y="40" width="190" height="290" fill="#5b6e8a" fill-opacity="0.12"></rect>
+      <path d="M250 40 V330 M440 40 V330" stroke="#5b6e8a" stroke-width="1"></path>
+      <path d="M0 200 H604" stroke="#8f8d96" stroke-width="1"></path>
+      <path d="M260 200 C320 200 330 236 345 236 C360 236 370 200 430 200 Z" fill="#d84cf2" fill-opacity="0.55"></path>
+      <path d="M260 200 C320 200 330 236 345 236 C360 236 370 200 430 200" fill="none" stroke="#d84cf2" stroke-width="1.5"></path>
+    </svg>
+    <span style="position: absolute; left: 334px; top: 225px; width: 22px; height: 22px; border-radius: 9999px; background: #d84cf2; box-shadow: 0 0 0 3px #eceaf0, 0 0 0 5px #17161a, 0 2px 8px rgba(0,0,0,0.6);"></span>
+    <span style="position: absolute; left: 247px; top: 52px; width: 7px; height: 22px; border-radius: 4px; background: #5b6e8a; cursor: ew-resize;" title="Drag the low edge"></span>
+    <span style="position: absolute; left: 437px; top: 52px; width: 7px; height: 22px; border-radius: 4px; background: #5b6e8a; cursor: ew-resize;" title="Drag the high edge"></span>
+    <section class="amq-panel" aria-label="Side-chain filter" style="position: absolute; left: 24px; top: 60px; width: 220px; box-sizing: border-box; padding: 12px; display: flex; flex-direction: column; gap: 8px;">
+      <div role="group" aria-label="Side-chain filter mode" style="display: flex; gap: 2px; padding: 2px; border-radius: 8px; background: #0d0d10;"><button class="seg">Band</button><button class="seg on" aria-pressed="true">Free</button></div>
+      <div style="display: flex; align-items: center; justify-content: space-between; font: 500 13px/16px var(--font-sans);"><span>Low</span><span class="amq-readout" style="cursor: ew-resize;">2.50 kHz</span></div>
+      <div style="display: flex; align-items: center; justify-content: space-between; font: 500 13px/16px var(--font-sans);"><span>High</span><span class="amq-readout" style="cursor: ew-resize;">6.00 kHz</span></div>
+    </section>
+    <section class="amq-panel" aria-label="Side-chain filter, band mode" style="position: absolute; left: 24px; bottom: 16px; width: 220px; box-sizing: border-box; padding: 12px; display: flex; flex-direction: column; gap: 8px;">
+      <div role="group" aria-label="Side-chain filter mode" style="display: flex; gap: 2px; padding: 2px; border-radius: 8px; background: #0d0d10;"><button class="seg on" aria-pressed="true">Band</button><button class="seg">Free</button></div>
+      <span style="font: 400 12px/16px var(--font-sans); color: var(--ink-muted);">Follows the band: 120–270 Hz</span>
+    </section>
+  </section>
+
+  <!-- One-band menu -->
+  <section class="tile" aria-label="Band menu for one band">
+    <span class="tcap">BAND MENU · ONE BAND</span>
+    <div role="menu" aria-label="Band menu, band 3" class="amq-panel" style="position: absolute; left: 24px; top: 40px; width: 196px; padding: 6px; display: flex; flex-direction: column;">
+      <span style="padding: 6px 10px; font: 600 12px/14px var(--font-sans); letter-spacing: 0.06em; color: var(--ink-muted);">BAND #3 · BELL</span>
+      <button class="mi" role="menuitemcheckbox" aria-checked="true"><svg viewBox="0 0 16 16"><path d="M3 8.5 L6.5 12 L13 4.5" style="stroke: #ffb81c;"></path></svg>Enabled<span class="k">Alt-click</span></button>
+      <button class="mi" role="menuitem"><svg viewBox="0 0 16 16"><path d="M2 8 C5 8 5 3 8 3 M8 13 C11 13 11 8 14 8"></path></svg>Invert Gain</button>
+      <button class="mi" role="menuitemcheckbox" aria-checked="false"><svg viewBox="0 0 16 16"><path d="M8 3 V13 M5 6 L8 3 L11 6"></path></svg>Make Dynamic</button>
+      <button class="mi" role="menuitemcheckbox" aria-checked="false"><svg viewBox="0 0 16 16"><path d="M2 12 V9 M5 12 V6 M8 12 V8 M11 12 V4 M14 12 V7"></path></svg>Make Spectral</button>
+      <div class="sep"></div>
+      <button class="mi" role="menuitem" aria-haspopup="true"><svg viewBox="0 0 16 16"><path d="M1 12 C5 12 6 4 8 4 C10 4 11 12 15 12"></path></svg>Shape<span class="k">▸</span></button>
+      <button class="mi" role="menuitem" aria-haspopup="true"><svg viewBox="0 0 16 16"><path d="M2 4 L14 12"></path></svg>Slope<span class="k">▸</span></button>
+      <button class="mi" role="menuitem" aria-haspopup="true" aria-expanded="true" style="background: #2b2a30;"><svg viewBox="0 0 16 16"><circle cx="6" cy="8" r="4"></circle><circle cx="10" cy="8" r="4"></circle></svg>Placement<span class="k">▸</span></button>
+    </div>
+    <div role="menu" aria-label="Placement" class="amq-panel" style="position: absolute; left: 224px; top: 140px; width: 160px; padding: 6px; display: flex; flex-direction: column;">
+      <button class="mi" role="menuitemradio" aria-checked="true" style="background: #2b2a30;"><span style="width: 14px; height: 14px; border-radius: 9999px; box-shadow: inset 0 0 0 4px #ffb81c;"></span>Stereo</button>
+      <button class="mi" role="menuitemradio" aria-checked="false"><span style="width: 14px; height: 14px; border-radius: 9999px; box-shadow: inset 0 0 0 1.5px #a5a3ad;"></span>Left</button>
+      <button class="mi" role="menuitemradio" aria-checked="false"><span style="width: 14px; height: 14px; border-radius: 9999px; box-shadow: inset 0 0 0 1.5px #a5a3ad;"></span>Right</button>
+      <button class="mi" role="menuitemradio" aria-checked="false"><span style="width: 14px; height: 14px; border-radius: 9999px; box-shadow: inset 0 0 0 1.5px #a5a3ad;"></span>Mid</button>
+      <button class="mi" role="menuitemradio" aria-checked="false"><span style="width: 14px; height: 14px; border-radius: 9999px; box-shadow: inset 0 0 0 1.5px #a5a3ad;"></span>Side</button>
+    </div>
+    <span style="position: absolute; left: 404px; top: 48px; width: 180px; font: 400 12px/16px var(--font-sans); color: var(--ink-muted);">The caption names one band and its shape. The other groups match the two-band menu on the Interactions board: Cut, Copy, Paste, Select All, then Split (disabled) and Delete.</span>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":760}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

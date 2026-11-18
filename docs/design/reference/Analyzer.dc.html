@@ -41,7 +41,7 @@ button:focus-visible{outline:2px solid #ffb81c;outline-offset:2px}
       </defs>
       <g stroke="#26252b" stroke-width="1">
         <path d="M102 24 V648 M237 24 V648 M339 24 V648 M442 24 V648 M577 24 V648 M679 24 V648 M781 24 V648 M916 24 V648 M1018 24 V648 M1120 24 V648"></path>
-        <path d="M0 93 H1180 M0 163 H1180 M0 232 H1180 M0 301 H1180 M0 371 H1180 M0 440 H1180 M0 509 H1180 M0 579 H1180"></path>
+        <path d="M0 24 H1180 M0 76 H1180 M0 128 H1180 M0 180 H1180 M0 232 H1180 M0 284 H1180 M0 388 H1180 M0 440 H1180 M0 492 H1180 M0 544 H1180 M0 596 H1180 M0 648 H1180"></path>
       </g>
       <path d="M0 209 L17 186 L34 192 L51 185 L67 186 L84 179 L101 163 L118 169 L135 156 L152 115 L169 131 L185 92 L202 84 L219 97 L236 98 L253 96 L270 97 L287 86 L303 72 L320 66 L337 66 L354 75 L371 89 L388 86 L405 93 L421 106 L438 97 L455 99 L472 128 L489 138 L506 164 L523 164 L539 172 L556 181 L573 179 L590 189 L607 221 L624 197 L641 205 L657 219 L674 202 L691 202 L708 222 L725 219 L742 242 L759 237 L775 255 L792 247 L809 247 L826 262 L843 289 L860 279 L877 292 L893 298 L910 301 L927 295 L944 315 L961 331 L978 313 L995 300 L1011 310 L1028 305 L1045 342 L1062 347 L1079 366 L1096 385 L1113 452 L1129 508 L1146 561 L1163 633 L1180 648 L0 648 Z" fill="#3a3940"></path>
       <path d="M140 648 L140 150 L245 92 L245 648 Z M800 648 L800 236 L880 262 L880 648 Z" fill="url(#coll)"></path>
@@ -72,11 +72,12 @@ button:focus-visible{outline:2px solid #ffb81c;outline-offset:2px}
       <div class="row"><span style="display: flex; flex-direction: column; gap: 2px;"><span>Collisions</span><span style="font: 400 12px/16px var(--font-sans); color: var(--ink-muted);">Where input and side chain overlap</span></span><button class="chip on" aria-pressed="true">On</button></div>
       <div style="height: 1px; background: var(--line-hairline);"></div>
       <span style="font: 500 13px/16px var(--font-sans); color: var(--ink-muted);">Resolution (FFT size)</span>
-      <div role="group" aria-label="Analyzer resolution" style="display: flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--surface-000);"><button class="seg">2048</button><button class="seg on" aria-pressed="true">4096</button><button class="seg">8192</button><button class="seg">16384</button></div>
+      <div role="group" aria-label="Analyzer resolution" style="display: flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--surface-000);"><button class="seg">Low</button><button class="seg on" aria-pressed="true">Medium</button><button class="seg">High</button><button class="seg">Max</button></div>
+      <span style="font: 400 12px/16px var(--font-sans); color: var(--ink-muted);">4096-point FFT at 48 kHz</span>
       <span style="font: 500 13px/16px var(--font-sans); color: var(--ink-muted);">Speed</span>
-      <div role="group" aria-label="Analyzer speed" style="display: flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--surface-000);"><button class="seg">Slow</button><button class="seg on" aria-pressed="true">Medium</button><button class="seg">Fast</button></div>
+      <div role="group" aria-label="Analyzer speed" style="display: flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--surface-000);"><button class="seg" aria-label="Very Slow">V. Slow</button><button class="seg">Slow</button><button class="seg on" aria-pressed="true">Medium</button><button class="seg">Fast</button><button class="seg" aria-label="Very Fast">V. Fast</button></div>
       <div class="row"><span>Tilt</span>
-        <button class="amq-select" style="min-width: 0; height: 28px;" aria-label="Analyzer tilt"><span>4.5 dB/oct</span><svg class="chev" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5 L6 7.5 L9 4.5"></path></svg></button>
+        <span style="display: inline-flex; align-items: center; gap: 4px;"><span class="amq-readout" role="slider" tabindex="0" aria-label="Analyzer tilt" aria-valuemin="0" aria-valuemax="6" aria-valuenow="4.5" title="Drag to change, double-click to type" style="cursor: ns-resize;">4.5 dB/oct</span><button class="amq-icon" aria-label="Tilt presets" title="0 · 1.5 · 3 · 4.5 · 6 dB/oct"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5 L6 7.5 L9 4.5"></path></svg></button></span>
       </div>
       <div class="row"><span>Range</span>
         <button class="amq-select" style="min-width: 0; height: 28px;" aria-label="Analyzer range"><span>90 dB</span><svg class="chev" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5 L6 7.5 L9 4.5"></path></svg></button>
@@ -88,6 +89,9 @@ button:focus-visible{outline:2px solid #ffb81c;outline-offset:2px}
       <span style="font: 500 13px/16px var(--font-sans); color: var(--ink-muted);">Scale</span>
       <div role="group" aria-label="Interface scale" style="display: flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--surface-000);"><button class="seg">100 %</button><button class="seg on" aria-pressed="true">150 %</button><button class="seg">200 %</button><button class="seg">300 %</button></div>
       <span style="font: 400 12px/16px var(--font-sans); color: var(--ink-muted);">Drag the window corner for any size in between.</span>
+      <div style="height: 1px; background: var(--line-hairline);"></div>
+      <div class="row"><span>Display range</span><button class="amq-select" style="min-width: 0; height: 28px;" aria-label="Display range" title="±3 · ±6 · ±12 · ±30 dB"><span>±12 dB</span><svg class="chev" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5 L6 7.5 L9 4.5"></path></svg></button></div>
+      <div class="row"><span style="display: flex; flex-direction: column; gap: 2px;"><span>Gain-Q coupling</span></span><button class="chip" aria-pressed="false">Off</button></div>
     </section>
   </main>
 
