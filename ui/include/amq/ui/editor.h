@@ -3,12 +3,12 @@
 // (docs/plan/decisions.md D1). The plugin creates it on gui.create, attaches it on
 // gui.set_parent and destroys it on gui.destroy, all on the main thread.
 //
-// Content: the response graph (cached ground, the analyzer spectra, the combined curve, band nodes
-// with selection, range handles and gain-reduction rings) driven by GraphInteraction; keys through
-// KeyDispatcher (focus first, then host fall-through); right-click band and graph menus; and the
-// band panel (BandPanel model) with output meters and analyzer toggles. Every edit goes through the
-// UndoController (set(id, plain, GUI) with host gestures; GUI edits are undoable). The layout is
-// PROVISIONAL until the Product designer's region map and the Legal UI review.
+// Content and layout follow docs/design/editor-spec.md (bars, the response graph over the analyzer,
+// the floating band panel, menus and popovers, EQ Match mode), with the region map in
+// EditorLayout. Graph input goes through GraphInteraction, keys through KeyDispatcher (focus first,
+// then host fall-through). Every edit goes through the UndoController (set(id, plain, GUI) with host
+// gestures; GUI edits are undoable). The design still needs the Product designer's sign-off on the
+// spec's PROPOSED items and the Legal UI review.
 //
 // Sizing (area 12 R16). Layout is in logical pixels. The host talks in "host units": physical
 // pixels on Windows and Linux, points on macOS (clap/ext/gui.h), so the host-unit scale is the
@@ -29,7 +29,7 @@ namespace amq::ui {
 
 class Editor {
 public:
-    // Logical pixels. Default and limits are PROVISIONAL until the Product designer's region map.
+    // Logical pixels. Default and limits are PROVISIONAL (spec C-1: the boards are 1280x760).
     static constexpr uint32_t kDefaultWidth = 1180;
     static constexpr uint32_t kDefaultHeight = 672;
     static constexpr uint32_t kMinWidth = 640;

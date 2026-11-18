@@ -21,6 +21,7 @@ amq_set_warnings(amq_ui_model)
 if(AMQ_BUILD_PLUGIN)
     add_library(amq_ui STATIC
         src/editor.cpp
+        src/editor_theme.cpp
         src/file_dialog.cpp)
     if(WIN32)
         target_link_libraries(amq_ui PRIVATE comdlg32)

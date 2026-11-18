@@ -53,6 +53,9 @@ struct EditorLayout {
          hideAnalyzerCaption = false;
 
     static EditorLayout compute(float width, float height, const PanelContent& content);
+    // A knob's column is as wide as its knob or its caption, whichever is wider (the board's flex
+    // columns). Captions are 12 px semibold capitals with 0.06em tracking: about 8 px a character.
+    static float knobSlot(float size, int captionChars) { return size > captionChars * 8.0f ? size : captionChars * 8.0f; }
 };
 
 }  // namespace amq::ui

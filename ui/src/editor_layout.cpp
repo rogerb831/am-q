@@ -39,8 +39,11 @@ void panelGeometry(EditorLayout& L, const PanelContent& c) {
     p.row1H = std::max({colA, colD, knobH + E::kKnobText});
     p.dynRowW = 0.0f, p.row2H = 0.0f;
     if (c.dynamic) {
-        int n = 3 + (c.rangeKnob ? 1 : 0) + (c.spectral ? 1 : 0);
-        const float dyn = 24.0f + n * p.knobDyn + (n - 1) * E::kDynGap;
+        // RANGE, THRESHOLD, ATTACK, RELEASE, DENSITY
+        float dyn = 24.0f - E::kDynGap;
+        if (c.rangeKnob) dyn += E::kDynGap + E::knobSlot(p.knobDyn, 5);
+        dyn += 3.0f * E::kDynGap + E::knobSlot(p.knobDyn, 9) + E::knobSlot(p.knobDyn, 6) + E::knobSlot(p.knobDyn, 7);
+        if (c.spectral) dyn += E::kDynGap + E::knobSlot(p.knobDyn, 7);
         const float sc = 14.0f + 8.0f + 28.0f + 8.0f + 28.0f + (c.spectral ? 8.0f + 28.0f : 0.0f);
         p.dynRowW = dyn + E::kColGap + E::kColumn;
         p.row2H = std::max(sc, 28.0f + 8.0f + p.knobDyn + E::kKnobText);

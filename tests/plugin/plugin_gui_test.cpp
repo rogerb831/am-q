@@ -65,15 +65,15 @@ struct Events {
     }
 };
 
-// Graph geometry of the editor (ui/include/amq/ui/graph_model.hpp, default size, +/-12 dB). The
-// graph fills the window above the band panel (ui/src/editor.cpp kPanelHeight).
+// Graph geometry of the editor (docs/design/editor-spec.md §1.1; ui/include/amq/ui/editor_layout.hpp
+// and graph_model.hpp): the graph sits between the 44 px bars, its plot runs from the left edge to
+// a 100 px gutter with 24 px top and bottom insets, over 10 Hz to 30 kHz and +/-12 dB.
 double kW = 1180, kH = 672;  // logical editor size; changed by the resize test
-constexpr double kLeft = 16, kRight = 56, kTop = 16, kBottom = 32, kRange = 12, kPanel = 176;
-double graphH() { return std::max(120.0, kH - kPanel); }
-double xOfHz(double hz) { return kLeft + std::log(hz / 20.0) / std::log(1000.0) * (kW - kLeft - kRight); }
+constexpr double kBar = 44, kInset = 24, kGutter = 100, kRange = 12;
+double xOfHz(double hz) { return (kW - kGutter) * std::log(hz / 10.0) / std::log(3000.0); }
 double yOfDb(double db) {
-    const double mid = kTop + 0.5 * (graphH() - kTop - kBottom);
-    return mid - db / kRange * 0.5 * (graphH() - kTop - kBottom);
+    const double plotH = kH - 2 * kBar - 2 * kInset;
+    return kBar + kInset + 0.5 * plotH - db / kRange * 0.5 * plotH;
 }
 
 size_t privateBytes() {
@@ -236,13 +236,14 @@ int main(int argc, char** argv) {
     // 3b. The EQ Match panel opens lazily from its panel button (area 12) and draws its overlay; the
     // editor keeps running (no crash, still one live editor) and closes it again.
     {
-        const double bx = kW - 150 + 60 + 20, by = graphH() + 12 + 3 * 28 + 12;
+        // The top bar's EQ Match button (spec §2.1); in EQ Match mode it sits at the right edge.
+        const double bx = kW - 24 - 28 - 8 - 28 - 8 - 50, by = 22, bx2 = kW - 24 - 40;
         post(WM_LBUTTONDOWN, MK_LBUTTON, bx, by);
         post(WM_LBUTTONUP, 0, bx, by);
         pump(200);
         check(IsWindow(gChild) != 0, "EQ Match panel opens without disturbing the editor");
-        post(WM_LBUTTONDOWN, MK_LBUTTON, bx, by);
-        post(WM_LBUTTONUP, 0, bx, by);
+        post(WM_LBUTTONDOWN, MK_LBUTTON, bx2, by);
+        post(WM_LBUTTONUP, 0, bx2, by);
         pump(100);
         check(IsWindow(gChild) != 0, "EQ Match panel closes again");
     }
@@ -282,6 +283,11 @@ int main(int argc, char** argv) {
             if (!std::strcmp(info.name, "Band 2 Frequency")) freq2 = info.id;
             if (!std::strcmp(info.name, "Band 2 Gain")) gain2 = info.id;
         }
+        // Clear the selection first: while a band is selected the floating band panel covers the
+        // lower plot (editor-spec §1.1).
+        post(WM_LBUTTONDOWN, MK_LBUTTON, xOfHz(5000.0), yOfDb(10.0));
+        post(WM_LBUTTONUP, 0, xOfHz(5000.0), yOfDb(10.0));
+        pump(600);
         const double x2 = xOfHz(200.0), y2 = yOfDb(-6.0);
         post(WM_MOUSEMOVE, 0, x2, y2);
         pump(30);

@@ -46,10 +46,12 @@ TEST_CASE("Band panel sizes by band state (panels §2.3)") {
     CHECK(L.panel.rect.h == doctest::Approx(166));
     CHECK(L.panel.rect.bottom() == doctest::Approx(672 - 32));
     CHECK(L.panel.rect.x == doctest::Approx((1280 - 632) / 2.0));
+    // Dynamics knob columns widen to their captions (THRESHOLD 72, RELEASE and DENSITY 56), as the
+    // board's flex columns do: 1080 and 1140 at the board's nominal 48 px, 1112 and 1180 here.
     c.dynamic = true;
-    CHECK(EditorLayout::compute(1280, 760, c).panel.rect.w == doctest::Approx(1080));
+    CHECK(EditorLayout::compute(1280, 760, c).panel.rect.w == doctest::Approx(1112));
     c.spectral = true;
-    CHECK(EditorLayout::compute(1280, 760, c).panel.rect.w == doctest::Approx(1140));
+    CHECK(EditorLayout::compute(1280, 760, c).panel.rect.w == doctest::Approx(1180));
     PanelContent cut;
     cut.band = true, cut.gain = false;
     CHECK(EditorLayout::compute(1280, 760, cut).panel.rect.w == doctest::Approx(528));
@@ -58,7 +60,7 @@ TEST_CASE("Band panel sizes by band state (panels §2.3)") {
 TEST_CASE("Reflow: wrapping, compact and strip modes, bar collapse (spec §1.2)") {
     PanelContent c;
     c.band = true, c.dynamic = true, c.spectral = true;
-    auto L = EditorLayout::compute(1100, 760, c);  // 1140 + 48 > 1100
+    auto L = EditorLayout::compute(1100, 760, c);  // 1180 + 48 > 1100
     CHECK(L.panel.wrapped);
     CHECK(L.panel.rect.w <= 1100 - 48);
     L = EditorLayout::compute(1180, 560, c);  // graph 472 high: compact
@@ -73,7 +75,7 @@ TEST_CASE("Reflow: wrapping, compact and strip modes, bar collapse (spec §1.2)"
     CHECK(L.hideAnalyzerCaption);
     L = EditorLayout::compute(3840, 2160, c);
     CHECK(L.panel.mode == PanelMode::Full);
-    CHECK(L.panel.rect.w == doctest::Approx(1140));  // the panel never scales with the window
+    CHECK(L.panel.rect.w == doctest::Approx(1180));  // the panel never scales with the window
     CHECK(L.plot.w == 3740);
     CHECK_FALSE(L.matchGlyphOnly);
 }

@@ -51,6 +51,7 @@ public:
     void endEdit(params::ParamIndex index) override;
     void setEditSource(params::ParamSource s) override { editSource_ = s; }
     ui::MatchHost* matchHost() noexcept override { return &match_; }
+    [[nodiscard]] double sampleRate() const noexcept override { return engine_.sampleRate(); }
 
 protected:
     // clap_plugin
