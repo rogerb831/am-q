@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Am-Q EQ Match</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="ds/am-q/components/bundle.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap">
+<style>
+:root{--surface-000:#0d0d10;--surface-100:#17161a;--surface-200:#201f24;--surface-300:#2b2a30;--surface-400:#37363d;--line-grid:#26252b;--line-hairline:#3d3c43;--line-zero:#8f8d96;--ink:#eceaf0;--ink-muted:#a5a3ad;--ink-axis:#8c8a93;--ink-disabled:#5e5c66;--accent:#ffb81c;--accent-hover:#ffc94d;--accent-ink:#1a1305;--focus:#ffb81c;--analyzer-pre:#3a3940;--analyzer-post:#7c7a84;--analyzer-sc:#5b6e8a;--font-sans:"Inter","Segoe UI",system-ui,sans-serif;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-6:24px;--space-8:32px;--radius-sm:4px;--radius-md:8px;--radius-lg:16px;--radius-full:9999px;--size-handle:18px;--size-bar:44px;--shadow-panel:0 16px 40px rgba(0,0,0,0.55),0 0 0 1px #3d3c43;--shadow-handle:0 0 0 2px #17161a,0 2px 6px rgba(0,0,0,0.6)}
+body{margin:0;background:#17161a}
+a{color:#ffb81c}a:hover{color:#ffc94d}
+button{font-family:inherit;cursor:pointer}
+button:focus-visible{outline:2px solid #ffb81c;outline-offset:2px}
+.chip{height:28px;padding:0 10px;border-radius:8px;border:0;background:#2b2a30;color:#eceaf0;font:600 13px/16px "Inter",sans-serif}
+.chip:hover{background:#37363d}
+.chip.on{background:#ffb81c;color:#1a1305}
+</style>
+</helmet>
+<div style="width: 1280px; height: 760px; display: flex; flex-direction: column; background: var(--surface-100); color: var(--ink); font-family: var(--font-sans); font-variant-numeric: tabular-nums; overflow: hidden;">
+
+  <header class="amq-bar" style="justify-content: space-between; flex-shrink: 0; position: relative;">
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <span class="amq-wordmark" aria-label="Am-Q" role="img">Am-<svg viewBox="0 0 64 64" aria-hidden="true" style="width: 1em; height: 1em; vertical-align: -0.2em;"><circle cx="28" cy="28" r="17.5" fill="none" stroke="#ffb81c" stroke-width="11"></circle><path d="M37 37 C39.5 39.5 40.5 42.5 42.5 44.5" fill="none" stroke="#ffb81c" stroke-width="11" stroke-linecap="round"></path><circle cx="56" cy="56" r="7" fill="#ffb81c"></circle></svg></span>
+    </div>
+    <div style="position: absolute; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px;">
+      <span class="amq-preset" style="min-width: 0;">Vocal Air Lift</span>
+      <span style="font: 400 12px/16px var(--font-sans); color: var(--ink-muted);">(edited)</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <a href="Main.dc.html" style="display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; border-radius: 8px; background: #ffb81c; color: #1a1305; font: 600 13px/16px var(--font-sans); text-decoration: none;" aria-current="page">EQ Match</a>
+    </div>
+  </header>
+
+  <main style="position: relative; flex-grow: 1; overflow: hidden;" aria-label="EQ Match graph">
+    <svg width="1280" height="672" viewBox="0 0 1280 672" style="position: absolute; left: 0; top: 0;" aria-hidden="true">
+      <g stroke="#26252b" stroke-width="1">
+        <path d="M102 24 V648 M237 24 V648 M339 24 V648 M442 24 V648 M577 24 V648 M679 24 V648 M781 24 V648 M916 24 V648 M1018 24 V648 M1120 24 V648"></path>
+        <path d="M0 24 H1180 M0 76 H1180 M0 128 H1180 M0 180 H1180 M0 232 H1180 M0 284 H1180 M0 388 H1180 M0 440 H1180 M0 492 H1180 M0 544 H1180 M0 596 H1180 M0 648 H1180"></path>
+      </g>
+      <path d="M0 336 H1180" stroke="#8f8d96" stroke-width="1"></path>
+      <path d="M0 206 L8 202 L17 204 L25 197 L34 191 L42 203 L51 213 L59 195 L67 197 L76 199 L84 177 L93 173 L101 158 L110 156 L118 148 L126 155 L135 144 L143 127 L152 121 L160 108 L169 98 L177 106 L185 89 L194 77 L202 74 L211 88 L219 76 L228 80 L236 75 L244 67 L253 66 L261 66 L270 68 L278 66 L287 70 L295 66 L303 66 L312 72 L320 85 L329 93 L337 77 L346 80 L354 78 L362 87 L371 90 L379 97 L388 105 L396 106 L405 108 L413 102 L421 105 L430 101 L438 101 L447 98 L455 105 L464 128 L472 125 L480 119 L489 118 L497 127 L506 130 L514 149 L523 145 L531 151 L539 164 L548 182 L556 173 L565 162 L573 182 L582 176 L590 184 L598 199 L607 206 L615 199 L624 190 L632 209 L641 207 L649 224 L657 217 L666 224 L674 214 L683 203 L691 210 L700 201 L708 216 L716 235 L725 236 L733 256 L742 267 L750 271 L759 269 L767 283 L775 298 L784 286 L792 295 L801 283 L809 275 L818 286 L826 293 L834 296 L843 295 L851 296 L860 298 L868 297 L877 287 L885 292 L893 298 L902 295 L910 307 L919 315 L927 301 L936 305 L944 308 L952 327 L961 331 L969 330 L978 347 L986 343 L995 340 L1003 356 L1011 351 L1020 353 L1028 347 L1037 353 L1045 347 L1054 341 L1062 359 L1070 371 L1079 363 L1087 347 L1096 378 L1104 403 L1113 425 L1121 458 L1129 490 L1138 524 L1146 559 L1155 587 L1163 628 L1172 648 L1180 648" fill="none" stroke="#7c7a84" stroke-width="1.5"></path>
+      <path d="M0 203 L8 212 L17 203 L25 213 L34 206 L42 206 L51 214 L59 206 L67 213 L76 206 L84 210 L93 212 L101 202 L110 180 L118 183 L126 180 L135 165 L143 140 L152 130 L160 126 L169 102 L177 109 L185 87 L194 84 L202 83 L211 90 L219 93 L228 80 L236 89 L244 84 L253 79 L261 83 L270 81 L278 94 L287 106 L295 111 L303 102 L312 103 L320 108 L329 105 L337 108 L346 115 L354 108 L362 105 L371 118 L379 119 L388 122 L396 115 L405 114 L413 127 L421 117 L430 136 L438 142 L447 138 L455 153 L464 155 L472 171 L480 166 L489 159 L497 159 L506 151 L514 162 L523 160 L531 162 L539 164 L548 170 L556 164 L565 156 L573 165 L582 167 L590 187 L598 184 L607 184 L615 174 L624 172 L632 187 L641 196 L649 196 L657 216 L666 218 L674 230 L683 242 L691 253 L700 241 L708 251 L716 256 L725 256 L733 242 L742 255 L750 254 L759 251 L767 239 L775 231 L784 224 L792 236 L801 242 L809 249 L818 238 L826 228 L834 245 L843 258 L851 268 L860 276 L868 275 L877 272 L885 280 L893 295 L902 295 L910 297 L919 293 L927 279 L936 276 L944 279 L952 279 L961 277 L969 295 L978 285 L986 280 L995 274 L1003 272 L1011 283 L1020 292 L1028 309 L1037 307 L1045 324 L1054 338 L1062 346 L1070 354 L1079 356 L1087 368 L1096 401 L1104 429 L1113 460 L1121 484 L1129 521 L1138 532 L1146 557 L1155 600 L1163 640 L1172 648 L1180 648" fill="none" stroke="#5b6e8a" stroke-width="1.5"></path>
+      <path d="M0 350 L17 353 L34 356 L51 360 L67 375 L84 397 L101 409 L110 414 L118 407 L135 388 L152 369 L169 355 L185 351 L202 349 L219 360 L236 365 L253 373 L270 397 L287 410 L303 412 L320 412 L337 400 L354 399 L371 393 L388 381 L405 381 L421 396 L438 418 L455 438 L464 440 L480 430 L497 413 L514 384 L531 350 L548 330 L565 318 L582 310 L598 300 L615 297 L624 286 L641 297 L657 332 L674 373 L691 404 L700 413 L716 384 L733 342 L750 282 L767 237 L784 223 L801 204 L818 219 L834 236 L851 249 L868 285 L885 305 L902 305 L919 294 L936 259 L952 236 L969 208 L986 181 L1003 177 L1020 198 L1037 246 L1054 284 L1070 329 L1087 360 L1104 391 L1113 396 L1138 379 L1155 358 L1180 351" fill="none" stroke="#eceaf0" stroke-width="1" stroke-dasharray="4 3"></path>
+      <path d="M0 380 L101 381 L152 382 L202 383 L253 385 L303 383 L337 384 L354 387 L371 390 L388 391 L396 389 L405 386 L413 382 L421 377 L430 372 L438 367 L447 363 L455 358 L464 355 L480 348 L497 343 L514 338 L531 332 L548 326 L565 319 L582 311 L598 308 L615 311 L632 315 L649 318 L674 318 L691 316 L708 313 L725 308 L742 301 L759 293 L775 282 L792 269 L809 254 L826 241 L843 232 L851 231 L860 232 L877 242 L893 255 L910 269 L927 280 L944 289 L961 293 L978 293 L995 290 L1011 284 L1028 276 L1045 268 L1062 263 L1079 259 L1096 258 L1180 258" fill="none" stroke="#ffb81c" stroke-width="2"></path>
+      <g font-family="Inter, sans-serif" font-size="12" font-weight="500">
+        <g fill="#ffb81c" text-anchor="end">
+          <text x="1210" y="28">+18</text><text x="1210" y="132">+12</text><text x="1210" y="236">+6</text><text x="1210" y="340">0</text><text x="1210" y="444">−6</text><text x="1210" y="548">−12</text><text x="1210" y="652">−18</text>
+        </g>
+        <g fill="#8c8a93" text-anchor="middle">
+          <text x="102" y="664">20</text><text x="237" y="664">50</text><text x="339" y="664">100</text><text x="442" y="664">200</text><text x="577" y="664">500</text><text x="679" y="664">1k</text><text x="781" y="664">2k</text><text x="916" y="664">5k</text><text x="1018" y="664">10k</text><text x="1120" y="664">20k</text>
+        </g>
+      </g>
+    </svg>
+
+    <span style="position: absolute; left: 315px; top: 370px; width: 18px; height: 18px; border-radius: 9999px; background: #c4ee3c; box-shadow: var(--shadow-handle);" title="Fitted band 1, Low Shelf"></span>
+    <span style="position: absolute; left: 380px; top: 379px; width: 18px; height: 18px; border-radius: 9999px; background: #ff4d4d; box-shadow: var(--shadow-handle);" title="Fitted band 2, Bell"></span>
+    <span style="position: absolute; left: 841px; top: 223px; width: 18px; height: 18px; border-radius: 9999px; background: #3aa0ff; box-shadow: var(--shadow-handle);" title="Fitted band 3, Bell"></span>
+    <span style="position: absolute; left: 1001px; top: 249px; width: 18px; height: 18px; border-radius: 9999px; background: #d84cf2; box-shadow: var(--shadow-handle);" title="Fitted band 4, High Shelf"></span>
+    <span style="position: absolute; left: 584px; top: 301px; width: 18px; height: 18px; border-radius: 9999px; background: transparent; box-shadow: inset 0 0 0 2px #7d62ff, var(--shadow-handle); opacity: 0.6;" title="Fitted band 5, not applied"></span>
+
+    <div class="amq-panel" style="position: absolute; left: 24px; top: 24px; display: flex; gap: 16px; padding: 10px 14px; font: 500 13px/16px var(--font-sans);">
+      <span style="display: flex; align-items: center; gap: 8px;"><svg width="20" height="8" aria-hidden="true"><path d="M0 4 H20" stroke="#7c7a84" stroke-width="1.5"></path></svg>Input</span>
+      <span style="display: flex; align-items: center; gap: 8px;"><svg width="20" height="8" aria-hidden="true"><path d="M0 4 H20" stroke="#5b6e8a" stroke-width="1.5"></path></svg>Reference</span>
+      <span style="display: flex; align-items: center; gap: 8px;"><svg width="20" height="8" aria-hidden="true"><path d="M0 4 H20" stroke="#eceaf0" stroke-width="1" stroke-dasharray="4 3"></path></svg>Difference</span>
+      <span style="display: flex; align-items: center; gap: 8px;"><svg width="20" height="8" aria-hidden="true"><path d="M0 4 H20" stroke="#ffb81c" stroke-width="2"></path></svg>Match</span>
+    </div>
+
+    <section class="amq-panel" aria-label="EQ Match" style="position: absolute; left: 50%; bottom: 32px; transform: translateX(-50%); display: flex; align-items: stretch; gap: 24px; padding: 16px 20px;">
+      <div style="display: flex; flex-direction: column; gap: 8px; width: 170px;">
+        <span style="font: 600 12px/14px var(--font-sans); letter-spacing: 0.06em; color: var(--ink-muted);">1 · REFERENCE</span>
+        <button class="amq-select" style="width: 170px; min-width: 0;" aria-label="Reference source">
+          <span>Side-chain</span>
+          <svg class="chev" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5 L6 7.5 L9 4.5"></path></svg>
+        </button>
+        <span style="font: 400 12px/16px var(--font-sans); color: var(--ink-muted);">Or load an audio file. Another Am-Q instance: v2.</span>
+      </div>
+      <div style="width: 1px; background: var(--line-hairline);"></div>
+      <div style="display: flex; flex-direction: column; gap: 8px; width: 220px;">
+        <span style="font: 600 12px/14px var(--font-sans); letter-spacing: 0.06em; color: var(--ink-muted);">2 · CAPTURE</span>
+        <div style="display: flex; justify-content: space-between; font: 500 13px/16px var(--font-sans);"><span style="display: flex; gap: 8px; align-items: center;"><span style="width: 8px; height: 8px; border-radius: 9999px; background: #7c7a84;"></span>Input</span><span style="color: var(--ink-muted);">1,284 frames</span></div>
+        <div style="display: flex; justify-content: space-between; font: 500 13px/16px var(--font-sans);"><span style="display: flex; gap: 8px; align-items: center;"><span style="width: 8px; height: 8px; border-radius: 9999px; background: #5b6e8a;"></span>Reference</span><span style="color: var(--ink-muted);">1,301 frames</span></div>
+        <button class="amq-select" style="min-width: 0; width: 220px; height: 28px;" aria-label="Averaging window"><span style="color: var(--ink-muted);">Window</span><span>Last 10 s</span><svg class="chev" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5 L6 7.5 L9 4.5"></path></svg></button>
+        <div style="display: flex; gap: 8px;">
+          <button class="chip on" aria-pressed="true" style="flex-grow: 1;">Capturing</button>
+          <button class="chip" style="flex-grow: 1;">Reset</button>
+        </div>
+      </div>
+      <div style="width: 1px; background: var(--line-hairline);"></div>
+      <div style="display: flex; flex-direction: column; gap: 8px; width: 170px;">
+        <span style="font: 600 12px/14px var(--font-sans); letter-spacing: 0.06em; color: var(--ink-muted);">3 · ALIGN</span>
+        <div style="display: flex; justify-content: space-between; align-items: center; font: 500 13px/16px var(--font-sans);"><span>Level alignment</span><button class="chip on" aria-pressed="true">On</button></div>
+        <span style="font: 400 12px/16px var(--font-sans); color: var(--ink-muted);">Removes the loudness gap: −2.4 dB</span>
+        <button class="amq-select" style="min-width: 0; width: 170px; height: 28px;" aria-label="Smoothing"><span style="color: var(--ink-muted);">Smoothing</span><span>1/6 oct</span><svg class="chev" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5 L6 7.5 L9 4.5"></path></svg></button>
+      </div>
+      <div style="width: 1px; background: var(--line-hairline);"></div>
+      <div style="display: flex; flex-direction: column; gap: 8px; width: 240px;">
+        <span style="font: 600 12px/14px var(--font-sans); letter-spacing: 0.06em; color: var(--ink-muted);">4 · FIT</span>
+        <label style="display: flex; justify-content: space-between; font: 500 13px/16px var(--font-sans);" for="match-amount"><span>Amount</span><span style="color: var(--accent); font-weight: 600;">80 %</span></label>
+        <input id="match-amount" type="range" min="0" max="100" value="80" style="width: 240px; accent-color: #ffb81c;">
+        <label style="display: flex; justify-content: space-between; font: 500 13px/16px var(--font-sans);" for="bands-to-apply"><span>Bands to apply</span><span style="color: var(--accent); font-weight: 600;">4 of 5 fitted</span></label>
+        <input id="bands-to-apply" type="range" min="0" max="24" value="4" style="width: 240px; accent-color: #ffb81c;">
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 8px; justify-content: flex-end; width: 120px;">
+        <button style="height: 36px; border: 0; border-radius: 8px; background: #ffb81c; color: #1a1305; font: 600 13px/16px var(--font-sans);" title="Writes bands as one undo step">Apply</button>
+        <a href="Main.dc.html" style="height: 36px; border-radius: 8px; background: var(--surface-300); color: var(--ink); font: 600 13px/36px var(--font-sans); text-align: center; text-decoration: none;">Cancel</a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="amq-bar" style="flex-shrink: 0; justify-content: space-between;">
+    <span style="display: flex; gap: 12px; align-items: center;"><span>Fitting bands</span><span role="progressbar" aria-label="Fit progress" aria-valuenow="60" aria-valuemin="0" aria-valuemax="100" style="width: 160px; height: 6px; border-radius: 9999px; background: var(--surface-000); overflow: hidden; display: block;"><span style="display: block; width: 60%; height: 6px; background: #ffb81c;"></span></span><span style="color: var(--ink-muted);">60 %</span></span>
+    <span class="muted" style="color: var(--ink-muted);">Power average · frames below −90 dBFS skipped · Apply = one undo step</span>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":760}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

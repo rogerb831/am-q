@@ -1,0 +1,67 @@
+{
+  "v": 3,
+  "title": "Parametric EQ Plugin",
+  "launch": {
+    "view": "canvas"
+  },
+  "pages": [],
+  "boards": {
+    "Main.dc.html": {
+      "x": 0,
+      "y": 0,
+      "w": 1280,
+      "h": 760,
+      "title": "Editor: graph and band panel",
+      "is_interactive": true,
+      "radius": 12
+    },
+    "Match.dc.html": {
+      "x": 1360,
+      "y": 0,
+      "w": 1280,
+      "h": 760,
+      "title": "EQ Match",
+      "radius": 12
+    },
+    "Processing.dc.html": {
+      "x": 0,
+      "y": 880,
+      "w": 1280,
+      "h": 760,
+      "title": "Processing and output menu",
+      "radius": 12
+    },
+    "Analyzer.dc.html": {
+      "x": 1360,
+      "y": 880,
+      "w": 1280,
+      "h": 760,
+      "title": "Analyzer and interface settings",
+      "radius": 12
+    },
+    "Interactions.dc.html": {
+      "x": 0,
+      "y": 1760,
+      "w": 1280,
+      "h": 760,
+      "title": "Multi-select, band menu, band list",
+      "radius": 12
+    }
+  },
+  "order": [
+    "Main.dc.html",
+    "Match.dc.html",
+    "Processing.dc.html",
+    "Analyzer.dc.html",
+    "Interactions.dc.html"
+  ],
+  "notes": {
+    "t1": {
+      "x": 0,
+      "y": -300,
+      "text": "Am-Q: dynamic, analyzer-first EQ",
+      "kind": "title1",
+      "maxW": 2640
+    }
+  }
+}

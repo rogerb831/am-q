@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Am-Q band menu and selection</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="ds/am-q/components/bundle.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap">
+<style>
+:root{--surface-000:#0d0d10;--surface-100:#17161a;--surface-200:#201f24;--surface-300:#2b2a30;--surface-400:#37363d;--line-grid:#26252b;--line-hairline:#3d3c43;--line-zero:#8f8d96;--ink:#eceaf0;--ink-muted:#a5a3ad;--ink-axis:#8c8a93;--accent:#ffb81c;--accent-ink:#1a1305;--focus:#ffb81c;--font-sans:"Inter","Segoe UI",system-ui,sans-serif;--radius-sm:4px;--radius-md:8px;--radius-lg:16px;--radius-full:9999px;--size-bar:44px;--shadow-panel:0 16px 40px rgba(0,0,0,0.55),0 0 0 1px #3d3c43;--shadow-handle:0 0 0 2px #17161a,0 2px 6px rgba(0,0,0,0.6)}
+body{margin:0;background:#17161a}
+a{color:#ffb81c}a:hover{color:#ffc94d}
+button{font-family:inherit;cursor:pointer}
+button:focus-visible{outline:2px solid #ffb81c;outline-offset:2px}
+.mi{display:flex;align-items:center;gap:10px;width:100%;height:30px;padding:0 10px;border:0;border-radius:6px;background:transparent;color:#eceaf0;font:500 13px/16px "Inter",sans-serif;text-align:left}
+.mi:hover,.mi.hl{background:#2b2a30}
+.mi .k{margin-left:auto;color:#a5a3ad;font-size:12px}
+.mi svg{width:16px;height:16px;flex-shrink:0;fill:none;stroke:#eceaf0;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.mi .chk{stroke:#ffb81c}
+.mi.dis{color:#a5a3ad}
+.sep{height:1px;background:#3d3c43;margin:4px 6px}
+.cap{font:600 12px/14px "Inter",sans-serif;letter-spacing:0.06em;color:#a5a3ad;padding:6px 10px}
+.br{display:flex;align-items:center;gap:10px;width:100%;height:36px;padding:0 10px;border:0;border-radius:8px;background:transparent;color:#eceaf0;font:500 13px/16px "Inter",sans-serif;text-align:left}
+.br.sel{background:#2b2a30;box-shadow:inset 0 0 0 1px #3d3c43}
+.br .num{width:22px;color:#a5a3ad;font:600 10px/12px "Inter",sans-serif;letter-spacing:0.04em}
+.br .f{margin-left:auto;font-weight:600}
+.opt{height:28px;border:0;border-radius:6px;background:transparent;color:#eceaf0;font:500 13px/16px "Inter",sans-serif}
+.opt.on{background:#ffb81c;color:#1a1305;font-weight:600}
+.opt.dis{color:#a5a3ad}
+</style>
+</helmet>
+<div style="width: 1280px; height: 760px; display: flex; flex-direction: column; background: var(--surface-100); color: var(--ink); font-family: var(--font-sans); font-variant-numeric: tabular-nums; overflow: hidden;">
+
+  <header class="amq-bar" style="justify-content: space-between; flex-shrink: 0; position: relative;">
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <span class="amq-wordmark" aria-label="Am-Q" role="img">Am-<svg viewBox="0 0 64 64" aria-hidden="true" style="width: 1em; height: 1em; vertical-align: -0.2em;"><circle cx="28" cy="28" r="17.5" fill="none" stroke="#ffb81c" stroke-width="11"></circle><path d="M37 37 C39.5 39.5 40.5 42.5 42.5 44.5" fill="none" stroke="#ffb81c" stroke-width="11" stroke-linecap="round"></path><circle cx="56" cy="56" r="7" fill="#ffb81c"></circle></svg></span>
+    </div>
+    <div style="position: absolute; left: 50%; transform: translateX(-50%);"><span class="amq-preset" style="min-width: 0;">Vocal Air Lift</span></div>
+    <a href="Main.dc.html" style="font: 500 13px/16px var(--font-sans);">Back to editor</a>
+  </header>
+
+  <main style="position: relative; flex-grow: 1; overflow: hidden;" aria-label="EQ graph">
+    <svg width="1280" height="672" viewBox="0 0 1280 672" style="position: absolute; left: 0; top: 0;" aria-hidden="true">
+      <g stroke="#26252b" stroke-width="1">
+        <path d="M102 24 V648 M237 24 V648 M339 24 V648 M442 24 V648 M577 24 V648 M679 24 V648 M781 24 V648 M916 24 V648 M1018 24 V648 M1120 24 V648"></path>
+        <path d="M0 24 H1180 M0 128 H1180 M0 232 H1180 M0 440 H1180 M0 544 H1180 M0 648 H1180"></path>
+      </g>
+      <path d="M0 336 H1180" stroke="#8f8d96" stroke-width="1"></path>
+      <path d="M101 625 L126 526 L152 439 L169 394 L185 365 L211 344 L236 338 L287 336" fill="none" stroke="#c4ee3c" stroke-width="1.5"></path>
+      <path d="M118 336 L236 339 L295 343 L337 351 L371 364 L396 382 L413 393 L426 397 L438 393 L455 382 L480 365 L506 353 L556 343 L624 338 L733 336" fill="none" stroke="#ff4d4d" stroke-width="1.5"></path>
+      <path d="M337 336 L464 333 L523 330 L565 326 L598 320 L632 312 L666 299 L700 283 L733 266 L767 258 L801 266 L834 283 L868 300 L902 313 L944 323 L995 330 L1062 334 L1104 336 Z" fill="#3aa0ff" fill-opacity="0.55" stroke="#3aa0ff" stroke-width="1.5"></path>
+      <path d="M708 336 L784 338 L809 341 L826 346 L843 360 L859 379 L868 370 L885 350 L910 340 L944 338 L1003 336 Z" fill="#d84cf2" fill-opacity="0.55" stroke="#d84cf2" stroke-width="1.5"></path>
+      <path d="M843 336 L902 334 L936 330 L961 325 L986 317 L1011 306 L1037 295 L1062 288 L1096 285 L1180 284" fill="none" stroke="#7d62ff" stroke-width="1.5"></path>
+      <path d="M101 625 L118 559 L135 496 L152 440 L169 395 L185 366 L202 350 L219 343 L244 340 L270 341 L303 344 L329 348 L354 356 L379 369 L405 387 L421 395 L438 392 L464 373 L489 357 L514 346 L548 336 L582 328 L615 319 L649 308 L683 293 L716 275 L742 264 L767 260 L792 266 L818 281 L843 311 L860 339 L877 324 L902 317 L944 318 L978 313 L1011 302 L1045 290 L1087 284 L1180 284" fill="none" stroke="#ffb81c" stroke-width="2"></path>
+      <rect x="740" y="228" width="150" height="176" fill="#eceaf0" fill-opacity="0.04" stroke="#eceaf0" stroke-width="1" stroke-dasharray="4 3"></rect>
+      <circle cx="560" cy="200" r="9" fill="none" stroke="#eceaf0" stroke-width="1.5" stroke-dasharray="3 3"></circle>
+      <path d="M556 200 H564 M560 196 V204" stroke="#eceaf0" stroke-width="1.5"></path>
+    </svg>
+
+    <button class="hbtn" style="position: absolute; border: 0; padding: 0; left: 162px; top: 379px; width: 18px; height: 18px; border-radius: 9999px; background: #c4ee3c; box-shadow: var(--shadow-handle);" aria-label="Band 1, Low Cut, 32 Hz"></button>
+    <button class="hbtn" style="position: absolute; border: 0; padding: 0; left: 417px; top: 388px; width: 18px; height: 18px; border-radius: 9999px; background: transparent; box-shadow: inset 0 0 0 2px #ff4d4d, var(--shadow-handle); opacity: 0.35;" aria-label="Band 2, Bell, 180 Hz, disabled"></button>
+    <button class="hbtn" style="position: absolute; border: 0; padding: 0; left: 756px; top: 247px; width: 22px; height: 22px; border-radius: 9999px; background: #3aa0ff; box-shadow: 0 0 0 3px #eceaf0, 0 0 0 5px #17161a, 0 2px 8px rgba(0,0,0,0.6);" aria-label="Band 3, Bell, 1.82 kHz, selected"></button>
+    <button class="hbtn" style="position: absolute; border: 0; padding: 0; left: 848px; top: 368px; width: 22px; height: 22px; border-radius: 9999px; background: #d84cf2; box-shadow: 0 0 0 3px #eceaf0, 0 0 0 5px #17161a, 0 2px 8px rgba(0,0,0,0.6);" aria-label="Band 4, Bell, 3.40 kHz, selected"></button>
+    <button class="hbtn" style="position: absolute; border: 0; padding: 0; left: 994px; top: 275px; width: 18px; height: 18px; border-radius: 9999px; background: #7d62ff; box-shadow: var(--shadow-handle);" aria-label="Band 5, High Shelf, 9.00 kHz"></button>
+
+    <div class="amq-readout" style="position: absolute; left: 576px; top: 168px; box-shadow: 0 0 0 1px #3d3c43;"><span>Double-click to add</span><span style="color: var(--ink-muted);">·</span><span>447 Hz</span><span style="color: var(--ink-muted);">·</span><span>+7.8 dB</span></div>
+
+    <!-- Band list (keyboard navigable) -->
+    <nav class="amq-panel" aria-label="Band list" style="position: absolute; left: 16px; top: 16px; width: 260px; display: flex; flex-direction: column; gap: 2px; padding: 8px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; padding: 4px 10px 8px;">
+        <span style="font: 600 12px/14px var(--font-sans); letter-spacing: 0.06em; color: var(--ink-muted);">BANDS</span>
+        <span style="font: 400 12px/16px var(--font-sans); color: var(--ink-muted);">5 of 24</span>
+      </div>
+      <button class="br"><span class="num">#1</span><span style="width: 10px; height: 10px; border-radius: 9999px; background: #c4ee3c;"></span><span>Low Cut</span><span class="f">32 Hz</span></button>
+      <button class="br" style="color: #a5a3ad;"><span class="num">#2</span><span style="width: 10px; height: 10px; border-radius: 9999px; box-shadow: inset 0 0 0 2px #ff4d4d;"></span><span>Bell · off</span><span class="f">180 Hz</span></button>
+      <button class="br sel" aria-current="true"><span class="num">#3</span><span style="width: 10px; height: 10px; border-radius: 9999px; background: #3aa0ff;"></span><span>Bell</span><span class="f">1.82 kHz</span></button>
+      <button class="br sel"><span class="num">#4</span><span style="width: 10px; height: 10px; border-radius: 9999px; background: #d84cf2;"></span><span>Bell · Dyn</span><span class="f">3.40 kHz</span></button>
+      <button class="br"><span class="num">#5</span><span style="width: 10px; height: 10px; border-radius: 9999px; background: #7d62ff;"></span><span>High Shelf</span><span class="f">9.00 kHz</span></button>
+      <span style="padding: 8px 10px 2px; font: 400 12px/16px var(--font-sans); color: var(--ink-muted);">↑ ↓ move · Shift adds · Space enables · Del removes</span>
+    </nav>
+
+    <!-- Slope picker (opened from the band panel) -->
+    <section class="amq-panel" aria-label="Slope for band 1" style="position: absolute; left: 292px; top: 432px; width: 236px; display: flex; flex-direction: column; gap: 6px; padding: 10px;">
+      <span style="font: 600 12px/14px var(--font-sans); letter-spacing: 0.06em; color: var(--ink-muted); padding: 2px 4px;">SLOPE · BAND 1</span>
+      <div role="listbox" aria-label="Slope" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px;">
+        <button class="opt" role="option">6</button><button class="opt" role="option">12</button><button class="opt" role="option">18</button>
+        <button class="opt on" role="option" aria-selected="true">24</button><button class="opt" role="option">30</button><button class="opt" role="option">36</button>
+        <button class="opt" role="option">48</button><button class="opt" role="option">72</button><button class="opt" role="option">96</button>
+      </div>
+      <button class="opt" role="option" style="width: 100%; background: #2b2a30;">Brickwall</button>
+      <span style="font: 400 12px/16px var(--font-sans); color: var(--ink-muted); padding: 0 4px;">dB/oct. Brickwall on Low and High Cut only.</span>
+    </section>
+
+    <!-- Right-click band menu -->
+    <div role="menu" aria-label="Band menu, 2 bands" class="amq-panel" style="position: absolute; left: 892px; top: 56px; width: 196px; padding: 6px; display: flex; flex-direction: column;">
+      <span class="cap">2 BANDS · #3, #4</span>
+      <button class="mi" role="menuitemcheckbox" aria-checked="true"><svg viewBox="0 0 16 16"><path class="chk" d="M3 8.5 L6.5 12 L13 4.5"></path></svg>Enabled<span class="k">Alt-click</span></button>
+      <button class="mi" role="menuitem"><svg viewBox="0 0 16 16"><path d="M2 8 C5 8 5 3 8 3 M8 13 C11 13 11 8 14 8"></path></svg>Invert Gain</button>
+      <button class="mi" role="menuitemcheckbox" aria-checked="false"><svg viewBox="0 0 16 16"><path d="M8 3 V13 M5 6 L8 3 L11 6"></path></svg>Make Dynamic</button>
+      <button class="mi" role="menuitemcheckbox" aria-checked="false"><svg viewBox="0 0 16 16"><path d="M2 12 V9 M5 12 V6 M8 12 V8 M11 12 V4 M14 12 V7"></path></svg>Make Spectral</button>
+      <div class="sep"></div>
+      <button class="mi hl" role="menuitem" aria-haspopup="true" aria-expanded="true"><svg viewBox="0 0 16 16"><path d="M1 12 C5 12 6 4 8 4 C10 4 11 12 15 12"></path></svg>Shape<span class="k">▸</span></button>
+      <button class="mi" role="menuitem" aria-haspopup="true"><svg viewBox="0 0 16 16"><path d="M2 4 L14 12"></path></svg>Slope<span class="k">▸</span></button>
+      <button class="mi" role="menuitem" aria-haspopup="true"><svg viewBox="0 0 16 16"><circle cx="6" cy="8" r="4"></circle><circle cx="10" cy="8" r="4"></circle></svg>Placement<span class="k">▸</span></button>
+      <div class="sep"></div>
+      <button class="mi" role="menuitem"><svg viewBox="0 0 16 16"><rect x="5" y="5" width="8" height="9" rx="1"></rect><path d="M3 11 V3 H10"></path></svg>Copy<span class="k">Ctrl C</span></button>
+      <button class="mi dis" role="menuitem" aria-disabled="true"><svg viewBox="0 0 16 16"><rect x="4" y="3" width="8" height="11" rx="1"></rect></svg>Paste<span class="k">Ctrl V</span></button>
+      <button class="mi" role="menuitem"><svg viewBox="0 0 16 16"><circle cx="4" cy="12" r="2"></circle><circle cx="12" cy="12" r="2"></circle><path d="M5.5 10.5 L12 2 M10.5 10.5 L4 2"></path></svg>Split</button>
+      <button class="mi" role="menuitem"><svg viewBox="0 0 16 16"><path d="M4 4 L12 12 M12 4 L4 12"></path></svg>Delete<span class="k">Del</span></button>
+    </div>
+
+    <div role="menu" aria-label="Shape" class="amq-panel" style="position: absolute; left: 1092px; top: 196px; width: 176px; padding: 6px; display: flex; flex-direction: column;">
+      <button class="mi" role="menuitemradio" aria-checked="true"><svg viewBox="0 0 16 16"><path class="chk" d="M1 12 C5 12 6 4 8 4 C10 4 11 12 15 12"></path></svg>Bell</button>
+      <button class="mi" role="menuitemradio" aria-checked="false"><svg viewBox="0 0 16 16"><path d="M1 5 L4 5 C7 5 7 11 10 11 L15 11"></path></svg>Low Shelf</button>
+      <button class="mi" role="menuitemradio" aria-checked="false"><svg viewBox="0 0 16 16"><path d="M1 14 C4 14 5 4 9 4 L15 4"></path></svg>Low Cut</button>
+      <button class="mi" role="menuitemradio" aria-checked="false"><svg viewBox="0 0 16 16"><path d="M1 11 L6 11 C9 11 9 5 12 5 L15 5"></path></svg>High Shelf</button>
+      <button class="mi" role="menuitemradio" aria-checked="false"><svg viewBox="0 0 16 16"><path d="M1 4 L7 4 C11 4 12 14 15 14"></path></svg>High Cut</button>
+      <button class="mi" role="menuitemradio" aria-checked="false"><svg viewBox="0 0 16 16"><path d="M1 6 L6 6 C7 6 7.5 14 8 14 C8.5 14 9 6 10 6 L15 6"></path></svg>Notch</button>
+      <button class="mi" role="menuitemradio" aria-checked="false"><svg viewBox="0 0 16 16"><path d="M1 14 C5 14 6 4 8 4 C10 4 11 14 15 14"></path></svg>Band Pass</button>
+      <button class="mi" role="menuitemradio" aria-checked="false"><svg viewBox="0 0 16 16"><path d="M1 11 L4 11 C7 11 9 5 12 5 L15 5"></path><path d="M8 2 V14" stroke-dasharray="1.5 2"></path></svg>Tilt Shelf</button>
+      <button class="mi" role="menuitemradio" aria-checked="false"><svg viewBox="0 0 16 16"><path d="M1 12 L15 4"></path></svg>Flat Tilt</button>
+      <button class="mi" role="menuitemradio" aria-checked="false"><svg viewBox="0 0 16 16"><path d="M1 8 L15 8"></path><circle cx="8" cy="8" r="2"></circle></svg>All Pass</button>
+    </div>
+  </main>
+
+  <footer class="amq-bar" style="flex-shrink: 0; justify-content: space-between; gap: 16px; font-size: 12px;">
+    <span><span style="font-weight: 600;">2 bands selected</span><span style="color: var(--ink-muted);"> · drag moves both · Shift: fine 0.1×</span></span>
+    <span style="color: var(--ink-muted);">Wheel: Q · Ctrl: gain · Alt: range · Shift: slope · Alt-click: enable · Del/⌫: delete</span>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":760}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

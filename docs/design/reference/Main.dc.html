@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Am-Q editor</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="ds/am-q/components/bundle.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap">
+<style>
+:root{--surface-000:#0d0d10;--surface-100:#17161a;--surface-200:#201f24;--surface-300:#2b2a30;--surface-400:#37363d;--line-grid:#26252b;--line-hairline:#3d3c43;--line-zero:#8f8d96;--ink:#eceaf0;--ink-muted:#a5a3ad;--ink-axis:#8c8a93;--ink-disabled:#5e5c66;--accent:#ffb81c;--accent-hover:#ffc94d;--accent-ink:#1a1305;--focus:#ffb81c;--band-1:#c4ee3c;--band-2:#ff4d4d;--band-3:#3aa0ff;--band-4:#d84cf2;--band-5:#7d62ff;--band-6:#2fe0b0;--band-7:#ff8a3d;--band-8:#ff63ae;--analyzer-pre:#3a3940;--analyzer-post:#7c7a84;--analyzer-sc:#5b6e8a;--meter-ok:#3faf3a;--meter-hot:#d9d33a;--signal-clip:#ff3b30;--signal-solo:#2fe0b0;--font-sans:"Inter","Segoe UI",system-ui,sans-serif;--font-mono:"JetBrains Mono",ui-monospace,Consolas,monospace;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-6:24px;--space-8:32px;--radius-sm:4px;--radius-md:8px;--radius-lg:16px;--radius-full:9999px;--size-handle:18px;--size-meter:6px;--size-bar:44px;--opacity-band-fill:0.38;--opacity-band-idle:0.18;--opacity-bypassed:0.35;--shadow-panel:0 16px 40px rgba(0,0,0,0.55),0 0 0 1px #3d3c43;--shadow-handle:0 0 0 2px #17161a,0 2px 6px rgba(0,0,0,0.6);--shadow-knob:inset 0 1px 0 rgba(255,255,255,0.06),0 4px 10px rgba(0,0,0,0.5)}
+body{margin:0;background:#17161a}
+a{color:#ffb81c}a:hover{color:#ffc94d}
+button{font-family:inherit;cursor:pointer}
+button:focus-visible{outline:2px solid #ffb81c;outline-offset:2px}
+.hbtn{position:absolute;border:0;padding:0;border-radius:9999px}
+.chip{height:28px;padding:0 10px;border-radius:8px;border:0;background:#2b2a30;color:#eceaf0;font:600 13px/16px "Inter",sans-serif}
+.chip:hover{background:#37363d}
+.chip.on{background:#ffb81c;color:#1a1305}
+</style>
+</helmet>
+<div style="width: 1280px; height: 760px; display: flex; flex-direction: column; background: var(--surface-100); color: var(--ink); font-family: var(--font-sans); font-variant-numeric: tabular-nums; overflow: hidden; position: relative;">
+
+  <!-- Top bar -->
+  <header class="amq-bar" style="justify-content: space-between; flex-shrink: 0; position: relative; z-index: 3;">
+    <div style="display: flex; align-items: center; gap: 24px;">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span class="amq-wordmark" aria-label="Am-Q" role="img">Am-<svg viewBox="0 0 64 64" aria-hidden="true" style="width: 1em; height: 1em; vertical-align: -0.2em;"><circle cx="28" cy="28" r="17.5" fill="none" stroke="#ffb81c" stroke-width="11"></circle><path d="M37 37 C39.5 39.5 40.5 42.5 42.5 44.5" fill="none" stroke="#ffb81c" stroke-width="11" stroke-linecap="round"></path><circle cx="56" cy="56" r="7" fill="#ffb81c"></circle></svg></span>
+      </div>
+      <div class="sep" style="width: 1px; height: 20px; background: var(--line-hairline);"></div>
+      <div style="display: flex; align-items: center; gap: 4px;">
+        <button class="amq-icon" aria-label="Undo"><svg viewBox="0 0 16 16"><path d="M5 3 L2 6 L5 9"></path><path d="M2 6 H10 A4 4 0 0 1 10 14 H7"></path></svg></button>
+        <button class="amq-icon" aria-label="Redo"><svg viewBox="0 0 16 16"><path d="M11 3 L14 6 L11 9"></path><path d="M14 6 H6 A4 4 0 0 0 6 14 H9"></path></svg></button>
+      </div>
+      <div style="display: flex; align-items: center; gap: 4px;">
+        <button class="chip on" aria-pressed="true">A</button>
+        <button class="chip" aria-pressed="false">B</button>
+        <button class="amq-icon" aria-label="Copy A to B"><svg viewBox="0 0 16 16"><path d="M3 8 H12"></path><path d="M9 5 L12 8 L9 11"></path></svg></button>
+      </div>
+    </div>
+    <div style="position: absolute; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 4px;">
+      <button class="amq-icon" aria-label="Previous preset"><svg viewBox="0 0 16 16"><path d="M10 3 L5 8 L10 13"></path></svg></button>
+      <button style="border: 0; background: var(--surface-300); border-radius: 8px; height: 32px; padding: 0 16px; display: flex; align-items: center; gap: 8px; min-width: 220px; justify-content: center; color: var(--ink);">
+        <span class="amq-preset" style="min-width: 0;">Vocal Air Lift</span>
+        <span style="font: 400 12px/16px var(--font-sans); color: var(--ink-muted);">(edited)</span>
+      </button>
+      <button class="amq-icon" aria-label="Next preset"><svg viewBox="0 0 16 16"><path d="M6 3 L11 8 L6 13"></path></svg></button>
+    </div>
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <a href="Match.dc.html" style="display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; border-radius: 8px; background: var(--surface-300); color: var(--ink); font: 500 13px/16px var(--font-sans); text-decoration: none;">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#eceaf0" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M1 10 C4 10 4 5 7 5 C10 5 10 11 15 8"></path><path d="M1 12 C4 12 5 8 8 8 C11 8 12 10 15 10" stroke="#a5a3ad" stroke-dasharray="2 2"></path></svg>
+        EQ Match
+      </a>
+      <a href="Analyzer.dc.html" class="amq-icon" aria-label="Interface and analyzer settings"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.2"></circle><path d="M8 1.5 V3.5 M8 12.5 V14.5 M1.5 8 H3.5 M12.5 8 H14.5 M3.4 3.4 L4.8 4.8 M11.2 11.2 L12.6 12.6 M3.4 12.6 L4.8 11.2 M11.2 4.8 L12.6 3.4"></path></svg></a>
+      <button class="amq-icon" aria-label="Full screen"><svg viewBox="0 0 16 16"><path d="M2 6 V2 H6 M10 2 H14 V6 M14 10 V14 H10 M6 14 H2 V10"></path></svg></button>
+      <button class="amq-icon" aria-label="Help"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"></circle><path d="M6.5 6.2 A1.6 1.6 0 1 1 8.6 7.7 C8 8 8 8.6 8 9.2"></path><path d="M8 11.5 V11.6"></path></svg></button>
+    </div>
+  </header>
+
+  <!-- Graph -->
+  <main style="position: relative; flex-grow: 1; overflow: hidden;" aria-label="EQ graph">
+    <svg width="1280" height="672" viewBox="0 0 1280 672" style="position: absolute; left: 0; top: 0;" aria-hidden="true">
+      <g stroke="#26252b" stroke-width="1">
+        <path d="M102 24 V648 M237 24 V648 M339 24 V648 M442 24 V648 M577 24 V648 M679 24 V648 M781 24 V648 M916 24 V648 M1018 24 V648 M1120 24 V648"></path>
+        <path d="M0 24 H1180 M0 76 H1180 M0 128 H1180 M0 180 H1180 M0 232 H1180 M0 284 H1180 M0 388 H1180 M0 440 H1180 M0 492 H1180 M0 544 H1180 M0 596 H1180 M0 648 H1180"></path>
+      </g>
+      <path d="M0 209 L8 195 L17 186 L25 194 L34 192 L42 192 L51 185 L59 174 L67 186 L76 196 L84 179 L93 176 L101 163 L110 174 L118 169 L126 154 L135 156 L143 134 L152 115 L160 125 L169 131 L177 118 L185 92 L194 86 L202 84 L211 83 L219 97 L228 102 L236 98 L244 93 L253 96 L261 97 L270 97 L278 89 L287 86 L295 92 L303 72 L312 66 L320 66 L329 70 L337 66 L346 66 L354 75 L362 89 L371 89 L379 91 L388 86 L396 97 L405 93 L413 94 L421 106 L430 106 L438 97 L447 92 L455 99 L464 105 L472 128 L480 142 L489 138 L497 148 L506 164 L514 166 L523 164 L531 163 L539 172 L548 178 L556 181 L565 175 L573 179 L582 186 L590 189 L598 207 L607 221 L615 212 L624 197 L632 198 L641 205 L649 218 L657 219 L666 206 L674 202 L683 207 L691 202 L700 218 L708 222 L716 214 L725 219 L733 228 L742 242 L750 246 L759 237 L767 260 L775 255 L784 251 L792 247 L801 248 L809 247 L818 256 L826 262 L834 270 L843 289 L851 278 L860 279 L868 291 L877 292 L885 293 L893 298 L902 303 L910 301 L919 297 L927 295 L936 298 L944 315 L952 322 L961 331 L969 325 L978 313 L986 306 L995 300 L1003 296 L1011 310 L1020 304 L1028 305 L1037 324 L1045 342 L1054 357 L1062 347 L1070 355 L1079 366 L1087 360 L1096 385 L1104 420 L1113 452 L1121 473 L1129 508 L1138 541 L1146 561 L1155 594 L1163 633 L1172 648 L1180 648 L1180 648 L0 648 Z" fill="#3a3940"></path>
+      <path d="M0 489 L8 462 L17 439 L25 433 L34 418 L42 403 L51 382 L59 358 L67 356 L76 353 L84 322 L93 306 L101 279 L110 277 L118 258 L126 230 L135 220 L143 186 L152 157 L160 157 L169 155 L177 135 L185 105 L194 95 L202 89 L211 87 L219 99 L228 104 L236 100 L244 95 L253 98 L261 99 L270 99 L278 91 L287 89 L295 95 L303 75 L312 69 L320 70 L329 75 L337 71 L346 72 L354 83 L362 98 L371 100 L379 104 L388 101 L396 115 L405 114 L413 117 L421 129 L430 129 L438 119 L447 112 L455 117 L464 119 L472 140 L480 152 L489 146 L497 154 L506 169 L514 170 L523 167 L531 165 L539 173 L548 178 L556 180 L565 173 L573 176 L582 183 L590 185 L598 202 L607 215 L615 205 L624 190 L632 189 L641 195 L649 207 L657 206 L666 192 L674 186 L683 190 L691 183 L700 197 L708 200 L716 189 L725 193 L733 201 L742 213 L750 216 L759 207 L767 229 L775 225 L784 222 L792 219 L801 222 L809 223 L818 234 L826 242 L834 255 L843 279 L851 275 L860 280 L868 290 L877 287 L885 286 L893 290 L902 295 L910 293 L919 290 L927 288 L936 291 L944 308 L952 315 L961 323 L969 317 L978 304 L986 296 L995 289 L1003 284 L1011 297 L1020 289 L1028 289 L1037 307 L1045 324 L1054 338 L1062 327 L1070 335 L1079 346 L1087 339 L1096 364 L1104 399 L1113 431 L1121 452 L1129 487 L1138 520 L1146 540 L1155 573 L1163 612 L1172 627 L1180 627" fill="none" stroke="#7c7a84" stroke-width="1"></path>
+      <path d="M0 336 H1180" stroke="#8f8d96" stroke-width="1"></path>
+
+      <path d="M0 1029 L8 1002 L17 968 L25 933 L34 899 L42 864 L51 830 L59 796 L67 761 L76 727 L84 693 L93 659 L101 625 L110 591 L118 558 L126 526 L135 495 L143 466 L152 439 L160 415 L169 394 L177 378 L185 365 L194 356 L202 349 L211 344 L219 341 L228 339 L236 338 L253 337 L287 336 L0 336 Z" fill="#c4ee3c" fill-opacity="{{fo.b1}}"></path>
+      <path d="M118 336 L194 337 L236 339 L261 340 L278 341 L295 343 L312 345 L329 348 L337 351 L346 353 L354 356 L362 360 L371 364 L379 369 L388 375 L396 382 L405 388 L413 393 L421 396 L430 396 L438 393 L447 388 L455 382 L464 376 L472 370 L480 365 L489 360 L497 356 L506 353 L514 351 L523 349 L531 347 L539 345 L556 343 L573 341 L598 340 L624 338 L657 337 L733 336 Z" fill="#ff4d4d" fill-opacity="{{fo.b2}}"></path>
+      <path d="M337 336 L421 335 L464 333 L497 332 L523 330 L539 329 L548 328 L556 327 L565 326 L573 325 L582 323 L590 322 L598 320 L607 318 L615 316 L624 314 L632 312 L641 309 L649 306 L657 303 L666 299 L674 295 L683 291 L691 287 L700 283 L708 278 L716 274 L725 270 L733 266 L742 263 L750 260 L759 259 L767 258 L775 259 L784 260 L792 263 L801 266 L809 270 L818 274 L826 279 L834 283 L843 288 L851 292 L860 296 L868 300 L877 303 L885 307 L893 310 L902 313 L910 315 L919 317 L927 320 L936 321 L944 323 L952 325 L961 326 L978 328 L995 330 L1011 332 L1037 333 L1062 334 L1096 335 L1104 336 Z" fill="#3aa0ff" fill-opacity="{{fo.b3}}"></path>
+      <path d="M708 336 L767 337 L784 338 L792 339 L801 340 L809 341 L818 343 L826 346 L834 351 L843 360 L851 372 L860 379 L868 370 L877 358 L885 350 L893 345 L902 342 L910 340 L927 339 L944 338 L986 337 L1003 336 Z" fill="#d84cf2" fill-opacity="{{fo.b4}}"></path>
+      <path d="M843 336 L885 335 L902 334 L919 333 L927 332 L936 330 L944 329 L952 327 L961 325 L969 323 L978 320 L986 317 L995 314 L1003 310 L1011 306 L1020 302 L1028 299 L1037 295 L1045 293 L1054 290 L1062 288 L1070 287 L1079 286 L1096 285 L1104 284 L1180 284 L1180 336 Z" fill="#7d62ff" fill-opacity="{{fo.b5}}"></path>
+
+      <path d="M0 1029 L8 1002 L17 968 L25 933 L34 899 L42 864 L51 830 L59 796 L67 761 L76 727 L84 693 L93 659 L101 625 L110 591 L118 558 L126 526 L135 495 L143 466 L152 439 L160 415 L169 394 L177 378 L185 365 L194 356 L202 349 L211 344 L219 341 L228 339 L236 338 L253 337 L287 336" fill="none" stroke="#c4ee3c" stroke-width="1.5"></path>
+      <path d="M118 336 L194 337 L236 339 L261 340 L278 341 L295 343 L312 345 L329 348 L337 351 L346 353 L354 356 L362 360 L371 364 L379 369 L388 375 L396 382 L405 388 L413 393 L421 396 L430 396 L438 393 L447 388 L455 382 L464 376 L472 370 L480 365 L489 360 L497 356 L506 353 L514 351 L523 349 L531 347 L539 345 L556 343 L573 341 L598 340 L624 338 L657 337 L733 336" fill="none" stroke="#ff4d4d" stroke-width="1.5"></path>
+      <path d="M337 336 L421 335 L464 333 L497 332 L523 330 L539 329 L548 328 L556 327 L565 326 L573 325 L582 323 L590 322 L598 320 L607 318 L615 316 L624 314 L632 312 L641 309 L649 306 L657 303 L666 299 L674 295 L683 291 L691 287 L700 283 L708 278 L716 274 L725 270 L733 266 L742 263 L750 260 L759 259 L767 258 L775 259 L784 260 L792 263 L801 266 L809 270 L818 274 L826 279 L834 283 L843 288 L851 292 L860 296 L868 300 L877 303 L885 307 L893 310 L902 313 L910 315 L919 317 L927 320 L936 321 L944 323 L952 325 L961 326 L978 328 L995 330 L1011 332 L1037 333 L1062 334 L1096 335 L1104 336" fill="none" stroke="#3aa0ff" stroke-width="1.5"></path>
+      <path d="M708 336 L767 337 L784 338 L792 339 L801 340 L809 341 L818 343 L826 346 L834 351 L843 360 L851 372 L860 379 L868 370 L877 358 L885 350 L893 345 L902 342 L910 340 L927 339 L944 338 L986 337 L1003 336" fill="none" stroke="#d84cf2" stroke-width="1.5"></path>
+      <path d="M843 336 L885 335 L902 334 L919 333 L927 332 L936 330 L944 329 L952 327 L961 325 L969 323 L978 320 L986 317 L995 314 L1003 310 L1011 306 L1020 302 L1028 299 L1037 295 L1045 293 L1054 290 L1062 288 L1070 287 L1079 286 L1096 285 L1104 284 L1180 284" fill="none" stroke="#7d62ff" stroke-width="1.5"></path>
+
+      <path d="M0 1029 L8 1002 L17 968 L25 933 L34 899 L42 865 L51 830 L59 796 L67 761 L76 727 L84 693 L93 659 L101 625 L110 592 L118 559 L126 527 L135 496 L143 466 L152 440 L160 416 L169 395 L177 379 L185 366 L194 357 L202 350 L211 346 L219 343 L228 342 L236 341 L244 340 L253 340 L261 340 L270 341 L278 341 L287 342 L295 343 L303 344 L312 345 L320 346 L329 348 L337 350 L346 353 L354 356 L362 359 L371 364 L379 369 L388 374 L396 381 L405 387 L413 392 L421 395 L430 395 L438 392 L447 386 L455 380 L464 373 L472 367 L480 361 L489 357 L497 352 L506 349 L514 346 L523 343 L531 340 L539 338 L548 336 L556 334 L565 332 L573 330 L582 328 L590 326 L598 324 L607 322 L615 319 L624 317 L632 314 L641 311 L649 308 L657 304 L666 301 L674 297 L683 293 L691 288 L700 284 L708 279 L716 275 L725 271 L733 267 L742 264 L750 261 L759 260 L767 260 L775 261 L784 263 L792 266 L801 270 L809 275 L818 281 L826 288 L834 298 L843 311 L851 328 L860 339 L868 333 L877 324 L885 319 L893 317 L902 317 L910 317 L919 317 L927 318 L936 318 L944 318 L952 317 L961 316 L969 315 L978 313 L986 311 L995 308 L1003 305 L1011 302 L1020 299 L1028 296 L1037 293 L1045 290 L1054 288 L1062 287 L1070 286 L1079 285 L1087 284 L1180 284" fill="none" stroke="#ffb81c" stroke-width="2"></path>
+
+      <g font-family="Inter, sans-serif" font-size="12" font-weight="500">
+        <g fill="#ffb81c" text-anchor="end">
+          <text x="1210" y="28">+18</text><text x="1210" y="132">+12</text><text x="1210" y="236">+6</text><text x="1210" y="340">0</text><text x="1210" y="444">−6</text><text x="1210" y="548">−12</text><text x="1210" y="652">−18</text>
+        </g>
+        <g fill="#8c8a93" text-anchor="end">
+          <text x="1246" y="97">−10</text><text x="1246" y="167">−20</text><text x="1246" y="236">−30</text><text x="1246" y="305">−40</text><text x="1246" y="375">−50</text><text x="1246" y="444">−60</text><text x="1246" y="513">−70</text><text x="1246" y="583">−80</text>
+        </g>
+        <g fill="#8c8a93" text-anchor="middle">
+          <text x="102" y="664">20</text><text x="237" y="664">50</text><text x="339" y="664">100</text><text x="442" y="664">200</text><text x="577" y="664">500</text><text x="679" y="664">1k</text><text x="781" y="664">2k</text><text x="916" y="664">5k</text><text x="1018" y="664">10k</text><text x="1120" y="664">20k</text>
+        </g>
+      </g>
+      <rect x="1258" y="24" width="6" height="624" rx="2" fill="#0d0d10"></rect>
+      <rect x="1266" y="24" width="6" height="624" rx="2" fill="#0d0d10"></rect>
+      <rect x="1258" y="430" width="6" height="218" fill="#3faf3a"></rect><rect x="1258" y="340" width="6" height="90" fill="#d9d33a"></rect>
+      <rect x="1266" y="446" width="6" height="202" fill="#3faf3a"></rect><rect x="1266" y="362" width="6" height="84" fill="#d9d33a"></rect>
+      <rect x="1258" y="300" width="6" height="2" fill="#d9d33a"></rect><rect x="1266" y="318" width="6" height="2" fill="#d9d33a"></rect>
+    </svg>
+
+    <sc-for list="{{ranges}}" as="r" hint-placeholder-count="2">
+      <div style="position: absolute; left: {{r.x}}px; top: {{r.top}}px; width: 0; height: {{r.h}}px; border-left: 1px dashed {{r.color}};" aria-hidden="true"></div>
+      <button class="hbtn" style="left: {{r.hx}}px; top: {{r.hy}}px; width: 14px; height: 14px; background: #17161a; box-shadow: inset 0 0 0 2px {{r.color}}, 0 2px 6px rgba(0,0,0,0.6);" aria-label="{{r.aria}}" title="{{r.aria}}"></button>
+    </sc-for>
+    <sc-for list="{{bands}}" as="b" hint-placeholder-count="5">
+      <button class="hbtn" style="left: {{b.left}}px; top: {{b.top}}px; width: {{b.size}}px; height: {{b.size}}px; background: {{b.color}}; box-shadow: {{b.ring}};" aria-label="{{b.aria}}" aria-pressed="{{b.selected}}" onClick="{{b.pick}}" title="{{b.aria}}"></button>
+    </sc-for>
+
+    <div class="amq-readout" style="position: absolute; left: {{sel.rx}}px; top: {{sel.ry}}px; box-shadow: 0 0 0 1px #3d3c43;">
+      <span class="dot" style="background: {{sel.color}};"></span>
+      <span>{{sel.freq}}</span><span style="color: var(--ink-muted);">·</span><span>{{sel.gain}}</span><span style="color: var(--ink-muted);">·</span><span>{{sel.q}}</span>
+    </div>
+
+    <!-- Band panel -->
+    <section class="amq-panel" aria-label="Band editor" style="position: absolute; left: 50%; bottom: 32px; transform: translateX(-50%); display: flex; flex-direction: column; gap: 16px; padding: 16px 20px;">
+      <div style="display: flex; align-items: center; gap: 24px;">
+        <div style="display: flex; flex-direction: column; gap: 8px; width: 148px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="width: 10px; height: 10px; border-radius: 9999px; background: {{sel.color}};"></span>
+            <span style="font: 600 13px/16px var(--font-sans);">Band #{{sel.n}}</span>
+            <span style="flex-grow: 1;"></span>
+            <button class="amq-icon" aria-label="Band enabled" aria-pressed="true" title="Enable/disable band (Alt-click the handle)"><svg viewBox="0 0 16 16"><path d="M8 2 V8"></path><path d="M4.5 4.5 A5 5 0 1 0 11.5 4.5"></path></svg></button>
+          </div>
+          <button class="amq-select" style="min-width: 0; width: 148px;" aria-label="Filter shape">
+            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="{{sel.glyph}}"></path></svg>
+            <span>{{sel.shape}}</span>
+            <svg class="chev" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5 L6 7.5 L9 4.5"></path></svg>
+          </button>
+          <button class="amq-select" style="min-width: 0; width: 148px;" aria-label="Slope">
+            <span>{{sel.slope}}</span>
+            <svg class="chev" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5 L6 7.5 L9 4.5"></path></svg>
+          </button>
+        </div>
+
+        <div style="display: flex; align-items: flex-end; gap: 16px;">
+          <sc-for list="{{knobs}}" as="k" hint-placeholder-count="3">
+            <div class="amq-knob">
+              <svg width="{{k.size}}" height="{{k.size}}" viewBox="{{k.vb}}" style="filter: drop-shadow(0 4px 10px rgba(0,0,0,0.5));" aria-hidden="true">
+                <circle class="face" cx="{{k.c}}" cy="{{k.c}}" r="{{k.fr}}"></circle>
+                <path class="track" d="{{k.track}}" stroke-width="{{k.sw}}"></path>
+                <path class="value" d="{{k.arc}}" stroke-width="{{k.sw}}"></path>
+                <path class="tick" d="{{k.tick}}" stroke-width="2"></path>
+              </svg>
+              <span class="lbl">{{k.label}}</span>
+              <span class="val">{{k.val}}</span>
+            </div>
+          </sc-for>
+        </div>
+
+        <sc-if value="{{sel.dyn}}" hint-placeholder-val="{{false}}">
+          <div style="display: flex; align-items: flex-end; gap: 12px; padding-left: 24px; box-shadow: -1px 0 0 #3d3c43;">
+            <sc-for list="{{dknobs}}" as="k" hint-placeholder-count="4">
+              <div class="amq-knob">
+                <svg width="{{k.size}}" height="{{k.size}}" viewBox="{{k.vb}}" style="filter: drop-shadow(0 4px 10px rgba(0,0,0,0.5));" aria-hidden="true">
+                  <circle class="face" cx="{{k.c}}" cy="{{k.c}}" r="{{k.fr}}"></circle>
+                  <path class="track" d="{{k.track}}" stroke-width="{{k.sw}}"></path>
+                  <path class="value" d="{{k.arc}}" stroke-width="{{k.sw}}"></path>
+                  <path class="tick" d="{{k.tick}}" stroke-width="2"></path>
+                </svg>
+                <span class="lbl">{{k.label}}</span>
+                <span class="val">{{k.val}}</span>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 8px; width: 148px;">
+            <span style="font: 600 12px/14px var(--font-sans); letter-spacing: 0.06em; color: var(--ink-muted);">SIDE CHAIN</span>
+            <div style="display: flex; gap: 4px;">
+              <button class="chip on" style="height: 28px; flex-grow: 1;" aria-pressed="true">Int</button>
+              <button class="chip" style="height: 28px; flex-grow: 1;" aria-pressed="false">Ext</button>
+              <button class="amq-icon" aria-label="Listen to side chain" title="Listen"><svg viewBox="0 0 16 16"><path d="M3 10 V8 A5 5 0 0 1 13 8 V10"></path><rect x="2" y="10" width="3" height="4" rx="1"></rect><rect x="11" y="10" width="3" height="4" rx="1"></rect></svg></button>
+            </div>
+            <button class="amq-select" style="min-width: 0; width: 148px; height: 28px;" aria-label="Side-chain filter">
+              <span>{{sel.scMode}}</span><span style="color: var(--ink-muted); font-size: 12px;">{{sel.scRange}}</span>
+              <svg class="chev" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5 L6 7.5 L9 4.5"></path></svg>
+            </button>
+            <sc-if value="{{sel.spectral}}" hint-placeholder-val="{{false}}">
+              <button class="chip on" style="height: 28px; width: 148px;" aria-pressed="true">Spectral Tilt</button>
+            </sc-if>
+          </div>
+        </sc-if>
+
+        <div style="display: flex; flex-direction: column; gap: 8px; width: 148px;">
+          <button class="amq-select" style="min-width: 0; width: 148px;" aria-label="Stereo placement">
+            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="6" cy="8" r="4"></circle><circle cx="10" cy="8" r="4"></circle></svg>
+            <span>{{sel.stereo}}</span>
+            <svg class="chev" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5 L6 7.5 L9 4.5"></path></svg>
+          </button>
+          <div style="display: flex; gap: 4px;">
+            <button class="chip {{sel.dynClass}}" style="height: 32px; flex-grow: 1;" aria-pressed="{{sel.dyn}}" onClick="{{toggleDyn}}">Dynamic</button>
+            <button class="chip {{sel.specClass}}" style="height: 32px; flex-grow: 1;" aria-pressed="{{sel.spectral}}" onClick="{{toggleSpec}}">Spectral</button>
+          </div>
+          <div style="display: flex; gap: 4px; justify-content: flex-end;">
+            <button class="amq-icon" aria-label="Solo band"><svg viewBox="0 0 16 16"><path d="M3 10 V8 A5 5 0 0 1 13 8 V10"></path><rect x="2" y="10" width="3" height="4" rx="1"></rect><rect x="11" y="10" width="3" height="4" rx="1"></rect></svg></button>
+            <button class="amq-icon" aria-label="Delete band"><svg viewBox="0 0 16 16"><path d="M4 4 L12 12 M12 4 L4 12"></path></svg></button>
+          </div>
+        </div>
+      </div>
+
+    </section>
+  </main>
+
+  <!-- Status bar -->
+  <footer class="amq-bar" style="flex-shrink: 0; justify-content: space-between; gap: 16px;">
+    <div style="display: flex; align-items: center; gap: 16px;">
+      <a href="Interactions.dc.html" class="amq-select" style="min-width: 0; height: 28px; text-decoration: none;"><span>Bands</span><span style="color: var(--ink-muted);">5 / 24</span></a>
+      <span class="sep" style="width: 1px; height: 20px; background: var(--line-hairline);"></span>
+      <a href="Processing.dc.html" class="amq-select" style="min-width: 0; height: 28px; text-decoration: none;">
+        <span>Natural Phase</span><span style="color: var(--ink-muted);">320 smp</span>
+        <svg class="chev" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 7.5 L6 4.5 L9 7.5"></path></svg>
+      </a>
+      <a href="Analyzer.dc.html" class="amq-select" style="min-width: 0; height: 28px; text-decoration: none;">
+        <span style="color: var(--ink-muted);">Analyzer</span><span>Pre + Post</span>
+      </a>
+      <button class="amq-icon" aria-label="Freeze analyzer" title="Freeze"><svg viewBox="0 0 16 16"><path d="M8 2 V14 M2.8 5 L13.2 11 M2.8 11 L13.2 5"></path></svg></button>
+    </div>
+    <div style="display: flex; align-items: center; gap: 16px;">
+      <button class="chip on" aria-pressed="true">Auto Gain</button>
+      <span style="color: var(--ink-muted);">Gain Scale</span><span>100 %</span>
+      <span class="sep" style="width: 1px; height: 20px; background: var(--line-hairline);"></span>
+      <span style="color: var(--ink-muted);">Output</span>
+      <button class="chip" aria-label="Output pan mode">L/R</button>
+      <span class="amq-readout is-accent">+0.0 dB</span>
+      <button class="amq-icon" aria-label="Invert polarity" title="Invert"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="4.5"></circle><path d="M12.5 3.5 L3.5 12.5"></path></svg></button>
+      <button class="amq-icon" aria-label="Bypass plugin"><svg viewBox="0 0 16 16"><path d="M8 2 V8"></path><path d="M4.5 4.5 A5 5 0 1 0 11.5 4.5"></path></svg></button>
+    </div>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":760}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { sel: 2, dyn: { 1: true, 3: true }, spec: { 3: true } }; }
+  pt(c, r, d) { const a = d * Math.PI / 180; return [c + r * Math.sin(a), c - r * Math.cos(a)]; }
+  arc(c, r, d0, d1) {
+    if (Math.abs(d1 - d0) < 0.5) return '';
+    const p0 = this.pt(c, r, d0), p1 = this.pt(c, r, d1);
+    const large = Math.abs(d1 - d0) > 180 ? 1 : 0, sweep = d1 > d0 ? 1 : 0;
+    return 'M' + p0[0].toFixed(1) + ' ' + p0[1].toFixed(1) + ' A' + r + ' ' + r + ' 0 ' + large + ' ' + sweep + ' ' + p1[0].toFixed(1) + ' ' + p1[1].toFixed(1);
+  }
+  knob(label, val, n, size, bip) {
+    const c = size / 2, sw = size > 70 ? 4 : 3, r = c - sw / 2 - 1, d = -135 + 270 * n, fr = r - sw - 3;
+    const t0 = this.pt(c, fr * 0.3, d), t1 = this.pt(c, fr - 4, d);
+    return { label, val, size, vb: '0 0 ' + size + ' ' + size, c, fr, sw,
+      track: this.arc(c, r, -135, 135), arc: bip ? this.arc(c, r, 0, d) : this.arc(c, r, -135, d),
+      tick: 'M' + t0[0].toFixed(1) + ' ' + t0[1].toFixed(1) + ' L' + t1[0].toFixed(1) + ' ' + t1[1].toFixed(1) };
+  }
+  renderVals() {
+    const G = { bell: 'M1 12 C5 12 6 4 8 4 C10 4 11 12 15 12', lc: 'M1 14 C4 14 5 4 9 4 L15 4', hs: 'M1 11 L6 11 C9 11 9 5 12 5 L15 5' };
+    const B = [
+      { n: 1, shape: 'Low Cut', glyph: G.lc, slope: '24 dB/oct', freq: '32 Hz', gain: '0.0 dB', q: 'Q 0.71', stereo: 'Stereo', color: '#c4ee3c', hx: 171, hy: 388, fn: 0.145, gn: 0.5, qn: 0.454, range: '', rn: 0.5, g: 0, r: -3, scMode: 'Band', scRange: '20–45 Hz' },
+      { n: 2, shape: 'Bell', glyph: G.bell, slope: '12 dB/oct', freq: '180 Hz', gain: '−3.5 dB', q: 'Q 1.40', stereo: 'Mid', color: '#ff4d4d', hx: 426, hy: 397, fn: 0.361, gn: 0.442, qn: 0.546, range: '−3.0 dB', rn: 0.45, g: -3.5, r: -3, scMode: 'Band', scRange: '120–270 Hz' },
+      { n: 3, shape: 'Bell', glyph: G.bell, slope: '12 dB/oct', freq: '1.82 kHz', gain: '+4.5 dB', q: 'Q 0.71', stereo: 'Stereo', color: '#3aa0ff', hx: 767, hy: 258, fn: 0.65, gn: 0.575, qn: 0.454, range: '+3.0 dB', rn: 0.55, g: 4.5, r: 3, scMode: 'Band', scRange: '0.9–3.6 kHz' },
+      { n: 4, shape: 'Bell', glyph: G.bell, slope: '12 dB/oct', freq: '3.40 kHz', gain: '−2.5 dB', q: 'Q 4.00', stereo: 'Side', color: '#d84cf2', hx: 859, hy: 379, fn: 0.727, gn: 0.458, qn: 0.688, range: '−4.0 dB', rn: 0.433, g: -2.5, r: -4, scMode: 'Free', scRange: '2.5–6.0 kHz' },
+      { n: 5, shape: 'High Shelf', glyph: G.hs, slope: '12 dB/oct', freq: '9.00 kHz', gain: '+3.0 dB', q: 'Q 0.71', stereo: 'Stereo', color: '#7d62ff', hx: 1003, hy: 284, fn: 0.85, gn: 0.55, qn: 0.454, range: '', rn: 0.5, g: 3, r: -3, scMode: 'Band', scRange: '6.0–14 kHz' }
+    ];
+    const s = this.state.sel, cur = B[s];
+    const dyn = !!this.state.dyn[s], spectral = dyn && !!this.state.spec[s];
+    const bands = B.map((b, i) => {
+      const on = i === s, size = on ? 22 : 18;
+      return { color: b.color, size, left: b.hx - size / 2, top: b.hy - size / 2, selected: on ? 'true' : 'false',
+        ring: on ? '0 0 0 3px #eceaf0, 0 0 0 5px #17161a, 0 2px 8px rgba(0,0,0,0.6)' : '0 0 0 2px #17161a, 0 2px 6px rgba(0,0,0,0.6)',
+        aria: 'Band ' + b.n + ', ' + b.shape + ', ' + b.freq, pick: () => this.setState({ sel: i }) };
+    });
+    const ranges = B.filter((b, i) => !!this.state.dyn[i] && b.shape !== 'Low Cut').map((b) => {
+      const y2 = 336 - (b.g + b.r) * 17.333, top = Math.min(b.hy, y2);
+      return { x: b.hx, top, h: Math.abs(y2 - b.hy), hx: b.hx - 7, hy: y2 - 7, color: b.color, aria: 'Band ' + b.n + ' dynamic range ' + (b.range || '') };
+    });
+    const fo = {}; B.forEach((b, i) => { fo['b' + (i + 1)] = i === s ? 0.55 : 0.38; });
+    const dk = [
+      this.knob('Range', cur.range || '−6.0 dB', cur.rn, 48, true),
+      this.knob('Threshold', 'Auto', 1, 48, false),
+      this.knob('Attack', '50 %', 0.5, 48, false),
+      this.knob('Release', '50 %', 0.5, 48, false)
+    ];
+    if (spectral) dk.push(this.knob('Density', '50 %', 0.5, 48, false));
+    return {
+      bands, fo, ranges,
+      sel: Object.assign({}, cur, { dyn, spectral, dynClass: dyn ? 'on' : '', specClass: spectral ? 'on' : '',
+        rx: Math.min(cur.hx + 18, 1000), ry: cur.hy - 44 }),
+      knobs: [ this.knob('Freq', cur.freq, cur.fn, 64, false), this.knob('Gain', cur.gain, cur.gn, 88, true), this.knob('Q', cur.q, cur.qn, 64, false) ],
+      dknobs: dk,
+      toggleDyn: () => this.setState({ dyn: Object.assign({}, this.state.dyn, { [s]: !dyn }) }),
+      toggleSpec: () => this.setState({ dyn: Object.assign({}, this.state.dyn, { [s]: true }), spec: Object.assign({}, this.state.spec, { [s]: !spectral }) })
+    };
+  }
+}
+</script>
+</body>
+</html>
