@@ -74,8 +74,10 @@ The panel is a floating panel: surface-200, radius-lg, shadow-panel, padding 16 
 | Band state | Width | Height |
 | --- | --- | --- |
 | Static | 632 | 166 |
-| Dynamic | 1080 | 166 |
-| Dynamic + Spectral | 1140 | 166 |
+| Dynamic | 1112 | 166 |
+| Dynamic + Spectral | 1180 | 166 |
+
+Each knob's column is as wide as the knob or its caption, whichever is wider, as the board's flex columns are: THRESHOLD needs 72, RELEASE and DENSITY 56 (`EditorLayout::knobSlot`). That makes the dynamic widths 1112 and 1180 rather than the 1080 and 1140 a fixed 48 px column would give.
 
 The height of 166 comes from the 88 Gain knob, its 14 label, its 16 value and two 8 gaps, plus padding.
 

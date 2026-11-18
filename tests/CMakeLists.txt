@@ -68,6 +68,11 @@ if(AMQ_BUILD_PLUGIN AND WIN32 AND NOT AMQ_STRICT_HOST_CHECKS)
     target_link_libraries(amq_plugin_gui_test PRIVATE clap psapi)
     target_compile_definitions(amq_plugin_gui_test PRIVATE UNICODE _UNICODE)
     add_dependencies(amq_plugin_gui_test AmQ_clap)
+    # Editor screenshots for design review (not a test).
+    add_executable(amq_plugin_gui_shot plugin/plugin_gui_shot.cpp)
+    target_link_libraries(amq_plugin_gui_shot PRIVATE clap windowscodecs ole32)
+    target_compile_definitions(amq_plugin_gui_shot PRIVATE UNICODE _UNICODE)
+    add_dependencies(amq_plugin_gui_shot AmQ_clap)
 endif()
 
 # Area 21 R16: every parameter interface function has a caller or a test.

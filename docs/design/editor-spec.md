@@ -441,6 +441,40 @@ Each conflict lists what the boards show, what `docs/plan` (or the parameter tab
 
 ---
 
+## Implementation status (2026-11-17)
+
+The editor in `ui/src/editor.cpp` follows this spec. The region map and reflow live in `ui/editor_layout` and the value formats in `ui/display_format`; both are unit-tested (`tests/ui/test_layout_format.cpp`). `amq_plugin_gui_shot` saves screenshots of the real editor for review, and the real-window GUI test passes.
+
+**Built:**
+
+- The bars, with their collapse rules.
+- The graph layers, in the §5.3 order.
+- Nodes and range handles, with their states.
+- Readouts, the add cursor and the lasso.
+- The band panel in every band state, including wrapping, compact and strip modes.
+- The band menu with submenus and the slope grid.
+- The Shape and Placement menus, and the slope picker.
+- The Processing, Output, Analyzer and Interface panels, and the side-chain filter popover.
+- The band list and the analyzer legend.
+- The inline value editor, for band nodes and knob values.
+- Hint mode.
+- EQ Match mode: panel, layers, fitted nodes, and the Match → Stop → Apply → Done sequence. The panel wraps into two rows when the window is narrow.
+- The spec's wheel bindings (Ctrl, Alt, Ctrl+Alt, Shift fine) and band-menu order.
+
+**Not built yet, or built differently:**
+
+- **Font.** Inter isn't bundled (bundling it is a licence and download decision). The editor uses the spec's first fallback, Segoe UI from the system on Windows, and the embedded Lato elsewhere.
+- **Interface scale (P-7).** The segments are drawn but inactive.
+- **Peak hold.** It shows as always on, because it has no parameter yet (C-27).
+- **`analyzer.grab`** is not placed (C-28).
+- **Presets.** The preset button shows "Untitled", with "(edited)" while there is undo history. Previous, next and the preset menu (P-28) wait for area 21's preset system.
+- **A/B and Full screen.** A/B is drawn but inactive, and Full screen is hidden. Both are pending a decision (C-25, C-26).
+- **Tooltips.** Not built. Accessible names exist on the band nodes.
+- **Side-chain range in Band mode.** It displays one octave either side of the band frequency. This is provisional, until the engine exposes the derived range.
+- **Collisions.** The hatch uses a provisional −60 dBFS activity floor.
+- **Motion.** Not built: state changes are instant. Reduced motion is therefore met trivially.
+- **Default size.** The default stays at the plan's 1180×672 (C-1).
+
 ## PROPOSED items for the designer
 
 Each item below is not shown on the boards, or changes what they show. It is designed in Am-Q's tokens and needs the Product designer to confirm.
