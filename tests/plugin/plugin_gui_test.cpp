@@ -189,6 +189,76 @@ int main(int argc, char** argv) {
         PostMessageW(gChild, msg, wp, MAKELPARAM(static_cast<int>(std::lround(x * scale)), static_cast<int>(std::lround(y * scale))));
     };
 
+    // Idle-CPU benchmark (area 12 R7: an idle editor with the analyzer off uses under 1 % of one
+    // core): run with --idle-benchmark. Three rounds alternate 20 s without the editor and 20 s
+    // with it open (60 s each), so slow drift in the machine's background load affects both
+    // sides alike; the editor's cost is the difference of the totals.
+    if (argc >= 3 && !std::strcmp(argv[2], "--idle-benchmark")) {
+        clap_id showPre = CLAP_INVALID_ID, showPost = CLAP_INVALID_ID;
+        for (uint32_t i = 0; i < params->count(p); ++i) {
+            clap_param_info info{};
+            params->get_info(p, i, &info);
+            if (!std::strcmp(info.name, "Analyzer Pre")) showPre = info.id;
+            if (!std::strcmp(info.name, "Analyzer Post")) showPost = info.id;
+        }
+        check(showPre != CLAP_INVALID_ID && showPost != CLAP_INVALID_ID, "analyzer parameters found");
+        clap_event_param_value off[2]{};
+        for (int k = 0; k < 2; ++k) {
+            off[k].header = {sizeof(off[k]), 0, CLAP_CORE_EVENT_SPACE_ID, CLAP_EVENT_PARAM_VALUE, 0};
+            off[k].param_id = k == 0 ? showPre : showPost;
+            off[k].note_id = -1;
+            off[k].port_index = off[k].channel = off[k].key = -1;
+            off[k].value = 0.0;
+        }
+        clap_input_events offIn{off, [](const clap_input_events*) -> uint32_t { return 2; },
+                                [](const clap_input_events* list, uint32_t i) {
+                                    return &static_cast<const clap_event_param_value*>(list->ctx)[i].header;
+                                }};
+        Events eOff;
+        processOnce(eOff, &offIn);
+        p->on_main_thread(p);
+        pump(500);
+        auto cpuSeconds = [] {
+            FILETIME c, e, k, u;
+            GetProcessTimes(GetCurrentProcess(), &c, &e, &k, &u);
+            auto t = [](FILETIME f) { return (static_cast<unsigned long long>(f.dwHighDateTime) << 32 | f.dwLowDateTime) * 1e-7; };
+            return t(k) + t(u);
+        };
+        double baseCpu = 0.0, baseWall = 0.0, openCpu = 0.0, openWall = 0.0;
+        auto measure = [&](DWORD ms, double& cpu, double& wall) {
+            const double c = cpuSeconds();
+            const ULONGLONG t = GetTickCount64();
+            pump(ms);
+            cpu += cpuSeconds() - c;
+            wall += (GetTickCount64() - t) * 1e-3;
+        };
+        gui->destroy(p);
+        pump(500);
+        for (int round = 0; round < 3; ++round) {
+            measure(20000, baseCpu, baseWall);
+            gui->create(p, CLAP_WINDOW_API_WIN32, false);
+            gui->set_parent(p, &win);
+            gui->show(p);
+            pump(1000);  // first frames and the GPU context, not counted
+            measure(20000, openCpu, openWall);
+            gui->destroy(p);
+            pump(500);
+            std::printf("  round %d: host loop alone %.2f %%, editor open %.2f %%\n", round + 1,
+                        baseCpu / baseWall * 100.0, openCpu / openWall * 100.0);
+        }
+        const double base = baseCpu / baseWall * 100.0, open = openCpu / openWall * 100.0;
+        std::printf("  idle editor, analyzer off, 60 s each: %.2f %% of one core (open %.2f %%, host loop %.2f %%)\n",
+                    open - base, open, base);
+        check(open - base < 1.0, "idle editor with the analyzer off: under 1 % of one core over 60 s (area 12 R7)");
+        p->stop_processing(p);
+        p->deactivate(p);
+        p->destroy(p);
+        DestroyWindow(top);
+        entry->deinit();
+        std::printf("%s (%d failure%s)\n", gFailures ? "FAILED" : "ALL PASSED", gFailures, gFailures == 1 ? "" : "s");
+        return gFailures ? 1 : 0;
+    }
+
     // 1. Double-click at 1 kHz, +6 dB creates band 1 there, as one gesture.
     const double cx = xOfHz(1000.0), cy = yOfDb(6.0);
     post(WM_MOUSEMOVE, 0, cx, cy);
