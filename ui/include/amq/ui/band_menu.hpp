@@ -3,9 +3,9 @@
 // items and calls activate(). Labels and enabled states are computed when the menu opens, from the
 // targets and the table (R2). Every action goes through BandOps, so each is one undo step (R4).
 //
-// PROVISIONAL: the entries, their order, grouping and wording follow R3's groups until the Product
-// designer's menu spec (area 14 Phase 0 task) and Counsel's review replace them. Split is shown
-// disabled until its behaviour is defined (area 14 Phase 3 task).
+// Entries, order and wording follow docs/design/editor-spec-graph.md §4.1 (Counsel review pending):
+// Enabled, Invert Gain, Make Dynamic, Make Spectral | Shape, Slope, Placement | Cut, Copy, Paste,
+// Select All | Split (disabled until defined, area 14), Delete.
 
 #include "amq/ui/band_ops.hpp"
 
@@ -31,7 +31,12 @@ struct MenuItem {
     bool checked = false;         // the current value of a choice
     bool separatorBefore = false;
     std::string submenu;          // items with the same submenu name group under it
+    bool checkbox = false;        // drawn with a check (Enabled, Make Dynamic, Make Spectral)
+    bool mixed = false;           // a checkbox whose targets differ
+    std::string hint;             // shortcut hint, right-aligned ("Ctrl C")
 };
+// The menu caption (spec §4.1): "BAND #3 · BELL" or "2 BANDS · #3, #4".
+[[nodiscard]] std::string bandMenuCaption(const BandOps& ops, const BandOps::Bands& targets);
 
 // Right-click on bands or a selection (R1): actions on `targets`.
 [[nodiscard]] std::vector<MenuItem> bandMenu(const BandOps& ops, const BandOps::Bands& targets, bool clipboardHasBands);

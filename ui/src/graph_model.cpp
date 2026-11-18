@@ -421,9 +421,10 @@ void GraphInteraction::wheel(float x, float y, double delta, Modifiers m) {
         return;
     }
     BandField f = BandField::Q;
-    if (m.command) f = BandField::Slope;
+    if (m.command && m.alt) f = BandField::Slope;
+    else if (m.command) f = BandField::Gain;
     else if (m.alt) f = BandField::DynRange;
-    else if (m.shift) f = BandField::Gain;
+    const double fine = m.shift ? kFineFactor : 1.0;  // R12: the fine modifier also scales wheel steps
     std::vector<params::ParamIndex> ids;
     for (int b : targets) ids.push_back(params::bandParam(b, f));
     EditGesture g;
@@ -432,11 +433,11 @@ void GraphInteraction::wheel(float x, float y, double delta, Modifiers m) {
         const auto id = params::bandParam(b, f);
         const double v = value(id);
         switch (f) {
-            case BandField::Q: g.set(id, v + delta * kWheelQStep); break;
+            case BandField::Q: g.set(id, v + delta * kWheelQStep * fine); break;
             case BandField::Gain:
-                if (node(b).hasGain) g.set(id, v + delta * kWheelGainDb);
+                if (node(b).hasGain) g.set(id, v + delta * kWheelGainDb * fine);
                 break;
-            case BandField::DynRange: g.set(id, v + delta * kWheelGainDb); break;
+            case BandField::DynRange: g.set(id, v + delta * kWheelGainDb * fine); break;
             default: {  // Slope: the next slope the shape allows, in the wheel's direction
                 const auto shape = static_cast<dsp::Shape>(static_cast<int>(value(params::bandParam(b, BandField::Shape))));
                 int s = static_cast<int>(v);

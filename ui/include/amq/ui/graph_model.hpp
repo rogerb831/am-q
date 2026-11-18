@@ -30,9 +30,11 @@ enum class Button : uint8_t { Left, Right, Middle };
 
 class GraphGeometry {
 public:
-    static constexpr double kMinHz = 20.0, kMaxHz = 20000.0;  // displayed span
-    // PROVISIONAL plot margins (Product designer): room for the axis labels.
-    static constexpr float kLeft = 16.0f, kRight = 56.0f, kTop = 16.0f, kBottom = 32.0f;
+    // Full displayed span = the band frequency range (editor-spec-graph §5.1).
+    static constexpr double kMinHz = 10.0, kMaxHz = 30000.0;
+    // Plot insets inside the graph region (editor-spec §1.1): the plot runs to the left edge; the
+    // right gutter holds the gain and analyzer scales and the meters.
+    static constexpr float kLeft = 0.0f, kRight = 100.0f, kTop = 24.0f, kBottom = 24.0f;
 
     void setSize(float w, float h) noexcept { w_ = w, h_ = h; }
     // Horizontal zoom (area 13 wheel bindings): the displayed span, within kMinHz .. kMaxHz.
@@ -92,8 +94,8 @@ struct NodeInfo {
     float rangeY = 0.0f;
 };
 
-// Pointer and wheel interaction (area 13). PROVISIONAL modifier table until the Product designer's
-// interaction spec (area 13 Phase 0 task) and Counsel's review:
+// Pointer and wheel interaction (area 13), per the modifier table in docs/design/editor-spec.md §6
+// (Counsel review pending):
 //   click a node: select it (and focus it); Shift+click: add; Command+click: toggle
 //   click empty: clear the selection (Shift keeps it); drag on empty: lasso (Shift adds)
 //   drag a node: moves every selected band by the same octaves and dB (gainless shapes: Q);
@@ -102,8 +104,9 @@ struct NodeInfo {
 //   a soloed band's vertical drag sets Solo Gain (R11; the editor shows soloDragDb())
 //   range handle (dynamic gain bands, at gain + range): drag sets Dyn Range; Alt-click toggles
 //     Dynamics Enabled (R7); Alt-click a node toggles Enabled
-//   wheel over a node or the selection: Q; Shift: gain; Alt: Dyn Range; Command: slope (steps
-//     through the slopes the shape allows); over empty space with no selection: horizontal zoom
+//   wheel over a node or the selection: Q; Command: gain; Alt: Dyn Range; Command+Alt: slope
+//     (steps through the slopes the shape allows); Shift: fine (x0.1, not for slope); over empty
+//     space with no selection: horizontal zoom (editor-spec §6.2)
 //   optional Gain-Q coupling (off by default, area 13 Phase 3): dragging gain narrows Q by
 //     2^(change in |gain| / 12)
 // Every change is one gesture (one undo step) across all affected bands.

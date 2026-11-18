@@ -155,7 +155,7 @@ TEST_CASE("Range handle: drag sets Dyn Range; Alt-click toggles Dynamics Enabled
     CHECK(r.h.balanced());
 }
 
-TEST_CASE("Wheel bindings: Q, Shift gain, Alt range, Command slope; empty space zooms") {
+TEST_CASE("Wheel bindings (editor-spec §6.2): Q, Command gain, Alt range, Command+Alt slope, Shift fine; empty space zooms") {
     Rig r;
     r.add(1000, 0);
     r.add(80, 0);
@@ -164,15 +164,21 @@ TEST_CASE("Wheel bindings: Q, Shift gain, Alt range, Command slope; empty space 
     const double q = r.v(0, BandField::Q);
     r.m.wheel(n.x, n.y, 1, {});
     CHECK(r.v(0, BandField::Q) == doctest::Approx(q + ui::GraphInteraction::kWheelQStep));
-    r.m.wheel(n.x, n.y, 2, kShift);
+    r.m.wheel(n.x, n.y, 1, kShift);  // fine Q
+    CHECK(r.v(0, BandField::Q) == doctest::Approx(q + 1.1 * ui::GraphInteraction::kWheelQStep));
+    r.m.wheel(n.x, n.y, 2, kCmd);
     CHECK(r.v(0, BandField::Gain) == doctest::Approx(2 * ui::GraphInteraction::kWheelGainDb));
+    n = r.m.node(0);  // the node moved with its gain
+    r.m.wheel(n.x, n.y, 1, {true, false, true});  // fine gain
+    CHECK(r.v(0, BandField::Gain) == doctest::Approx(2.1 * ui::GraphInteraction::kWheelGainDb));
     n = r.m.node(0);  // the node moved with its gain
     r.m.wheel(n.x, n.y, -4, kAlt);
     CHECK(r.v(0, BandField::DynRange) == doctest::Approx(-4 * ui::GraphInteraction::kWheelGainDb));
-    for (int k = 0; k < 20; ++k) r.m.wheel(n.x, n.y, 1, kCmd);  // a Bell never reaches Brickwall (node y: gain only)
+    const ui::Modifiers kSlope{false, true, true};
+    for (int k = 0; k < 20; ++k) r.m.wheel(n.x, n.y, 1, kSlope);  // a Bell never reaches Brickwall (node y: gain only)
     CHECK(r.v(0, BandField::Slope) == static_cast<int>(dsp::Slope::Db96));
     auto c = r.m.node(1);
-    for (int k = 0; k < 20; ++k) r.m.wheel(c.x, c.y, 1, kCmd);  // a cut does
+    for (int k = 0; k < 20; ++k) r.m.wheel(c.x, c.y, 1, kSlope);  // a cut does
     CHECK(r.v(1, BandField::Slope) == static_cast<int>(dsp::Slope::Brickwall));
     r.m.clearSelection();
     const float x = r.g.xOfHz(2000);

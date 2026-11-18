@@ -96,12 +96,12 @@ TEST_CASE("Attachment binds by string id and follows external changes") {
     CHECK_FALSE(bad.valid());
 }
 
-TEST_CASE("Geometry round trips and spans 20 Hz to 20 kHz") {
+TEST_CASE("Geometry round trips and spans 10 Hz to 30 kHz (editor-spec-graph §5.1)") {
     ui::GraphGeometry g;
     g.setSize(1000.0f, 600.0f);
     g.setRangeDb(12.0);
-    CHECK(g.xOfHz(20.0) == doctest::Approx(ui::GraphGeometry::kLeft));
-    CHECK(g.xOfHz(20000.0) == doctest::Approx(1000.0f - ui::GraphGeometry::kRight));
+    CHECK(g.xOfHz(ui::GraphGeometry::kMinHz) == doctest::Approx(ui::GraphGeometry::kLeft));
+    CHECK(g.xOfHz(ui::GraphGeometry::kMaxHz) == doctest::Approx(1000.0f - ui::GraphGeometry::kRight));
     for (double hz : {31.0, 440.0, 9876.0}) CHECK(g.hzOfX(g.xOfHz(hz)) == doctest::Approx(hz).epsilon(1e-5));
     for (double db : {-12.0, 0.0, 7.5}) CHECK(g.dbOfY(g.yOfDb(db)) == doctest::Approx(db).epsilon(1e-5));
 }

@@ -2,6 +2,9 @@
 
 #include "amq/ui/band_panel.hpp"
 
+#include "amq/params/shape_info.hpp"
+
+#include <cctype>
 #include <string>
 
 namespace amq::ui {
@@ -40,23 +43,36 @@ std::vector<MenuItem> bandMenu(const BandOps& ops, const BandOps::Bands& targets
     std::vector<MenuItem> m;
     const bool has = !targets.empty();
     const bool plural = targets.size() > 1;
-    m.push_back({menu::SelectAll, "Select All", true});
-    m.push_back({menu::ClearSelection, "Clear Selection", has});
+    auto add = [&](int action, std::string label, bool enabled) -> MenuItem& {
+        MenuItem it;
+        it.action = action, it.label = std::move(label), it.enabled = enabled;
+        m.push_back(std::move(it));
+        return m.back();
+    };
+    auto any = [&](BandField f) {
+        for (int b : targets)
+            if (val(ops, b, f) >= 0.5) return true;
+        return false;
+    };
+    // Group 1: checkboxes and Invert Gain.
     const bool enabled = all(ops, targets, BandField::Enabled);
-    m.push_back({enabled ? menu::Disable : menu::Enable, enabled ? "Disable" : "Enable", has, false, true});
+    auto& en = add(enabled ? menu::Disable : menu::Enable, "Enabled", has);
+    en.checkbox = true, en.checked = enabled, en.mixed = !enabled && any(BandField::Enabled), en.hint = "Alt-click";
     const bool gain = anyGainShape(ops, targets);
-    m.push_back({menu::InvertGain, "Invert Gain", has && gain});
+    add(menu::InvertGain, "Invert Gain", has && gain);
     const bool dynamic = all(ops, targets, BandField::DynEnabled);
-    m.push_back({dynamic ? menu::ClearDynamics : menu::MakeDynamic, dynamic ? "Clear Dynamics" : "Make Dynamic",
-                 has && gain, false, true});
+    auto& dy = add(dynamic ? menu::ClearDynamics : menu::MakeDynamic, "Make Dynamic", has && gain);
+    dy.checkbox = true, dy.checked = dynamic, dy.mixed = !dynamic && any(BandField::DynEnabled);
     const bool spectral = all(ops, targets, BandField::Spectral);
-    m.push_back({spectral ? menu::ClearSpectral : menu::MakeSpectral, spectral ? "Clear Spectral" : "Make Spectral",
-                 has && gain});
+    auto& sp = add(spectral ? menu::ClearSpectral : menu::MakeSpectral, "Make Spectral", has && gain);
+    sp.checkbox = true, sp.checked = spectral, sp.mixed = !spectral && any(BandField::Spectral);
+    // Group 2: Shape, Slope, Placement submenus. Labels and order from the table (area 11).
     const int shape = common(ops, targets, BandField::Shape);
-    // Labels and order from the table (area 11: menus read the table's choices).
     const auto shapes = choiceItems(ops.table(), params::bandParam(0, BandField::Shape));
-    for (const auto& it : shapes)
-        m.push_back({menu::ShapeBase + it.value, it.label, has, shape == it.value, it.value == 0, "Shape"});
+    for (const auto& it : shapes) {
+        auto& x = add(menu::ShapeBase + it.value, it.label, has);
+        x.checked = shape == it.value, x.submenu = "Shape", x.separatorBefore = it.value == 0;
+    }
     const int slope = common(ops, targets, BandField::Slope);
     const auto& slopes = params::specAt(params::bandParam(0, BandField::Slope))->choices;
     for (int s = 0; s < static_cast<int>(slopes.size()); ++s) {
@@ -64,21 +80,40 @@ std::vector<MenuItem> bandMenu(const BandOps& ops, const BandOps::Bands& targets
         for (int b : targets)
             ok = ok && dsp::slopeAllowed(static_cast<dsp::Shape>(static_cast<int>(val(ops, b, BandField::Shape))),
                                         static_cast<dsp::Slope>(s));
-        m.push_back({menu::SlopeBase + s, slopes[static_cast<size_t>(s)], ok, slope == s, false, "Slope"});
+        auto& x = add(menu::SlopeBase + s, slopes[static_cast<size_t>(s)], ok);
+        x.checked = slope == s, x.submenu = "Slope";
     }
     const auto& places = params::specAt(params::bandParam(0, BandField::Placement))->choices;
     const int placement = common(ops, targets, BandField::Placement);
-    for (int p = 0; p < static_cast<int>(places.size()); ++p)
-        m.push_back({menu::PlacementBase + p, places[static_cast<size_t>(p)], has, placement == p, false, "Placement"});
-    m.push_back({menu::Cut, "Cut", has, false, true});
-    m.push_back({menu::Copy, "Copy", has});
-    m.push_back({menu::Paste, plural || has ? "Paste Over" : "Paste", clipboardHasBands});
-    m.push_back({menu::Split, "Split", false, false, true});  // behaviour not defined yet
-    m.push_back({menu::Delete, plural ? "Delete " + std::to_string(targets.size()) + " Bands" : "Delete Band", has,
-                 false, true});
-    m.push_back({menu::DeleteDisabled, "Delete Disabled Bands", !ops.disabledBands().empty()});
-    m.push_back({menu::DeleteAll, "Delete All Bands", !ops.usedBands().empty()});
+    for (int p = 0; p < static_cast<int>(places.size()); ++p) {
+        auto& x = add(menu::PlacementBase + p, places[static_cast<size_t>(p)], has);
+        x.checked = placement == p, x.submenu = "Placement";
+    }
+    // Group 3: clipboard and selection.
+    auto& cut = add(menu::Cut, "Cut", has);
+    cut.separatorBefore = true, cut.hint = "Ctrl X";
+    add(menu::Copy, "Copy", has).hint = "Ctrl C";
+    add(menu::Paste, plural || has ? "Paste Over" : "Paste", clipboardHasBands).hint = "Ctrl V";
+    add(menu::SelectAll, "Select All", true).hint = "Ctrl A";
+    // Group 4.
+    add(menu::Split, "Split", false).separatorBefore = true;  // behaviour not defined yet (area 14)
+    add(menu::Delete, plural ? "Delete " + std::to_string(targets.size()) + " Bands" : "Delete Band", has).hint = "Del";
     return m;
+}
+
+std::string bandMenuCaption(const BandOps& ops, const BandOps::Bands& t) {
+    auto upper = [](std::string s) {
+        for (auto& c : s) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+        return s;
+    };
+    if (t.size() == 1) {
+        const auto info = params::shapeInfo(static_cast<dsp::Shape>(static_cast<int>(val(ops, t[0], BandField::Shape))));
+        return "BAND #" + std::to_string(t[0] + 1) + " \xC2\xB7 " + upper(std::string(info.name));
+    }
+    std::string s = std::to_string(t.size()) + " BANDS \xC2\xB7 ";
+    for (size_t i = 0; i < t.size() && i < 4; ++i) s += (i ? ", #" : "#") + std::to_string(t[i] + 1);
+    if (t.size() > 4) s += ", \xE2\x80\xA6";
+    return s;
 }
 
 std::vector<MenuItem> graphMenu(const BandOps& ops, bool clipboardHasBands) {
