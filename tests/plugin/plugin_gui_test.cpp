@@ -189,6 +189,64 @@ int main(int argc, char** argv) {
         PostMessageW(gChild, msg, wp, MAKELPARAM(static_cast<int>(std::lround(x * scale)), static_cast<int>(std::lround(y * scale))));
     };
 
+    // Frame rate (area 12, render driver): run with --frame-rate. Visage's pacing thread invalidates
+    // the editor once per tick (a vblank, or its fallback sleep when there is no output to wait on,
+    // as in a remote session), so WM_PAINT messages to the editor count the ticks.
+    if (argc >= 3 && !std::strcmp(argv[2], "--frame-rate")) {
+        static int paints = 0;
+        HHOOK hook = SetWindowsHookExW(
+            WH_GETMESSAGE,
+            [](int code, WPARAM wp, LPARAM lp) -> LRESULT {
+                const auto* m = reinterpret_cast<const MSG*>(lp);
+                if (code >= 0 && wp == PM_REMOVE && m->message == WM_PAINT && m->hwnd == gChild) ++paints;
+                return CallNextHookEx(nullptr, code, wp, lp);
+            },
+            nullptr, GetCurrentThreadId());
+        pump(1000);
+        paints = 0;
+        const ULONGLONG t0 = GetTickCount64();
+        pump(5000);
+        const double secs = (GetTickCount64() - t0) * 1e-3;
+        UnhookWindowsHookEx(hook);
+        const double hz = paints / secs;
+        // The display's own rate: Visage paces to the vblank of the window's monitor, and falls back
+        // to 60 Hz (cmake/patches/visage-fallback-timer.patch) when there is no output to wait on.
+        double displayHz = 0.0;
+        IDXGIFactory1* factory = nullptr;
+        if (SUCCEEDED(CreateDXGIFactory1(__uuidof(IDXGIFactory1), reinterpret_cast<void**>(&factory)))) {
+            const HMONITOR mon = MonitorFromWindow(top, MONITOR_DEFAULTTONEAREST);
+            IDXGIAdapter* adapter = nullptr;
+            for (UINT i = 0; displayHz == 0.0 && factory->EnumAdapters(i, &adapter) != DXGI_ERROR_NOT_FOUND; ++i) {
+                IDXGIOutput* output = nullptr;
+                for (UINT j = 0; adapter->EnumOutputs(j, &output) != DXGI_ERROR_NOT_FOUND; ++j) {
+                    DXGI_OUTPUT_DESC desc{};
+                    if (displayHz == 0.0 && SUCCEEDED(output->GetDesc(&desc)) && desc.Monitor == mon) {
+                        const ULONGLONG v0 = GetTickCount64();
+                        int ok = 0;
+                        for (int k = 0; k < 30; ++k) ok += SUCCEEDED(output->WaitForVBlank());
+                        if (ok == 30) displayHz = 30.0 / ((GetTickCount64() - v0) * 1e-3);
+                    }
+                    output->Release();
+                }
+                adapter->Release();
+            }
+            factory->Release();
+        }
+        const double expected = displayHz > 0.0 ? std::min(displayHz, 240.0) : 60.0;
+        std::printf("  editor ticks: %.1f per second; display %s %.1f Hz (%s session)\n", hz,
+                    displayHz > 0.0 ? "vblank" : "none, fallback", expected,
+                    GetSystemMetrics(SM_REMOTESESSION) ? "remote" : "local");
+        check(hz > 0.9 * expected, "the editor ticks at the display's rate (or 60 Hz without one)");
+        gui->destroy(p);
+        p->stop_processing(p);
+        p->deactivate(p);
+        p->destroy(p);
+        DestroyWindow(top);
+        entry->deinit();
+        std::printf("%s (%d failure%s)\n", gFailures ? "FAILED" : "ALL PASSED", gFailures, gFailures == 1 ? "" : "s");
+        return gFailures ? 1 : 0;
+    }
+
     // Idle-CPU benchmark (area 12 R7: an idle editor with the analyzer off uses under 1 % of one
     // core): run with --idle-benchmark. Three rounds alternate 20 s without the editor and 20 s
     // with it open (60 s each), so slow drift in the machine's background load affects both

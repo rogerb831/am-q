@@ -32,15 +32,19 @@ FetchContent_Declare(amq_clap_wrapper
     GIT_SHALLOW    TRUE
     EXCLUDE_FROM_ALL)
 
-# Visage carries one local patch (cmake/patches/visage-user-scale.patch): a user scale on
+# Visage carries two local patches: cmake/patches/visage-user-scale.patch, a user scale on
 # visage::Window, multiplied into the OS DPI scale, for Am-Q's interface zoom (docs/design/
-# editor-spec.md P-7). FETCHCONTENT_SOURCE_DIR_AMQ_VISAGE overrides skip it (CMake runs no patch
+# editor-spec.md P-7); and cmake/patches/visage-fallback-timer.patch, which paces the Windows
+# frame thread's fallback (no display output to wait on) with a high-resolution timer at 60 Hz,
+# where Sleep(16) gave about 32 Hz at the default timer resolution (area 12 render driver). FETCHCONTENT_SOURCE_DIR_AMQ_VISAGE overrides skip it (CMake runs no patch
 # step on them), so builds against a local clone get no zoom.
 FetchContent_Declare(amq_visage
     GIT_REPOSITORY https://github.com/VitalAudio/visage.git
     GIT_TAG        v1.0.0
     GIT_SHALLOW    TRUE
     PATCH_COMMAND  ${CMAKE_COMMAND} -DPATCH=${CMAKE_CURRENT_LIST_DIR}/patches/visage-user-scale.patch
+                   -P ${CMAKE_CURRENT_LIST_DIR}/patches/apply_patch.cmake
+          COMMAND  ${CMAKE_COMMAND} -DPATCH=${CMAKE_CURRENT_LIST_DIR}/patches/visage-fallback-timer.patch
                    -P ${CMAKE_CURRENT_LIST_DIR}/patches/apply_patch.cmake
     EXCLUDE_FROM_ALL)
 

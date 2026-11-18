@@ -1,0 +1,67 @@
+diff --git a/visage_windowing/win32/windowing_win32.cpp b/visage_windowing/win32/windowing_win32.cpp
+index 87af51d..fc8cb87 100644
+--- a/visage_windowing/win32/windowing_win32.cpp
++++ b/visage_windowing/win32/windowing_win32.cpp
+@@ -50,6 +50,10 @@
+ #include <vector>
+ #include <windowsx.h>
+ 
++#ifndef CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
++#define CREATE_WAITABLE_TIMER_HIGH_RESOLUTION 0x00000002
++#endif
++
+ typedef DPI_AWARENESS_CONTEXT(WINAPI* GetWindowDpiAwarenessContext_t)(HWND);
+ typedef DPI_AWARENESS_CONTEXT(WINAPI* GetThreadDpiAwarenessContext_t)();
+ typedef DPI_AWARENESS_CONTEXT(WINAPI* SetThreadDpiAwarenessContext_t)(DPI_AWARENESS_CONTEXT);
+@@ -267,6 +271,8 @@ namespace visage {
+       stop();
+       clear();
+       CloseHandle(ready_event_);
++      if (fallback_timer_)
++        CloseHandle(fallback_timer_);
+     }
+ 
+     void clear() {
+@@ -341,7 +347,7 @@ namespace visage {
+           auto output = monitor_outputs_.find(monitor);
+           if (output == monitor_outputs_.end() || FAILED(output->second->WaitForVBlank()) ||
+               time::microseconds() - last_tick_us < kMinFrameUs)
+-            sleep(kFallbackFrameMs);
++            waitFallbackFrame(last_tick_us, kFallbackFrameMs);
+         }
+         last_tick_us = time::microseconds();
+ 
+@@ -359,6 +365,25 @@ namespace visage {
+     void hiddenTickHandled() { hidden_tick_pending_ = false; }
+ 
+   private:
++    void waitFallbackFrame(long long last_tick_us, int fallback_ms) {
++      static constexpr long long kFallbackFrameUs = 16667;
++      if (fallback_timer_ == nullptr)
++        fallback_timer_ = CreateWaitableTimerExW(nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,
++                                                 TIMER_ALL_ACCESS);
++      if (fallback_timer_ == nullptr) {
++        sleep(fallback_ms);
++        return;
++      }
++      long long wait_us = last_tick_us + kFallbackFrameUs - time::microseconds();
++      wait_us = std::max(wait_us, 1000LL);
++      LARGE_INTEGER due;
++      due.QuadPart = -wait_us * 10;
++      if (SetWaitableTimer(fallback_timer_, &due, 0, nullptr, nullptr, FALSE))
++        WaitForSingleObject(fallback_timer_, INFINITE);
++      else
++        sleep(fallback_ms);
++    }
++
+     bool waitForFrame(int timeout_ms) {
+       std::lock_guard<std::mutex> lock(waiter_mutex_);
+       if (!waiter_ || ready_)
+@@ -385,6 +410,7 @@ namespace visage {
+     std::function<bool(int)> waiter_;
+     int unmatched_presents_ = 0;
+     HANDLE ready_event_ = nullptr;
++    HANDLE fallback_timer_ = nullptr;
+     std::atomic<bool> ready_ = false;
+     std::atomic<bool> hidden_tick_pending_ = false;
+ 
