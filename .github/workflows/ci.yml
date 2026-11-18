@@ -10,6 +10,9 @@
 #                   the first macOS build task in area 01 is done; remove continue-on-error
 #                   then.
 #
+# The windows job also uploads the binary build: Am-Q-<version>-windows-x64 (Am-Q.clap, the
+# Am-Q.vst3 bundle and INSTALL.txt) and its debug symbols as a separate -symbols artifact.
+#
 # Validator binaries are pinned by version and SHA-256 in tools/ci/fetch_validators.sh.
 name: CI
 
@@ -107,13 +110,45 @@ jobs:
           path: validator-logs
           if-no-files-found: ignore
 
-      - name: Upload plugins
-        if: success() && matrix.strict == 'OFF'
+      # The binary build: the shipping plugins as an installable package, with the debug symbols
+      # in a separate artifact. Named Am-Q-<tag>-windows-x64 on a tag build, otherwise
+      # Am-Q-<branch>-<short hash>-windows-x64.
+      - name: Package plugins
+        if: success() && matrix.strict == 'OFF' && matrix.platform == 'windows'
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then ver="$GITHUB_REF_NAME"; else ver="${GITHUB_REF_NAME//\//-}-${GITHUB_SHA::7}"; fi
+          pkg="Am-Q-$ver-windows-x64"
+          clap=$(find build -path '*/_deps' -prune -o -type f -name Am-Q.clap -print | head -n 1)
+          vst3=$(find build -path '*/_deps' -prune -o -type d -name Am-Q.vst3 -print -prune | head -n 1)
+          test -n "$clap" && test -n "$vst3"
+          mkdir -p "dist/$pkg" "dist/$pkg-symbols"
+          cp "$clap" "dist/$pkg/"
+          cp -r "$vst3" "dist/$pkg/"
+          # Symbols: out of the bundle, named after the plugin they belong to.
+          find "dist/$pkg/Am-Q.vst3" -name '*.pdb' -exec mv {} "dist/$pkg-symbols/Am-Q.vst3.pdb" \;
+          cp "$(dirname "$clap")/Am-Q.pdb" "dist/$pkg-symbols/Am-Q.clap.pdb"
+          cat > "dist/$pkg/INSTALL.txt" <<EOF
+          Am-Q $ver (Windows, x64)
+          Built from commit $GITHUB_SHA.
+
+          CLAP: copy Am-Q.clap to C:\Program Files\Common Files\CLAP
+          VST3: copy the Am-Q.vst3 folder to C:\Program Files\Common Files\VST3
+          Then rescan plugins in your host.
+          EOF
+          echo "PKG=$pkg" >> "$GITHUB_ENV"
+
+      - name: Upload the package
+        if: success() && matrix.strict == 'OFF' && matrix.platform == 'windows'
         uses: actions/upload-artifact@v7
         with:
-          name: am-q-${{ matrix.name }}
-          path: |
-            build/**/Am-Q.clap
-            build/**/Am-Q.vst3
-            !build/_deps/**
-          if-no-files-found: warn
+          name: ${{ env.PKG }}
+          path: dist/${{ env.PKG }}
+          if-no-files-found: error
+
+      - name: Upload the symbols
+        if: success() && matrix.strict == 'OFF' && matrix.platform == 'windows'
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.PKG }}-symbols
+          path: dist/${{ env.PKG }}-symbols
+          if-no-files-found: error
