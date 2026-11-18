@@ -77,6 +77,7 @@ bool Engine::prepare(double sampleRate, uint32_t maxFrames) noexcept {
     try {
         work_.assign(static_cast<size_t>(kMaxChannels) * maxFrames, 0.0);
         dynW_.assign(static_cast<size_t>(params::kBandCount) * maxFrames, 0.0);
+        dynLanes_.resize(params::kBandCount);
         solo_.assign(static_cast<size_t>(kMaxChannels) * maxFrames, 0.0);
         soloMixBuf_.assign(maxFrames, 0.0);
         if (!analyzerSubscribed_) {
@@ -147,6 +148,7 @@ bool Engine::prepare(double sampleRate, uint32_t maxFrames) noexcept {
     for (auto& b : bands_) {  // dynamics start from rest; the reference envelope warms up again
         b.dyn.core.prepare(sampleRate);
         b.dyn.ref.prepare(sampleRate);
+        b.dyn.laneLive = false;
         b.dyn.on = false;
         b.dyn.designed = false;
         b.dyn.grDb = 0.0;
@@ -1105,8 +1107,10 @@ void Engine::readDynamics(int b, uint64_t sample, bool reset, double f, double g
         sc.dynIn = DesignInputs{sampleRate_, f, std::clamp(g + range, -30.0, 30.0), q, shape, slope};
         return;
     }
-    const double hz = std::exp2(f);
-    const double qv = params::qFromPosition(q);
+    if (!(f == d.memoF)) d.memoF = f, d.memoHz = std::exp2(f);
+    if (!(q == d.memoQ)) d.memoQ = q, d.memoQv = params::qFromPosition(q);
+    const double hz = d.memoHz;
+    const double qv = d.memoQv;
     if (!d.on || reset) {  // starting: from rest, the reference warms up again (area 07 R9)
         d.core.reset();
         d.ref.reset();
@@ -1118,6 +1122,8 @@ void Engine::readDynamics(int b, uint64_t sample, bool reset, double f, double g
         d.designed = false;
         d.scKey.fill(-1.0);
         d.grDb = 0.0;
+        d.wPrev = 0.0;
+        d.laneLive = false;
     }
     d.on = true;
     // Timing: Dyn Auto uses the knob-50 timing; the stored knobs are untouched (R6).
@@ -1126,9 +1132,10 @@ void Engine::readDynamics(int b, uint64_t sample, bool reset, double f, double g
     const double kr = autoThr ? dsp::kDefaultTimingKnob : table_.value(params::bandParam(b, BandField::Release));
     if (const std::array<double, 3> tk{ka, kr, hz}; tk != d.timingKey) {  // pow() only on change
         d.timingKey = tk;
+        storeDynLane(b);
         d.core.setTimes(dsp::attackSeconds(ka, hz), dsp::releaseSeconds(kr));
     }
-    if (autoThr && !d.autoWas) d.ref.reset();  // Auto switched on: warm up (area 07 R9)
+    if (autoThr && !d.autoWas) storeDynLane(b), d.ref.reset();  // Auto switched on: warm up (area 07 R9)
     d.autoWas = autoThr;
     d.autoThr = autoThr;
     d.thresholdDb = field(b, rampSlot(BandField::Threshold)).ramp.current();
@@ -1197,10 +1204,23 @@ void Engine::readDynamics(int b, uint64_t sample, bool reset, double f, double g
 
 // Detectors of every dynamic band over samples [off, off + n): side-chain level, threshold, gain
 // computer, smoothing, and the blend weight per sample (area 06, area 07 R7-R10).
+// Writes a band's live lane back to its objects (state only: the coefficients there are the
+// per-sample ones, and the warm-up count goes back to samples).
+void Engine::storeDynLane(int band) noexcept {
+    auto& d = bands_[static_cast<size_t>(band)].dyn;
+    if (!d.laneLive) return;
+    dsp::GainLane L = dynLanes_.lane(static_cast<size_t>(band));
+    L.refCount = L.refCount * d.laneN + d.refRem;
+    L.store(d.ref, d.core);
+    d.laneLive = false;
+}
+
 void Engine::runDynamics(const double* const* w, const float* const* sc, uint32_t numSc, uint32_t outCh,
                          uint32_t off, uint32_t n) noexcept {
     std::array<int, params::kBandCount> lanes{};
     std::array<dsp::GainLane, params::kBandCount> laneState{};
+    std::array<double, params::kBandCount> stepEnv{};     // decimated: each band's block peak (lane = band)
+    const bool decimate = kDecimatedDetector && n > 1;
     uint32_t count = 0;
     for (int b = 0; b < params::kBandCount; ++b) {
         auto& d = bands_[static_cast<size_t>(b)].dyn;
@@ -1210,65 +1230,128 @@ void Engine::runDynamics(const double* const* w, const float* const* sc, uint32_
         const double inv = 1.0 / cap;
         const bool ext = d.external;
         const bool haveExt = ext && sc && numSc > 0 && sc[0];
-        for (uint32_t i = 0; i < n; ++i) {
+        // The block's detector inputs (a, and c for linked stereo), then the side-chain filter as
+        // block runs, then the peak envelopes. Each step is the per-sample arithmetic in the same
+        // order (svf.hpp: block runs are bit-identical to per-sample ticks).
+        const bool two = d.detect == 0;  // Stereo: linked (R10)
+        constexpr uint32_t kChunk = 64;  // the read interval is 4; tests may set a longer one
+        double a[kChunk], c[kChunk];
+        for (uint32_t c0 = 0; c0 < n; c0 += kChunk) {
+        const uint32_t m = std::min(kChunk, n - c0);
+        for (uint32_t i = 0; i < m; ++i) {
             double l = 0.0, r = 0.0;
+            const uint32_t at = off + c0 + i;
             if (!ext) {
-                l = w[0][off + i];
-                r = outCh >= 2 ? w[1][off + i] : l;
+                l = w[0][at];
+                r = outCh >= 2 ? w[1][at] : l;
             } else if (haveExt) {
-                l = sc[0][off + i];
-                r = numSc >= 2 && sc[1] ? sc[1][off + i] : l;
+                l = sc[0][at];
+                r = numSc >= 2 && sc[1] ? sc[1][at] : l;
             }
-            double a = 0.0, c = 0.0;
-            bool two = false;
             switch (d.detect) {
-                case 0: a = l, c = r, two = true; break;  // Stereo: linked (R10)
-                case 1: a = l; break;
-                case 2: a = r; break;
-                case 3: a = 0.5 * (l + r); break;  // Mid (area 03: M/S side-chain encoder)
-                case 4: a = 0.5 * (l - r); break;  // Side
-                default: break;
+                case 0: a[i] = l, c[i] = r; break;
+                case 1: a[i] = l; break;
+                case 2: a[i] = r; break;
+                case 3: a[i] = 0.5 * (l + r); break;  // Mid (area 03: M/S side-chain encoder)
+                case 4: a[i] = 0.5 * (l - r); break;  // Side
+                default: a[i] = 0.0; break;
             }
-            double ea, ec = 0.0;  // side-chain envelopes
-            if (d.scBandPass) {
-                ea = dsp::svfBandEnvelope(d.sc[0], d.scState[0][0], a);
-                if (two) ec = dsp::svfBandEnvelope(d.sc[0], d.scState[1][0], c);
-            } else {
-                for (uint8_t k = 0; k < d.scCount; ++k) {
-                    a = dsp::svfTick(d.sc[k], d.scState[0][k], a);
-                    if (two) c = dsp::svfTick(d.sc[k], d.scState[1][k], c);
-                }
-                ea = std::abs(a), ec = std::abs(c);
+        }
+        if (d.scBandPass) {
+            if (two) dsp::svfBandEnvelopeStereo(d.sc[0], d.scState[0][0], d.scState[1][0], a, c, m);
+            else
+                for (uint32_t i = 0; i < m; ++i) a[i] = dsp::svfBandEnvelope(d.sc[0], d.scState[0][0], a[i]);
+        } else {
+            for (uint8_t k = 0; k < d.scCount; ++k) {
+                if (two) dsp::svfRunStereo(d.sc[k], d.scState[0][k], d.scState[1][k], a, c, m);
+                else dsp::svfRun(d.sc[k], d.scState[0][k], a, m);
             }
-            double env = d.peak[0].process(ea);
-            if (two) env = std::max(env, d.peak[1].process(ec));  // linked: the louder channel (R10)
-            wt[i] = env;  // the dB chain below turns it into the weight
+            for (uint32_t i = 0; i < m; ++i) a[i] = std::abs(a[i]);
+            if (two)
+                for (uint32_t i = 0; i < m; ++i) c[i] = std::abs(c[i]);
+        }
+        for (uint32_t i = 0; i < m; ++i) {
+            double env = d.peak[0].process(a[i]);
+            if (two) env = std::max(env, d.peak[1].process(c[i]));  // linked: the louder channel (R10)
+            wt[c0 + i] = env;  // the dB chain below turns it into the weight
+        }
         }
         lanes[count] = b;
         auto& L = laneState[count++];
         L.autoThr = d.autoThr, L.thresholdDb = d.thresholdDb, L.offsetDb = std::min(cap, dsp::kAutoOffsetCapDb);
         L.kneeDb = d.kneeDb, L.capDb = cap, L.inv = inv;
-        L.load(d.ref, d.core);
+        if (decimate) {
+            // One step for the block on its peak envelope. The band's lane holds its state between
+            // blocks; it is (re)loaded from the objects only when it is not live or the block
+            // length changed, with each one-pole coefficient c turned into 1 - (1 - c)^n, which is
+            // n steps of the same pole with the input held.
+            double peak = 0.0;
+            for (uint32_t i = 0; i < n; ++i) peak = std::max(peak, wt[i]);
+            stepEnv[static_cast<size_t>(b)] = peak;
+            const auto bi = static_cast<size_t>(b);
+            if (d.laneLive && d.laneN != n) storeDynLane(b);
+            if (!d.laneLive) {
+                L.load(d.ref, d.core);
+                auto blockCoeff = [n](double c) {
+                    double p = 1.0;
+                    for (uint32_t i = 0; i < n; ++i) p *= 1.0 - c;
+                    return 1.0 - p;
+                };
+                L.fa = blockCoeff(L.fa), L.fr = blockCoeff(L.fr), L.sa = blockCoeff(L.sa), L.sr = blockCoeff(L.sr);
+                L.za = blockCoeff(L.za), L.zr = blockCoeff(L.zr);
+                L.refSlow = blockCoeff(L.refSlow), L.refWarm = blockCoeff(L.refWarm);
+                // The warm-up counts samples; the step counts blocks.
+                d.refRem = L.refCount % n;
+                L.refCount /= n;
+                L.refWarmSamples = (L.refWarmSamples + n - 1) / n;
+                dynLanes_.setLane(bi, L);
+                d.laneLive = true, d.laneN = n;
+            } else {
+                dynLanes_.autoThr[bi] = L.autoThr ? 1 : 0, dynLanes_.thresholdDb[bi] = L.thresholdDb;
+                dynLanes_.offsetDb[bi] = L.offsetDb, dynLanes_.kneeDb[bi] = L.kneeDb;
+                dynLanes_.capDb[bi] = L.capDb, dynLanes_.inv[bi] = L.inv;
+            }
+        } else {
+            storeDynLane(b);
+            L.load(d.ref, d.core);
+        }
+    }
+    if (decimate) {
+        // Every band's lane in one structure-of-arrays step (dynamics_lanes.hpp, the same bits as
+        // the scalar kernel per lane); lanes of bands without dynamics step on silence and are
+        // reloaded before use. Then each band's weight is interpolated over the block from where
+        // the last block ended, so the gain never steps.
+        if (count == 0) return;
+        dsp::gainLanesStep(dynLanes_, stepEnv.data(), params::kBandCount);
+        for (uint32_t j = 0; j < count; ++j) {
+            const auto bi = static_cast<size_t>(lanes[j]);
+            auto& d = bands_[bi].dyn;
+            const double w1 = std::min(dynLanes_.zy[bi] * dynLanes_.inv[bi], 1.0);
+            double* wt = dynW_.data() + bi * maxFrames_ + off;
+            const double w0 = d.wPrev;
+            for (uint32_t i = 0; i < n; ++i) wt[i] = w0 + (w1 - w0) * (static_cast<double>(i + 1) / n);
+            d.wPrev = w1;
+            d.grDb = dynLanes_.zy[bi];
+        }
+        return;
     }
     // The dB-domain chain is the same arithmetic for every band: two bands per SSE2 step
     // (dynamics_lanes.hpp; bit-identical to running them one by one).
+    auto buf = [&](uint32_t j) { return dynW_.data() + static_cast<size_t>(lanes[j]) * maxFrames_ + off; };
+    const uint32_t steps = n;
     uint32_t k = 0;
     static const bool avx2 = dsp::cpuHasAvx2();
     if (avx2)  // four bands per AVX2 step where the CPU has it (the same bits as the pairs)
         for (; k + 3 < count; k += 4) {
             dsp::GainLane* const L[4] = {&laneState[k], &laneState[k + 1], &laneState[k + 2], &laneState[k + 3]};
-            double* const B[4] = {dynW_.data() + static_cast<size_t>(lanes[k]) * maxFrames_ + off,
-                                  dynW_.data() + static_cast<size_t>(lanes[k + 1]) * maxFrames_ + off,
-                                  dynW_.data() + static_cast<size_t>(lanes[k + 2]) * maxFrames_ + off,
-                                  dynW_.data() + static_cast<size_t>(lanes[k + 3]) * maxFrames_ + off};
-            dsp::gainLaneQuadAvx2(L, B, n);
+            double* const B[4] = {buf(k), buf(k + 1), buf(k + 2), buf(k + 3)};
+            dsp::gainLaneQuadAvx2(L, B, steps);
         }
-    for (; k + 1 < count; k += 2)
-        dsp::gainLanePair(laneState[k], laneState[k + 1], dynW_.data() + static_cast<size_t>(lanes[k]) * maxFrames_ + off,
-                          dynW_.data() + static_cast<size_t>(lanes[k + 1]) * maxFrames_ + off, n);
-    if (k < count) dsp::gainLaneScalar(laneState[k], dynW_.data() + static_cast<size_t>(lanes[k]) * maxFrames_ + off, n);
+    for (; k + 1 < count; k += 2) dsp::gainLanePair(laneState[k], laneState[k + 1], buf(k), buf(k + 1), steps);
+    if (k < count) dsp::gainLaneScalar(laneState[k], buf(k), steps);
     for (uint32_t j = 0; j < count; ++j) {
         auto& d = bands_[static_cast<size_t>(lanes[j])].dyn;
+        d.wPrev = dynW_[static_cast<size_t>(lanes[j]) * maxFrames_ + off + n - 1];
         laneState[j].store(d.ref, d.core);
         d.grDb = laneState[j].zy;
     }

@@ -122,6 +122,36 @@ struct SvfState {
     return c.m1 * std::sqrt(v1 * v1 + v2 * v2);
 }
 
+// svfBandEnvelope on two channels with the same coefficients (linked stereo side chain), one block:
+// l and r hold the inputs and receive the envelopes. SSE2 keeps the scalar operation order, and its
+// square root is correctly rounded like std::sqrt, so the results are bit-identical.
+inline void svfBandEnvelopeStereo(const SvfCoeffs& c, SvfState& sl, SvfState& sr, double* l, double* r,
+                                  uint32_t n) noexcept {
+#if defined(AMQ_SVF_SSE2)
+    const __m128d a1 = _mm_set1_pd(c.a1), a2 = _mm_set1_pd(c.a2), a3 = _mm_set1_pd(c.a3);
+    const __m128d m1 = _mm_set1_pd(c.m1), two = _mm_set1_pd(2.0);
+    __m128d ic1 = _mm_set_pd(sr.ic1, sl.ic1), ic2 = _mm_set_pd(sr.ic2, sl.ic2);
+    for (uint32_t i = 0; i < n; ++i) {
+        const __m128d v0 = _mm_set_pd(r[i], l[i]);
+        const __m128d v3 = _mm_sub_pd(v0, ic2);
+        const __m128d v1 = _mm_add_pd(_mm_mul_pd(a1, ic1), _mm_mul_pd(a2, v3));
+        const __m128d v2 = _mm_add_pd(_mm_add_pd(ic2, _mm_mul_pd(a2, ic1)), _mm_mul_pd(a3, v3));
+        ic1 = _mm_sub_pd(_mm_mul_pd(two, v1), ic1);
+        ic2 = _mm_sub_pd(_mm_mul_pd(two, v2), ic2);
+        const __m128d y = _mm_mul_pd(m1, _mm_sqrt_pd(_mm_add_pd(_mm_mul_pd(v1, v1), _mm_mul_pd(v2, v2))));
+        _mm_storel_pd(l + i, y);
+        _mm_storeh_pd(r + i, y);
+    }
+    double t[2];
+    _mm_storeu_pd(t, ic1);
+    sl.ic1 = t[0], sr.ic1 = t[1];
+    _mm_storeu_pd(t, ic2);
+    sl.ic2 = t[0], sr.ic2 = t[1];
+#else
+    for (uint32_t i = 0; i < n; ++i) l[i] = svfBandEnvelope(c, sl, l[i]), r[i] = svfBandEnvelope(c, sr, r[i]);
+#endif
+}
+
 // Block runs of one section in place (R18 kernel variants). Results are bit-identical to calling
 // svfTick per sample: a section's recurrence does not depend on the order sections are run in, and
 // the SIMD form keeps the scalar operation order.

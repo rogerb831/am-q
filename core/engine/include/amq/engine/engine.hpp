@@ -83,6 +83,7 @@
 #include <atomic>
 #include <memory>
 #include <cstdint>
+#include <limits>
 #include <vector>
 
 namespace amq::engine {
@@ -92,6 +93,13 @@ inline constexpr double kMaxSampleRate = 384000.0;
 inline constexpr uint32_t kMaxChannels = 2;
 inline constexpr uint32_t kReadInterval = 4;       // samples between parameter reads (R15)
 inline constexpr uint32_t kRedesignInterval = 32;  // minimum samples between redesigns (R15)
+// Decimated detector (area 06, the 3 % CPU target): the dynamics dB chain (level, auto reference,
+// knee, dual release, final stage) runs once per parameter read on the block's peak envelope,
+// with its one-pole coefficients converted for the block length; the side-chain filters and the
+// peak envelope stay at the full rate, and the weight is interpolated across the block.
+// PROVISIONAL until a listening check (it moves timing by up to one read interval, 83 us at
+// 48 kHz). false runs the chain on every sample, as before.
+inline constexpr bool kDecimatedDetector = true;
 inline constexpr double kJumpOctaves = 0.5;        // PROVISIONAL: redesign at once beyond this
 inline constexpr double kEnableFadeMs = 10.0;      // area 02 R6 initial value
 inline constexpr double kRefineSwapDelayMs = 50.0; // PROVISIONAL: swap a refined design this long after the request
@@ -210,7 +218,9 @@ public:
         return band >= 0 && band < params::kBandCount && bands_[static_cast<size_t>(band)].dyn.on;
     }
     [[nodiscard]] double dynReferenceDb(int band) const noexcept {
-        return band >= 0 && band < params::kBandCount ? bands_[static_cast<size_t>(band)].dyn.ref.value() : 0.0;
+        if (band < 0 || band >= params::kBandCount) return 0.0;
+        const auto& d = bands_[static_cast<size_t>(band)].dyn;
+        return d.laneLive ? dynLanes_.ref[static_cast<size_t>(band)] : d.ref.value();
     }
     // Structure crossfade of a band (R17): weight of the new filter, 1 when none is running.
     [[nodiscard]] double structureMix(int band) const noexcept {
@@ -310,6 +320,10 @@ private:
             uint8_t scCount = 0;
             bool scBandPass = false;  // the side-chain filter is one band-pass: quadrature envelope
             std::array<double, 3> timingKey{-1, -1, -1};      // attack knob, release knob, band Hz
+            // exp2 of the frequency and the Q mapping, kept while their inputs are bitwise the same:
+            // readDynamics runs at every parameter read, and these were most of its cost.
+            double memoF = std::numeric_limits<double>::quiet_NaN(), memoHz = 0.0;
+            double memoQ = std::numeric_limits<double>::quiet_NaN(), memoQv = 0.0;
             std::array<double, 3> kneeKey{-1, -1, -1};        // Q, range, shape
             std::array<dsp::PeakDetector, kMaxChannels> peak{};
             std::array<std::array<dsp::SvfState, 2>, kMaxChannels> scState{};
@@ -323,6 +337,14 @@ private:
             int dShape = -1, dSlope = -1;
             uint64_t lastDesignAt = 0;
             double grDb = 0.0;        // smoothed gain reduction now (>= 0)
+            double wPrev = 0.0;       // the weight at the end of the last block (decimated detector)
+            // Decimated detector: the band's dB-chain state lives in dynLanes_ (lane = band) while
+            // laneLive; core and ref are then stale until storeDynLane writes the lane back.
+            // laneN is the block length its coefficients were converted for; refRem the warm-up
+            // samples below one block.
+            bool laneLive = false;
+            uint32_t laneN = 0;
+            uint64_t refRem = 0;
         } dyn;
     };
 
@@ -429,6 +451,9 @@ private:
         double hz = 0.0, lo = 0.0, hi = 0.0;
     };
     std::array<SpanMemo, params::kBandCount> spanMemo_{};
+    // The decimated detector's lanes, one per band (Dyn::laneLive), stepped together once per block.
+    dsp::GainLaneSet dynLanes_;
+    void storeDynLane(int band) noexcept;
     std::vector<double> inCopy_;  // kMaxChannels * maxFrames: this piece's input (spectral side chain)
     [[nodiscard]] int requestedConfig() const noexcept {
         return static_cast<int>(requestedMode()) * 16 + (requestedSpectral() ? 8 : 0) + requestedResolution();

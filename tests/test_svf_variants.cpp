@@ -47,6 +47,29 @@ TEST_CASE("svfRun, svfRunStereo and svfTickStereo equal svfTick bit for bit") {
     }
 }
 
+TEST_CASE("svfBandEnvelopeStereo equals svfBandEnvelope per channel bit for bit") {
+    std::mt19937 rng(17);
+    std::uniform_real_distribution<double> u(-1.0, 1.0);
+    for (int trial = 0; trial < 50; ++trial) {
+        SvfParams p;
+        p.g = std::exp(3.0 * u(rng));
+        p.k = 0.05 + 2.0 * std::abs(u(rng));
+        p.m0 = 0.0, p.m1 = p.k, p.m2 = 0.0;  // the helper band pass
+        const SvfCoeffs c = svfCoeffs(p);
+        const uint32_t n = 1 + static_cast<uint32_t>(trial * 7 % 97);
+        std::vector<double> l(n), r(n);
+        for (uint32_t i = 0; i < n; ++i) l[i] = u(rng), r[i] = u(rng);
+        SvfState s0{u(rng), u(rng)}, s1{u(rng), u(rng)};
+        std::vector<double> el = l, er = r;
+        SvfState e0 = s0, e1 = s1;
+        for (uint32_t i = 0; i < n; ++i) el[i] = svfBandEnvelope(c, e0, el[i]), er[i] = svfBandEnvelope(c, e1, er[i]);
+        svfBandEnvelopeStereo(c, s0, s1, l.data(), r.data(), n);
+        CHECK(l == el);
+        CHECK(r == er);
+        CHECK((s0.ic1 == e0.ic1 && s0.ic2 == e0.ic2 && s1.ic1 == e1.ic1 && s1.ic2 == e1.ic2));
+    }
+}
+
 #include "amq/dsp/mid_side.hpp"
 
 TEST_CASE("M/S converter: the SSE2 form equals the scalar formula bit for bit, odd lengths included") {
