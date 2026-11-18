@@ -266,3 +266,107 @@ TEST_CASE("Natural Phase notch on a bin: the plain ratio fails, the limit fixes 
     CHECK(plain.db > 1.0);
     CHECK(fixed.db <= 0.05);
 }
+
+// Report (area 03 task "compare the combined correction with per-stage correction"): the engine's
+// one combined 2x2 correction after both IIR stages, against a correction per stage (one after the
+// L/R stage from its bands only, one after the M/S stage from its bands only), both from the
+// engine's kernel builder. Measured as the relative complex error of the whole 2x2 response
+// against the 2x2 analog target, |G - T| / |T| (Frobenius), 20 Hz to 0.95 Nyquist. Run with
+//   amq_engine_tests -tc="Natural Phase combined versus per-stage*" --no-skip
+TEST_CASE("Natural Phase combined versus per-stage correction (report)" * doctest::skip()) {
+    using C = std::complex<double>;
+    struct M2 { C a, b, c, d; };  // row-major [[a, b], [c, d]]
+    auto mul = [](const M2& x, const M2& y) {
+        return M2{x.a * y.a + x.b * y.c, x.a * y.b + x.b * y.d, x.c * y.a + x.d * y.c, x.c * y.b + x.d * y.d};
+    };
+    auto diag = [](C x, C y) { return M2{x, 0.0, 0.0, y}; };
+    const M2 enc{0.5, 0.5, 0.5, -0.5}, dec{1.0, 1.0, 1.0, -1.0};
+    auto fro = [](const M2& m) { return std::sqrt(std::norm(m.a) + std::norm(m.b) + std::norm(m.c) + std::norm(m.d)); };
+    struct Placed { Band band; uint8_t stage, mask; };  // stage 0: mask L=1 R=2 (3 both); stage 1: M=1 S=2
+    struct Scenario { const char* name; std::vector<Placed> bands; };
+    const std::vector<Scenario> scenarios = {
+        {"L/R only (Stereo, Left, Right)",
+         {{kBands[0], 0, 3}, {kBands[6], 0, 1}, {kBands[8], 0, 2}}},
+        {"Mixed (Left, Mid, Side, Stereo)",
+         {{kBands[0], 0, 1}, {kBands[6], 1, 1}, {kBands[1], 1, 2}, {kBands[9], 0, 3}}},
+        {"Heavy M/S (Mid, Side, Stereo, Right)",
+         {{kBands[2], 1, 1}, {kBands[7], 1, 2}, {kBands[5], 0, 3}, {kBands[4], 0, 2}}},
+        {"M/S only (Mid, Side)",
+         {{kBands[3], 1, 1}, {kBands[11], 1, 2}}},
+    };
+    const double fs = 48000.0;
+    std::printf("\n%-40s %14s %14s %9s %9s\n", "scenario", "combined err", "per-stage err", "latency", "kernels");
+    for (const auto& sc : scenarios) {
+        // Requests: all bands; the L/R bands only; the M/S bands only.
+        auto all = std::make_unique<engine::CorrectionRequest>();
+        auto lr = std::make_unique<engine::CorrectionRequest>();
+        auto ms = std::make_unique<engine::CorrectionRequest>();
+        for (auto* r : {all.get(), lr.get(), ms.get()}) r->sampleRate = fs, r->channels = 2;
+        struct Resp { dsp::SvfCascade cascade; dsp::AnalogPrototype proto; uint8_t stage, mask; };
+        std::vector<Resp> resp;
+        bool anyMs = false, anyLr = false;
+        for (size_t i = 0; i < sc.bands.size(); ++i) {
+            const auto& p = sc.bands[i];
+            const engine::DesignInputs in{fs, std::log2(p.band.hz), p.band.gainDb, params::positionFromQ(p.band.q),
+                                          static_cast<int>(p.band.shape), static_cast<int>(p.band.slope)};
+            Resp r;
+            REQUIRE(engine::designBandCascade(in, engine::DesignTier::Refined, r.cascade));
+            r.proto = dsp::designAnalogPrototype(engine::bandSpecFrom(in));
+            r.stage = p.stage, r.mask = p.mask;
+            resp.push_back(r);
+            const engine::CorrectionBand cb{true, p.stage, p.mask, in, r.cascade};
+            all->bands[i] = cb;
+            (p.stage == 0 ? lr : ms)->bands[i] = cb;
+            (p.stage == 0 ? anyLr : anyMs) = true;
+        }
+        K builder(K::Window::Rectangular);
+        auto kAll = std::make_unique<engine::CorrectionKernels>();
+        auto kLr = std::make_unique<engine::CorrectionKernels>();
+        auto kMs = std::make_unique<engine::CorrectionKernels>();
+        engine::buildCorrectionKernels(*all, builder, *kAll);
+        engine::buildCorrectionKernels(*lr, builder, *kLr);
+        engine::buildCorrectionKernels(*ms, builder, *kMs);
+        auto kernelAt = [](const engine::CorrectionKernels& k, double om) {
+            C v[4];
+            for (int e = 0; e < 4; ++e) {
+                v[e] = 0.0;
+                for (int n = 0; n < K::kTaps; ++n)
+                    v[e] += static_cast<double>(k.taps[static_cast<size_t>(e)][static_cast<size_t>(n)]) *
+                            std::polar(1.0, -om * (n - K::kCentre));
+            }
+            return M2{v[0], v[1], v[2], v[3]};
+        };
+        double errAll = 0.0, errStage = 0.0;
+        const int points = 400;
+        const double lo = std::log(20.0), hi = std::log(0.95 * fs / 2.0);
+        for (int i = 0; i < points; ++i) {
+            const double hz = std::exp(lo + (hi - lo) * i / (points - 1));
+            const double om = 2.0 * kPi * hz / fs;
+            C lrD[2] = {1.0, 1.0}, lrA[2] = {1.0, 1.0}, msD[2] = {1.0, 1.0}, msA[2] = {1.0, 1.0};
+            for (const auto& r : resp) {
+                const C d = dsp::svfCascadeResponseHz(r.cascade, hz, fs), a = r.proto.evaluateHz(hz);
+                for (int ch = 0; ch < 2; ++ch)
+                    if (r.mask & (1u << ch)) (r.stage == 0 ? lrD : msD)[ch] *= d, (r.stage == 0 ? lrA : msA)[ch] *= a;
+            }
+            const M2 hLr = diag(lrD[0], lrD[1]), hMs = mul(mul(dec, diag(msD[0], msD[1])), enc);
+            const M2 t = mul(mul(mul(dec, diag(msA[0], msA[1])), enc), diag(lrA[0], lrA[1]));
+            const double tn = fro(t);
+            if (tn < 0.02) continue;  // below about -34 dB: not a meaningful relative error
+            auto err = [&](const M2& g) {
+                const M2 e{g.a - t.a, g.b - t.b, g.c - t.c, g.d - t.d};
+                return fro(e) / tn;
+            };
+            const M2 gAll = mul(kernelAt(*kAll, om), mul(hMs, hLr));
+            const M2 cLr = anyLr ? kernelAt(*kLr, om) : diag(1.0, 1.0);
+            const M2 cMs = anyMs ? kernelAt(*kMs, om) : diag(1.0, 1.0);
+            const M2 gStage = mul(cMs, mul(hMs, mul(cLr, hLr)));
+            errAll = std::max(errAll, err(gAll));
+            errStage = std::max(errStage, err(gStage));
+        }
+        const int lat = 320 * ((anyLr ? 1 : 0) + (anyMs ? 1 : 0));
+        std::printf("%-40s %14.2e %14.2e %4d/%-4d %4d/%-4d\n", sc.name, errAll, errStage, 320, lat, 4,
+                    (anyLr ? 2 : 0) + (anyMs ? 2 : 0));
+    }
+    std::printf("latency and kernels: combined / per-stage (samples at 48 kHz; per-stage counts an M/S-domain\n"
+                "correction as 2 diagonal kernels)\n");
+}
