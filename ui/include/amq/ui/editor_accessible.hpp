@@ -113,6 +113,16 @@ public:
     [[nodiscard]] EditorFocus& focus() noexcept { return focus_; }
     // Binds a top-bar command: "Undo", "Redo", "EQ Match", "Settings", "Help".
     void setCommand(const std::string& name, std::function<void()> run, std::function<bool()> enabled = {});
+    // Keyboard reach into the band panel (area 15; PROVISIONAL key map until the Product designer's):
+    //   Enter on a focused band     focus its first panel control
+    //   Tab / Shift+Tab (in panel)  next / previous panel control, wrapping
+    //   Up / Down (in panel)        increment / decrement the focused control (fine: 1/10 the step)
+    //   Enter (in panel)            press: toggle a toggle, step a choice, run a command
+    //   Escape (in panel)           back to the band
+    // Returns true if the key was used; other keys (Space among them) are not, so they reach the host.
+    enum class PanelKey : uint8_t { Enter, Escape, Next, Previous, Up, Down };
+    bool panelKey(PanelKey k, bool fine);
+    [[nodiscard]] bool panelHasFocus();
     // The parameter the focused control writes, or -1 (for the focus ring).
     [[nodiscard]] long focusedParam() const noexcept;
     [[nodiscard]] std::string focusedName() const;

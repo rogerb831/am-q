@@ -139,6 +139,8 @@ struct Ctx {
     std::function<void()> kickAnimation;
     // The parameter whose control holds the accessible focus, or -1 (the focus ring).
     std::function<long()> focusedParam;
+    // Keyboard reach into the band panel (EditorAccessible::panelKey); true if the key was used.
+    std::function<bool(int key, bool fine)> panelKey;
     void focusRings(visage::Canvas& canvas, const std::vector<Hit>& hits) const {
         const long f = focusedParam ? focusedParam() : -1;
         if (f < 0) return;
@@ -1537,6 +1539,23 @@ public:
             x_.hintMode = false;
             x_.redrawBars();
             return true;
+        }
+        if (!listFocus_ && x_.panelKey) {  // the band panel by keyboard (EditorAccessible::panelKey)
+            using PK = EditorAccessible::PanelKey;
+            int pk = -1;
+            switch (e.keyCode()) {
+                case visage::KeyCode::Return:
+                case visage::KeyCode::KPEnter: pk = static_cast<int>(PK::Enter); break;
+                case visage::KeyCode::Escape: pk = static_cast<int>(PK::Escape); break;
+                case visage::KeyCode::Tab: pk = static_cast<int>(e.isShiftDown() ? PK::Previous : PK::Next); break;
+                case visage::KeyCode::Up: pk = static_cast<int>(PK::Up); break;
+                case visage::KeyCode::Down: pk = static_cast<int>(PK::Down); break;
+                default: break;
+            }
+            if (pk >= 0 && x_.panelKey(pk, e.isShiftDown())) {
+                x_.redrawAll();
+                return true;
+            }
         }
         if (listFocus_ && x_.bandListOpen) {  // band list keys (spec §6.3)
             const auto used = sortedBands();
@@ -3070,6 +3089,19 @@ struct Editor::Impl : params::ParameterListener {
             x.redrawBars();
         });
         x.focusedParam = [this] { return access.focusedParam(); };
+        x.panelKey = [this](int k, bool fine) {
+            using PK = EditorAccessible::PanelKey;
+            const auto key = static_cast<PK>(k);
+            // Tab, Up and Down belong to the graph unless the panel holds the focus.
+            const bool wasIn = access.panelHasFocus();
+            if (key != PK::Enter && !wasIn) return false;
+            const bool used = access.panelKey(key, fine);
+            // At small sizes the panel is a collapsed strip: open it while the keyboard is in it, so
+            // the focused control (and its ring) can be seen, and close it again on the way out.
+            if (used && !wasIn && access.panelHasFocus()) x.stripExpanded = true;
+            if (used && wasIn && !access.panelHasFocus()) x.stripExpanded = false;
+            return used;
+        };
         x.interaction.onSelectionChanged = [this] {
             access.focus().control = nullptr;  // a click or key on the graph moves the focus there
             x.stripExpanded = false;

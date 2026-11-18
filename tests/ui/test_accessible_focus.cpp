@@ -157,3 +157,46 @@ TEST_CASE("Editor tree: every region's controls, with one shared focus") {
     CHECK(status.front()->performAccessibleAction(ui::AccessibleAction::Press));  // next mode
     CHECK(h.t.value(params::globalParam(params::GlobalParam::Mode)) == 1.0);
 }
+
+TEST_CASE("Panel keys: Enter goes in, Tab moves, Up and Down adjust, Enter presses, Escape goes back") {
+    Host h;
+    ui::UndoController u(h);
+    ui::GraphGeometry g;
+    g.setSize(1180.0f, 584.0f);
+    ui::GraphInteraction m(u, g);
+    ui::BandOps ops(u);
+    band(h, 3, 1000.0);
+    ui::EditorAccessible tree(u, m, ops);
+    using PK = ui::EditorAccessible::PanelKey;
+
+    CHECK_FALSE(tree.panelKey(PK::Enter, false));  // no focused band: nothing to enter
+    m.setSelection({3}, 3);
+    CHECK_FALSE(tree.panelHasFocus());
+    CHECK_FALSE(tree.panelKey(PK::Up, false));     // the graph keeps Up (gain nudge)
+    REQUIRE(tree.panelKey(PK::Enter, false));      // into the panel: its first control
+    CHECK(tree.panelHasFocus());
+    const std::string first = tree.focusedName();
+    CHECK(first.rfind("Band 4 ", 0) == 0);
+
+    // Tab to Gain, then adjust it.
+    for (int i = 0; i < 30 && tree.focusedName() != "Band 4 Gain"; ++i) tree.panelKey(PK::Next, false);
+    REQUIRE(tree.focusedName() == "Band 4 Gain");
+    const auto gid = params::bandParam(3, BandField::Gain);
+    CHECK(tree.panelKey(PK::Up, false));
+    CHECK(h.t.value(gid) == doctest::Approx(0.6));   // 1 % of the 60 dB range
+    CHECK(tree.panelKey(PK::Down, true));            // fine: 0.1 %
+    CHECK(h.t.value(gid) == doctest::Approx(0.54));
+    CHECK(tree.panelKey(PK::Previous, false));
+    CHECK(tree.focusedName() != "Band 4 Gain");
+
+    // Enter presses a toggle.
+    for (int i = 0; i < 30 && tree.focusedName() != "Band 4 Enabled"; ++i) tree.panelKey(PK::Next, false);
+    REQUIRE(tree.focusedName() == "Band 4 Enabled");
+    CHECK(tree.panelKey(PK::Enter, false));
+    CHECK(h.t.value(params::bandParam(3, BandField::Enabled)) == 0.0);
+
+    // Escape: back to the band node.
+    CHECK(tree.panelKey(PK::Escape, false));
+    CHECK_FALSE(tree.panelHasFocus());
+    CHECK(ui::accessibleFocusedControl(tree.root())->accessibleName() == "Band 4");
+}

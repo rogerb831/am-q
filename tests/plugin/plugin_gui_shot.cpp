@@ -254,6 +254,18 @@ int main(int argc, char** argv) {
     click(xOf(1820), yOf(4.5));
     post(WM_MOUSEMOVE, 0, xOf(1820), yOf(4.5) - 120);
     shot("02-main-dynamic");
+    // The band panel by keyboard (area 15): Enter goes in, two Tabs reach Gain (focus ring).
+    auto key = [&](UINT vk) {
+        const LPARAM sc = static_cast<LPARAM>(MapVirtualKeyW(vk, MAPVK_VK_TO_VSC)) << 16;
+        PostMessageW(gChild, WM_KEYDOWN, vk, sc | 1);
+        PostMessageW(gChild, WM_KEYUP, vk, sc | 1 | (LPARAM(3) << 30));
+        pump(100);
+    };
+    key(VK_RETURN);
+    key(VK_TAB);
+    key(VK_TAB);
+    shot("02b-panel-focus");
+    key(VK_ESCAPE);
     click(xOf(9000), yOf(3.0));
     shot("03-main-static");
     click(xOf(32), yOf(0));

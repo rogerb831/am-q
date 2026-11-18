@@ -166,6 +166,50 @@ std::vector<AccessibleControl*> EditorAccessible::panelChildren() {
     return v;
 }
 
+bool EditorAccessible::panelHasFocus() {
+    if (!focus_.control) return false;
+    for (auto* c : panelChildren())
+        if (c == focus_.control) return true;
+    return false;
+}
+
+bool EditorAccessible::panelKey(PanelKey k, bool fine) {
+    const auto kids = panelChildren();
+    std::vector<AccessibleControl*> order;
+    for (auto* c : kids)
+        if (c->accessibleFocusable()) order.push_back(c);
+    if (!panelHasFocus()) {
+        if (k != PanelKey::Enter || m_.focused() < 0 || order.empty()) return false;
+        return order.front()->setAccessibleFocus();  // into the panel
+    }
+    auto* f = const_cast<AccessibleControl*>(focus_.control);
+    switch (k) {
+        case PanelKey::Escape: focus_.control = nullptr; return true;  // back to the band
+        case PanelKey::Next:
+        case PanelKey::Previous: {
+            auto it = std::find(order.begin(), order.end(), f);
+            const int n = static_cast<int>(order.size());
+            int i = it == order.end() ? 0 : static_cast<int>(it - order.begin());
+            i = ((i + (k == PanelKey::Next ? 1 : -1)) % n + n) % n;
+            return order[static_cast<size_t>(i)]->setAccessibleFocus();
+        }
+        case PanelKey::Enter: f->performAccessibleAction(AccessibleAction::Press, 0.0); return true;
+        case PanelKey::Up:
+        case PanelKey::Down: {
+            const bool up = k == PanelKey::Up;
+            auto* p = dynamic_cast<ParamAccessible*>(f);
+            if (p && fine && params::specAt(p->id())->type == params::ParamType::Continuous) {
+                const double n = std::clamp(p->accessibleValueNormalised() + (up ? 0.001 : -0.001), 0.0, 1.0);
+                p->performAccessibleAction(AccessibleAction::SetValue, n);
+            } else {
+                f->performAccessibleAction(up ? AccessibleAction::Increment : AccessibleAction::Decrement, 0.0);
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
 long EditorAccessible::focusedParam() const noexcept {
     if (const auto* p = dynamic_cast<const ParamAccessible*>(focus_.control)) return static_cast<long>(p->id());
     return -1;
