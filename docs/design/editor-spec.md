@@ -321,6 +321,7 @@ Area 13 says this table is an original Am-Q design document. It is built from th
 | Drag | Band node | Frequency (x, log) and Gain (y). Gainless shapes: Q (y) | R9 |
 | Drag with a multi-selection | Any selected node | Every selected band moves by the same octaves and dB ("drag moves both") | Board; R14 |
 | Shift during a drag | Node or range handle | Fine: steps × 0.1 | Board "Shift: fine 0.1×"; R12 |
+| Press and move | Any draggable | A press that moves less than 3 px is a click; more starts the drag | R2; **PROVISIONAL** `GraphInteraction::kDragThresholdPx` |
 | Alt-drag | Band node | Vertical drag changes Q | R13 (designer-assigned; matches the code) |
 | Ctrl pressed during a drag | Node drag | Lock to the first dominant axis | R14 (optional axis lock; matches the code) |
 | Drag | Range handle | Dyn Range only | R10 |
@@ -362,6 +363,13 @@ The key map is the Product designer's (area 15). Every key not listed passes to 
 | Ctrl+A | Graph | Select all bands |
 | Ctrl+X / C / V | Graph | Cut, copy, paste bands (board menu shows "Ctrl C", "Ctrl V") |
 | Enter, Tab, Escape | Inline value editor | Commit; commit and move to the next field; cancel |
+| Enter | Graph, a band focused | Move the focus into that band's panel, to its first control (**PROVISIONAL**, 2026-11-18) |
+| Tab / Shift+Tab | Band panel | Next or previous visible, enabled control, wrapping (**PROVISIONAL**) |
+| ↑ / ↓ | Band panel | Increment or decrement the focused control (Shift: a tenth of the step for continuous controls) (**PROVISIONAL**) |
+| Enter | Band panel | Press: toggle a toggle, step a choice, run Delete band (**PROVISIONAL**) |
+| Escape | Band panel | Focus back to the band; an expanded strip collapses (**PROVISIONAL**) |
+| Escape | Graph, strip expanded | Collapse the strip (§1.2) |
+| Typing, ↑ / ↓, Enter, Backspace, Escape | Preset menu | Search; move the highlight; load it; edit; clear the search, then close (graph §4.10) |
 
 Arrow keys and Tab are graph commands only while the graph or band list has keyboard focus. Otherwise they pass to the host.
 
