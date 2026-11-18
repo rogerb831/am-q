@@ -13,7 +13,7 @@ Full harness output:
 | Conventions | `core/dsp/include/amq/dsp/conventions.hpp` | 10^(dB/20); ±30 dB clamp; one-pole coefficient from a 90 % step time, `c = -expm1(ln(0.1)/(t*fs))`; log2-Hz encoding and its 0..1 host mapping (10 Hz–30 kHz). |
 | Analog prototypes | `analog_prototype.{hpp,cpp}` | Ten shapes, built as zero/pole/gain and grouped into 2nd-order s-sections (1st-order where the order is odd). s is normalised to f0. `evaluate(Ω)` returns complex H(jΩ). |
 | Digital design | `digital_design.{hpp,cpp}`, `joint_fit.cpp` | Three-point matched (Vicanek), least-squares matched, **joint minimax refinement (default)** and bilinear transform with pre-warp. All Pass always uses the bilinear design, pre-warped at f0. |
-| Update policy | `update_policy.hpp` | R15/R17 values behind an interface, **PROVISIONAL (counsel review pending)**. Nothing uses it yet. |
+| Update policy | `update_policy.hpp` | R15/R17 values behind an interface, counsel review marked complete 2026-11-18. Nothing uses it yet. |
 | Harness | `tools/accuracy_harness/` | Sweeps shapes × slopes × frequencies × gains × Q × sample rates and reports errors. Also has a `--case` per-section dump and a `--bench` design-cost benchmark. |
 
 ### Shape construction (all from public filter theory)

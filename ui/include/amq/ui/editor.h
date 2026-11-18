@@ -8,7 +8,7 @@
 // EditorLayout. Graph input goes through GraphInteraction, keys through KeyDispatcher (focus first,
 // then host fall-through). Every edit goes through the UndoController (set(id, plain, GUI) with host
 // gestures; GUI edits are undoable). The design still needs the Product designer's sign-off on the
-// spec's PROPOSED items and the Legal UI review.
+// spec's PROPOSED items (the Legal UI review was marked complete on 2026-11-18).
 //
 // Sizing (area 12 R16). Layout is in logical pixels. The host talks in "host units": physical
 // pixels on Windows and Linux, points on macOS (clap/ext/gui.h), so the host-unit scale is the

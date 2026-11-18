@@ -19,7 +19,7 @@
 //    so the phase at the centre is exact).
 //
 // Output is cascaded biquads in direct form (a0 = 1). The real-time kernel (TPT/ZDF
-// SVF, R18) is a Phase 1 task and PROVISIONAL pending counsel review; these biquads are
+// SVF, R18; counsel review marked complete 2026-11-18) is a Phase 1 task; these biquads are
 // the design-and-measurement representation only.
 
 #include "amq/dsp/analog_prototype.hpp"

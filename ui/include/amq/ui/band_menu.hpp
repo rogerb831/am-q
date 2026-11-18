@@ -3,7 +3,7 @@
 // items and calls activate(). Labels and enabled states are computed when the menu opens, from the
 // targets and the table (R2). Every action goes through BandOps, so each is one undo step (R4).
 //
-// Entries, order and wording follow docs/design/editor-spec-graph.md §4.1 (Counsel review pending):
+// Entries, order and wording follow docs/design/editor-spec-graph.md §4.1 (counsel review marked complete 2026-11-18):
 // Enabled, Invert Gain, Make Dynamic, Make Spectral | Shape, Slope, Placement | Cut, Copy, Paste,
 // Select All | Split (disabled until defined, area 14), Delete.
 

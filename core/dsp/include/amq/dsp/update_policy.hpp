@@ -1,10 +1,10 @@
 #pragma once
 // Coefficient update and structure-change policy (plan area 01, R15 and R17).
 //
-// PROVISIONAL (counsel review pending): the values below (4-sample parameter read,
-// 32-sample minimum redesign interval, 100 ms section-count crossfade) come from
-// area 01 R15/R17, which are still under counsel review. They live behind this
-// interface so the schedule and the values can change without touching DSP code.
+// The values below (4-sample parameter read, 32-sample minimum redesign interval, 100 ms
+// section-count crossfade) come from area 01 R15/R17. Their counsel review was marked complete
+// on 2026-11-18 (CLEAN_ROOM.md). They live behind this interface so the schedule and the values
+// can change without touching DSP code.
 // Nothing in the Phase 0 sandbox consumes this yet; the redesign scheduler and the
 // crossfade are Phase 1/2 tasks.
 //
@@ -28,7 +28,7 @@ struct UpdatePolicy {
     [[nodiscard]] virtual double sectionCountCrossfadeSeconds() const noexcept = 0;
 };
 
-// Defaults taken from the plan text. PROVISIONAL (counsel review pending).
+// Defaults taken from the plan text (area 01 R15/R17).
 struct DefaultUpdatePolicy final : UpdatePolicy {
     [[nodiscard]] int parameterReadIntervalSamples() const noexcept override { return 4; }
     [[nodiscard]] int minimumRedesignIntervalSamples() const noexcept override { return 32; }

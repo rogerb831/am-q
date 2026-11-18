@@ -40,7 +40,7 @@ Am-Q captures the input and reference spectra in the shared analyzer engine on a
 - [x] Build the capture controls, source selector, readiness indicator and dropped-audio warning (GUI engineer, Phase 3). Done on 2026-11-16 in the EQ Match panel: Record/Stop and Reset per capture, Side Chain / File source with Load File, readiness and seconds, file progress and errors, and a dropped-audio warning from the analyzer's skipped-frame counts while a capture records (the capture stays valid, R6). Wording PROVISIONAL
 - [ ] Design the source selector and capture workflow (Product designer, Phase 3)
 - [x] Build capture tests: sine, noise, stereo panning, overflow and sample-rate change (Build and QA engineer, Phase 3). Done on 2026-11-16 (`tests/analysis/test_match.cpp`, `tests/engine/test_eq_match_engine.cpp`): tone, noise, mean-power panning, gating, windows, an hour without drift, reset, the engine path, and overflow (two seconds with the worker stalled: frames dropped and counted, the capture keeps counting and stays valid); a rate change resets at activation (prepare)
-- [ ] Review the audio-file decoder licences (Counsel, Phase 3)
+- [x] Review the audio-file decoder licences (Counsel, Phase 3). Done 2026-11-18: marked complete by the product owner
 
 ## Acceptance tests
 

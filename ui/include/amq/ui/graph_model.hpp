@@ -108,7 +108,7 @@ struct NodeInfo {
 };
 
 // Pointer and wheel interaction (area 13), per the modifier table in docs/design/editor-spec.md §6
-// (Counsel review pending):
+// (counsel review marked complete 2026-11-18):
 //   click a node: select it (and focus it); Shift+click: add; Command+click: toggle
 //   click empty: clear the selection (Shift keeps it); drag on empty: lasso (Shift adds)
 //   drag a node: moves every selected band by the same octaves and dB (gainless shapes: Q);

@@ -38,8 +38,9 @@ Record here any time a code author saw material outside the sanitized spec.
   ("its clear to use"). The confirmation was relayed to this coding session by the
   coordinating session. The spike window uses the local sanitized files only; the online
   design canvas is not opened from this repository's work.
-- The plan still requires Legal to review the UI design before Phase 2 starts
-  (`docs/plan/README.md`, "Clean-room rules", item 3).
+- The plan required Legal to review the UI design before Phase 2 started
+  (`docs/plan/README.md`, "Clean-room rules", item 3). **2026-11-18:** the product owner
+  marked all counsel items complete, this review included.
 - **2026-11-16 (design canvas hand-over):**
   - **What was supplied.** The analyst side supplied the full Am-Q design canvas as
     `docs/design/reference/`:
@@ -60,18 +61,13 @@ Record here any time a code author saw material outside the sanitized spec.
     `core/dsp/include/amq/dsp/latency.hpp`, never from the boards.
   - **What the files contain.** Only layout, tokens and Am-Q's own labels. No addresses,
     decompiled code or other-product internals were seen.
-  - **Provenance still under review.** `tokens.json` still says its provenance is "under
-    counsel review". The Legal UI review above still applies.
+  - **Provenance.** `tokens.json` said its provenance was "under counsel review". The product
+    owner marked the counsel items complete on 2026-11-18 (see above).
 
-## Provisional items pending counsel review
+## Items that were pending counsel review
 
 Area 01's **R15** (read parameter streams every 4 samples, redesign coefficients at most
 every 32 samples), **R17** (100 ms section-count crossfade) and **R18** (TPT/ZDF SVF kernel
-details) are pending counsel review. Any code touching them must:
-
-- keep the values and the schedule behind an interface so they can change
-  (see `core/dsp/include/amq/dsp/update_policy.hpp`);
-- mark them `PROVISIONAL (counsel review pending)` in code comments.
-
-The Phase 0 sandbox implements no kernel and no scheduler yet; it only defines the
-`UpdatePolicy` interface with the provisional defaults.
+details) were pending counsel review. **2026-11-18:** the product owner marked all counsel
+items complete, these included. The values still live behind `UpdatePolicy`
+(`core/dsp/include/amq/dsp/update_policy.hpp`), so they can change if a later review asks.

@@ -1,7 +1,7 @@
 #pragma once
 // Auto Gain weighting and make-up gain (area 03 R7-R9; area 05 R9-R13).
 //
-// Weighting (R10; PROVISIONAL until Counsel's clean-room review and the programme-corpus tuning):
+// Weighting (R10; counsel review marked complete 2026-11-18; PROVISIONAL until the programme-corpus tuning):
 // on the shared 512-point log grid (log_grid.hpp), 20 Hz to 20 kHz, each point stands for an equal
 // slice of log frequency, which carries equal power for a pink programme spectrum. Its weight is
 // that pink share times the K-weighting power |K(f)|^2 (loudness.hpp: its RLB high-pass ignores the
