@@ -3,6 +3,19 @@
 Engineering decisions that close an open question in this plan. Newest first. Each entry
 states the decision, who made it, the evidence and what it changes.
 
+## Proposed · Versioning (2026-11-18, PROPOSED: not yet decided by the product owner)
+
+**Mechanism (built):** `project(AmQ VERSION x.y.z)` in `CMakeLists.txt` is the only place the version is set. At every build, `cmake/gen_version.cmake` writes `generated/amq_version.h`. The CLAP descriptor reports `AMQ_VERSION_FULL`, VST3 reports the same (clap-wrapper reads the descriptor), and both Windows DLLs carry it in a version resource. `AMQ_VERSION_FULL` is `x.y.z` on a commit tagged `vx.y.z`, otherwise `x.y.z+<short hash>`, plus `.dirty` with uncommitted changes. CI fails a `v*` tag build whose tag is not `v` + the project version, and names the Windows package after the version.
+
+**Proposed meaning of the numbers:** SemVer, where the public interface is the user's saved work (projects, presets, automation):
+- **Major:** anything that can break or change an existing project or preset: a parameter removed or renumbered, a stored value's meaning changed, or a change that makes a saved session sound different on reload. The plugin id never changes.
+- **Minor:** additive changes: new parameters on new ids, new features, shapes or formats. Old sessions load and sound the same.
+- **Patch:** fixes that leave saved sessions sounding the same (crashes, UI fixes, bit-identical performance work).
+- **Before 1.0:** `0.minor` releases may break the rules above; 1.0 is the first release that keeps them.
+- **Open call:** a DSP bug fix that audibly changes existing sessions. Proposed: major, or at least minor with a release note.
+
+The state chunk's own versions (`AMQS`, `AMQE`; parameter table, State chunk) are independent of the product version: they describe the format, and loading stays compatible across product versions.
+
 ## D3 · Natural Phase kernel window: none (rectangular) (2026-11-16)
 
 **Decision (product owner, 2026-11-16):** the Natural Phase kernel uses no window (rectangular).

@@ -70,6 +70,16 @@ jobs:
           -DAMQ_BUILD_PLUGIN=ON
           -DAMQ_STRICT_HOST_CHECKS=${{ matrix.strict }}
 
+      # A release tag must name the version the build carries (project(VERSION) in CMakeLists.txt).
+      - name: Check the tag matches the version
+        if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
+        run: |
+          v=$(sed -n 's/^#define AMQ_VERSION "\(.*\)"$/\1/p' build/generated/amq_version.h)
+          if [ "$GITHUB_REF_NAME" != "v$v" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match project(VERSION $v) in CMakeLists.txt"
+            exit 1
+          fi
+
       - name: Build
         run: cmake --build build --config Release --parallel
 
@@ -111,12 +121,12 @@ jobs:
           if-no-files-found: ignore
 
       # The binary build: the shipping plugins as an installable package, with the debug symbols
-      # in a separate artifact. Named Am-Q-<tag>-windows-x64 on a tag build, otherwise
-      # Am-Q-<branch>-<short hash>-windows-x64.
+      # in a separate artifact, named after the version the plugins report: Am-Q-0.1.0-windows-x64
+      # on a v0.1.0 tag, otherwise Am-Q-0.1.0+<short hash>-windows-x64.
       - name: Package plugins
         if: success() && matrix.strict == 'OFF' && matrix.platform == 'windows'
         run: |
-          if [ "$GITHUB_REF_TYPE" = tag ]; then ver="$GITHUB_REF_NAME"; else ver="${GITHUB_REF_NAME//\//-}-${GITHUB_SHA::7}"; fi
+          ver=$(tr -d '\r\n' < build/generated/amq_version.txt)
           pkg="Am-Q-$ver-windows-x64"
           clap=$(find build -path '*/_deps' -prune -o -type f -name Am-Q.clap -print | head -n 1)
           vst3=$(find build -path '*/_deps' -prune -o -type d -name Am-Q.vst3 -print -prune | head -n 1)

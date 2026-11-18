@@ -8,6 +8,8 @@ target_include_directories(amq_plugin_impl PUBLIC src)
 target_link_libraries(amq_plugin_impl PUBLIC amq::dsp amq::params amq::engine amq::ui clap clap-helpers)
 target_compile_definitions(amq_plugin_impl PUBLIC AMQ_STRICT_HOST_CHECKS=$<BOOL:${AMQ_STRICT_HOST_CHECKS}>)
 amq_set_warnings(amq_plugin_impl)
+target_include_directories(amq_plugin_impl PRIVATE ${AMQ_VERSION_DIR})  # amq_version.h
+add_dependencies(amq_plugin_impl amq_version)
 
 # Am-Q.clap and Am-Q.vst3.
 make_clapfirst_plugins(
@@ -20,3 +22,12 @@ make_clapfirst_plugins(
     PLUGIN_FORMATS CLAP VST3
     WINDOWS_FOLDER_VST3 TRUE
     COPY_AFTER_BUILD FALSE)
+
+# Windows version resource on both DLLs: the version in Explorer's Details and to installers.
+if(WIN32)
+    foreach(t AmQ_clap AmQ_vst3)
+        target_sources(${t} PRIVATE src/version.rc)
+        target_include_directories(${t} PRIVATE ${AMQ_VERSION_DIR})
+        add_dependencies(${t} amq_version)
+    endforeach()
+endif()

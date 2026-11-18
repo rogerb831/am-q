@@ -1,4 +1,5 @@
 #include "amq_plugin.h"
+#include "amq_version.h"
 
 #include "amq/ui/editor.h"
 
@@ -101,7 +102,7 @@ const clap_plugin_descriptor AmqPlugin::descriptor = {
     "",
     "",
     "",
-    "0.0.1",
+    AMQ_VERSION_FULL,  // CMake's project version; VST3 reports the same (clap-wrapper reads it here)
     "24-band parametric EQ",
     kFeatures,
 };

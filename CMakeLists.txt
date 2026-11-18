@@ -36,6 +36,20 @@ function(amq_set_warnings target)
     endif()
 endfunction()
 
+# Version (docs/plan/decisions.md, versioning): project(VERSION) above is the one place to set
+# it. amq_version regenerates generated/amq_version.h at every build (cmake/gen_version.cmake):
+# AMQ_VERSION_FULL is the version on a v<version> tag, otherwise version+<short hash>.
+set(AMQ_VERSION_DIR "${CMAKE_BINARY_DIR}/generated")
+set(_amq_version_args
+    -DVERSION=${PROJECT_VERSION} -DVERSION_MAJOR=${PROJECT_VERSION_MAJOR}
+    -DVERSION_MINOR=${PROJECT_VERSION_MINOR} -DVERSION_PATCH=${PROJECT_VERSION_PATCH}
+    -DSOURCE_DIR=${CMAKE_SOURCE_DIR} -DOUT_DIR=${AMQ_VERSION_DIR})
+execute_process(COMMAND ${CMAKE_COMMAND} ${_amq_version_args} -P ${CMAKE_SOURCE_DIR}/cmake/gen_version.cmake)
+add_custom_target(amq_version ALL
+    COMMAND ${CMAKE_COMMAND} ${_amq_version_args} -P ${CMAKE_SOURCE_DIR}/cmake/gen_version.cmake
+    BYPRODUCTS ${AMQ_VERSION_DIR}/amq_version.h ${AMQ_VERSION_DIR}/amq_version.txt
+    COMMENT "Am-Q version")
+
 include(cmake/AmqFftDeps.cmake)
 add_subdirectory(core/dsp)
 add_subdirectory(core/params)
