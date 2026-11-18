@@ -3,6 +3,18 @@
 Engineering decisions that close an open question in this plan. Newest first. Each entry
 states the decision, who made it, the evidence and what it changes.
 
+## D4 · Editor design approved as built; names frozen (2026-11-18)
+
+**Decision (product owner, 2026-11-18):** "Approve all as built" for the editor spec (`docs/design/editor-spec*.md`), and "freeze them" for the names.
+
+**What it covers:**
+- **The editor spec as built:** the region map and reflow, the interaction and wheel tables (drag threshold 3 px, Shift fine 0.1×), the key map with the band panel keys, the band menu and the graph menu (Select All, Paste, Delete Disabled Bands, Delete All Bands), the Output menu labels and ranges (Pan Mode "L/R" / "M/S", Gain Scale 0–200 %, Solo Gain ±20 dB), the EQ Match panel, the preset menu with its search, and every PROPOSED item P-1 to P-32.
+- **Names for v1:** shapes Bell, Low Shelf, Low Cut, High Shelf, High Cut, Notch, Band Pass, Tilt Shelf, Flat Tilt, All Pass; modes Zero Latency, Natural Phase, Linear Phase; the product name Am-Q.
+
+**Deferred (product owner, same day):** band Split (stays a disabled menu entry) and the Output Level fade law (stays PROVISIONAL: bottom 10 % of the control, square law).
+
+**What it changes:** the designer tasks in areas 04, 11 (ranges), 12, 13, 14 (menus), 15, 16, 17 and 20 are closed. Code comments that marked these choices PROVISIONAL for the designer now cite the spec. DSP and engineering constants (EQ Match cut bypass, undo depth, spectral and dynamics constants) keep their own PROVISIONAL marks.
+
 ## Proposed · Versioning (2026-11-18, PROPOSED: not yet decided by the product owner)
 
 **Mechanism (built):** `project(AmQ VERSION x.y.z)` in `CMakeLists.txt` is the only place the version is set. At every build, `cmake/gen_version.cmake` writes `generated/amq_version.h`. The CLAP descriptor reports `AMQ_VERSION_FULL`, VST3 reports the same (clap-wrapper reads the descriptor), and both Windows DLLs carry it in a version resource. `AMQ_VERSION_FULL` is `x.y.z` on a commit tagged `vx.y.z`, otherwise `x.y.z+<short hash>`, plus `.dirty` with uncommitted changes. CI fails a `v*` tag build whose tag is not `v` + the project version, and names the Windows package after the version.

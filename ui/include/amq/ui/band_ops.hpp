@@ -23,7 +23,7 @@
 
 namespace amq::ui {
 
-inline constexpr double kDefaultDynamicRangeDb = -6.0;  // PROVISIONAL (area 14 R5; Product designer)
+inline constexpr double kDefaultDynamicRangeDb = -6.0;  // area 14 R5; design approved 2026-11-18
 
 class BandOps {
 public:

@@ -240,7 +240,7 @@ Open decisions:
 - [x] JUCE 8 or a CLAP-native core with clap-wrapper and a custom UI. Decided 2026-11-14: CLAP-native + clap-wrapper + Visage; screen reader post-v1 ([D1](decisions.md))
 - [ ] Is AU in v1 or v2? Logic users would need it at launch.
 - [ ] Final CPU target and minimum hardware
-- [ ] Visual identity and naming of shapes and modes (designer + counsel)
+- [x] Visual identity and naming of shapes and modes (designer + counsel). Decided 2026-11-18: the current names are frozen for v1 ([D4](decisions.md))
 - [ ] Whether importing third-party EQ presets is ever in scope (counsel)
 
 ## Area plan index

@@ -113,7 +113,7 @@ public:
     [[nodiscard]] EditorFocus& focus() noexcept { return focus_; }
     // Binds a top-bar command: "Undo", "Redo", "EQ Match", "Settings", "Help".
     void setCommand(const std::string& name, std::function<void()> run, std::function<bool()> enabled = {});
-    // Keyboard reach into the band panel (area 15; PROVISIONAL key map until the Product designer's):
+    // Keyboard reach into the band panel (area 15; editor spec §6.3, approved 2026-11-18):
     //   Enter on a focused band     focus its first panel control
     //   Tab / Shift+Tab (in panel)  next / previous panel control, wrapping
     //   Up / Down (in panel)        increment / decrement the focused control (fine: 1/10 the step)

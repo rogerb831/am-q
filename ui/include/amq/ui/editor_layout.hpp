@@ -28,8 +28,8 @@ struct PanelGeometry {
     PanelMode mode = PanelMode::Hidden;
     Rect rect;                         // graph-local
     // Strip mode only: where the expanded strip (the compact panel over the plot) goes. When the
-    // compact panel is taller than the graph, it is tightened to fit (PROVISIONAL until the Product
-    // designer's call): it may then reach 4 from the graph's top and bottom, with padding 8 tall,
+    // compact panel is taller than the graph, it is tightened to fit (editor spec §1.2,
+    // approved 2026-11-18): it may then reach 4 from the graph's top and bottom, with padding 8 tall,
     // the wrap divider 8 from each row, 32 dynamics knobs, then the divider 6 from each row.
     Rect expanded;
     float rowGap = 16;                 // the wrap divider's distance from each row

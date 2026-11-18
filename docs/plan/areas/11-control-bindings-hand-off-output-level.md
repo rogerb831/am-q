@@ -35,9 +35,9 @@ Am-Q binds every control by parameter id and keeps styling separate. Analyzer, m
 - [x] Implement the lock-free snapshot queue with peak accumulation and stamps (DSP lead, Phase 1). `core/analysis`: one SPSC triple buffer per data type, stamps from 1, peaks of unread frames max-merged into the next one. Publishing at 60 Hz (PROVISIONAL); RMS 300 ms and hold 1.5 s are PROVISIONAL
 - [x] Publish per-band gain change and meter data from the processor (DSP lead, Phase 2). The engine meters input, output and side chain (peak, RMS, hold per channel) and, since 2026-11-16, publishes each band's signed dynamic gain change (negative for a cut) in the gain-change snapshot
 - [x] Implement editor pulling at about 30 Hz with stamp checks (GUI engineer, Phase 2). Done early: `ui::SnapshotPoller` on a 33 ms Visage timer; frames with an old stamp are skipped, and a redraw is reported only for a visible change (0.1 dB)
-- [ ] Specify the Output Level segments and fade curve (Product designer, DSP lead, Phase 0)
+- [ ] Specify the Output Level segments and fade curve (Product designer, DSP lead, Phase 0) Deferred by the product owner on 2026-11-18; the build keeps the PROVISIONAL fade (bottom 10 %, square law; parameter table).
 - [x] Implement the Output Level forward and inverse mappings and the dB helpers (Plugin and host engineer, Phase 1). The fade start (0.1) and the fade law are PROVISIONAL, for the Product designer
-- [ ] Document ranges for Gain Scale, Output Pan and solo gain (Product designer, Phase 0)
+- [x] Document ranges for Gain Scale, Output Pan and solo gain (Product designer, Phase 0). Done 2026-11-18: the product owner approved the editor spec as built (decisions.md D4): Gain Scale 0–200 %, Output Pan *fmt-pan*, Solo Gain ±20 dB (panels §2.7)
 
 ## Acceptance tests
 

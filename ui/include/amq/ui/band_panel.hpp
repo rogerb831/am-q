@@ -9,8 +9,8 @@
 // the dynamics and spectral sections only for gain shapes); hidden controls keep their values
 // (nothing writes them). Enabled state greys controls that do nothing now (dynamics off; threshold,
 // attack and release while Auto is on, R6; spectral controls while Spectral is off). The Delete and
-// Clear Dynamics buttons call BandOps (area 14 R8). Layout and wording are PROVISIONAL until the
-// Product designer's region map (area 12 Phase 0 task).
+// Clear Dynamics buttons call BandOps (area 14 R8). Layout and wording follow the editor spec
+// (panels §2.3; design approved 2026-11-18).
 
 #include "amq/params/parameter_table.hpp"
 

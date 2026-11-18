@@ -2,7 +2,7 @@
 
 This spec is written from the Am-Q design canvas in [`reference/`](reference/). It gives the GUI engineer enough detail to rebuild every board without opening the HTML.
 
-- **Status:** draft, 2026-11-16. Area 12's task "Define the editor region map and the visual hierarchy" points here.
+- **Status:** approved as built by the product owner, 2026-11-18 ([D4](../plan/decisions.md)); first draft 2026-11-16. Area 12's task "Define the editor region map and the visual hierarchy" points here.
 - **Boards:** seven boards, 1280×760 each, listed in `reference/canvas.json` in this order (revised to match this spec on 2026-11-17):
   - **Main:** the editor, with the graph and the band panel.
   - **Match:** EQ Match.
@@ -486,6 +486,8 @@ The editor in `ui/src/editor.cpp` follows this spec. The region map and reflow l
 - **Value formats.** Done 2026-11-17: the host-facing formatters in `core/params` use the spec's formats (C-29), and a test pins them to the editor's.
 
 ## PROPOSED items for the designer
+
+**All approved as built on 2026-11-18** ([D4](../plan/decisions.md)). The list stays as the record of what the boards did not show.
 
 Each item below is not shown on the boards, or changes what they show. It is designed in Am-Q's tokens and needs the Product designer to confirm.
 

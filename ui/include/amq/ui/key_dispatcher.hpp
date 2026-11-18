@@ -3,7 +3,7 @@
 // a focused text field before calling keyDown(). Then graph commands; anything not handled returns
 // false and the editor passes the key to the host (transport keys, Space, function keys).
 //
-// PROVISIONAL key map until the Product designer's key map (area 15 Phase 0 task):
+// The key map (area 15; editor spec §6.3, approved 2026-11-18):
 //   Delete, Backspace     delete the selected bands (or the focused band), one undo step (R9)
 //   Escape                cancel a drag; else clear the selection
 //   Left / Right          frequency -/+ 1/12 octave (Shift: 1/96)

@@ -1,6 +1,5 @@
 #pragma once
-// Presets (docs/design/editor-spec-graph.md §4.10, P-28; area 21 R14). PROVISIONAL design until the
-// Product designer's preset spec:
+// Presets (docs/design/editor-spec-graph.md §4.10, P-28; area 21 R14). Design approved 2026-11-18:
 //   - A preset file holds exactly the plugin's state chunk (the bytes a host saves: AMQS header,
 //     parameter pairs, editor trailer), with the extension .amqpreset. Loading one goes through the
 //     same batch state load as a host recall, so it is one batch with source Preset and clears the

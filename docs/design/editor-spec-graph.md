@@ -77,6 +77,7 @@ The band menu is a menu 196 wide with padding 6 (board: at 892, 56 in the Intera
 The board uses the scissors-like Split glyph. Cut and Split need distinct icons, so the designer chooses one (P-15).
 
 - **Dismissal** follows §4.0. Right-clicking elsewhere on the plot reopens the menu at the new point, for the new targets.
+- **Graph menu.** A right-click on empty plot with nothing selected opens the graph menu instead: "Select All" (disabled with no bands), a separator, "Paste" (disabled with no bands on the clipboard), a separator, "Delete Disabled Bands" (disabled with none disabled) and "Delete All Bands" (disabled with no bands). Approved as built, 2026-11-18 (`ui::graphMenu`).
 
 ### 4.2 Shape menu
 

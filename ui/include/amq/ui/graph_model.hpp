@@ -125,14 +125,14 @@ struct NodeInfo {
 // Every change is one gesture (one undo step) across all affected bands.
 class GraphInteraction {
 public:
-    static constexpr float kDragThresholdPx = 3.0f;  // PROVISIONAL (area 13 R2; Product designer)
+    static constexpr float kDragThresholdPx = 3.0f;  // area 13 R2; editor spec §6.1, approved 2026-11-18
     static constexpr float kNodeRadiusPx = 11.0f;
     static constexpr float kHandleRadiusPx = 7.0f;
-    static constexpr double kWheelQStep = 0.02;      // Q position per wheel unit, PROVISIONAL
-    static constexpr double kWheelGainDb = 0.5;      // dB per wheel unit (gain and range), PROVISIONAL
+    static constexpr double kWheelQStep = 0.02;      // Q position per wheel unit (spec §6.2)
+    static constexpr double kWheelGainDb = 0.5;      // dB per wheel unit (gain and range; spec §6.2)
     static constexpr double kDragQPerPx = 0.004;     // Q position per pixel for gainless shapes
-    static constexpr double kFineFactor = 0.1;       // Shift-drag, PROVISIONAL
-    static constexpr double kZoomPerWheel = 0.85;    // span factor per wheel unit, PROVISIONAL
+    static constexpr double kFineFactor = 0.1;       // Shift: fine (spec §6.1)
+    static constexpr double kZoomPerWheel = 0.85;    // span factor per wheel unit (spec §6.2)
 
     GraphInteraction(EditController& c, GraphGeometry& g) : c_(c), g_(g) {}
 

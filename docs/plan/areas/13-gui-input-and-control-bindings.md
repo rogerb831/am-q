@@ -43,7 +43,7 @@ The exact modifier-to-action table is an original Am-Q design document.
 
 ## Implementation tasks
 
-- [ ] Write the Am-Q interaction spec: gestures, modifier table, drag threshold, fine factor and new-band defaults (Product designer, Phase 0)
+- [x] Write the Am-Q interaction spec: gestures, modifier table, drag threshold, fine factor and new-band defaults (Product designer, Phase 0). Done 2026-11-18: the product owner approved the editor spec as built (decisions.md D4) (editor-spec §6.1, §6.2: drag threshold 3 px, fine 0.1×)
 - [x] Have Counsel review the interaction spec for similarity to existing products (Counsel, Phase 0). Done 2026-11-18: marked complete by the product owner
 - [x] Implement platform modifier normalisation and the click-versus-drag threshold (GUI engineer, Phase 1). Ctrl and Cmd map to one `command` modifier. The 3 px threshold is PROVISIONAL until the interaction spec
 - [x] Implement the gesture state machine with begin/perform/end transactions and clamping (GUI engineer, Phase 2). `EditGesture` (one begin per parameter, performs, one end each, also on early destruction) and the graph's modes (pending, node drag, range drag, lasso, solo drag; cancel restores) with every value clamped by the table and the ranges; the write-path trace test checks no write ever happens outside a gesture (2026-11-16)

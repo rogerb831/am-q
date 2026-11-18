@@ -7,8 +7,8 @@
 // the floating band panel, menus and popovers, EQ Match mode), with the region map in
 // EditorLayout. Graph input goes through GraphInteraction, keys through KeyDispatcher (focus first,
 // then host fall-through). Every edit goes through the UndoController (set(id, plain, GUI) with host
-// gestures; GUI edits are undoable). The design still needs the Product designer's sign-off on the
-// spec's PROPOSED items (the Legal UI review was marked complete on 2026-11-18).
+// gestures; GUI edits are undoable). The spec, its PROPOSED items included, was approved by the
+// product owner on 2026-11-18 (the Legal UI review was marked complete the same day).
 //
 // Sizing (area 12 R16). Layout is in logical pixels. The host talks in "host units": physical
 // pixels on Windows and Linux, points on macOS (clap/ext/gui.h), so the host-unit scale is the
@@ -29,7 +29,7 @@ namespace amq::ui {
 
 class Editor {
 public:
-    // Logical pixels. Default 1280x720 (decided 2026-11-17, spec C-1); limits PROVISIONAL.
+    // Logical pixels. Default 1280x720 (decided 2026-11-17, spec C-1); limits per spec §1.2 (approved 2026-11-18).
     static constexpr uint32_t kDefaultWidth = 1280;
     static constexpr uint32_t kDefaultHeight = 720;
     static constexpr uint32_t kMinWidth = 640;

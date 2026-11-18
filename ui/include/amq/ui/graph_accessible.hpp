@@ -22,7 +22,7 @@ public:
     std::vector<AccessibleAction> accessibleActions() const override {
         return {AccessibleAction::Press, AccessibleAction::Increment, AccessibleAction::Decrement, AccessibleAction::SetValue};
     }
-    // Press selects; Increment/Decrement nudge gain by 1 dB (PROVISIONAL step); SetValue sets the
+    // Press selects; Increment/Decrement nudge gain by 1 dB; SetValue sets the
     // normalised frequency. All through gestures.
     bool performAccessibleAction(AccessibleAction a, double value) override;
     bool accessibleVisible() const override { return m_.node(band_).used; }

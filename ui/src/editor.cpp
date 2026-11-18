@@ -230,7 +230,7 @@ struct Ctx {
 
 const char* kModeNames[] = {"Zero Latency", "Natural Phase", "Linear Phase"};
 
-// Tooltip text for a control (spec panels §2; PROVISIONAL wording).
+// Tooltip text for a control (spec panels §2).
 std::string tipFor(const Ctx& x, const Hit& h) {
     auto g = [](GlobalParam p) { return params::globalParam(p); };
     switch (h.kind) {
@@ -1285,7 +1285,7 @@ public:
 
 private:
     // Hatch under the lower of the pre and side-chain spectra where both are above -60 dBFS
-    // (PROVISIONAL activity floor): 2-wide stripes every 6 px at 45°.
+    // (the activity floor): 2-wide stripes every 6 px at 45° (graph §5.3).
     template <typename F>
     void drawCollisions(visage::Canvas& c, const analysis::SpectrumSnapshot& s, uint32_t n, F yOf, float bottom) {
         const auto& g = x_.geometry;

@@ -28,7 +28,7 @@ This plan closes three small gaps. The auto-threshold envelope has an instant at
 - [x] Add a unit test that Attack/Release changes leave reference-envelope state untouched (Build and QA engineer, Phase 2). Done on 2026-11-16 (`tests/engine/test_dynamic_eq.cpp`): Attack and Release swept every piece during a steady tone move the reference by less than 0.01 dB
 - [x] Implement change detection on the Density slot that triggers the grid rebuild (DSP lead, Phase 2) Done on 2026-11-16: the engine reads Density at every parameter read into the band's spectral configuration; the spectral stage compares it (with the span) at each frame and rebuilds the grid at that frame boundary, the first frame after the change (area 07)
 - [x] Add static shape descriptors to core/params and use them in the GUI and EQ Match (Plugin and host engineer, Phase 1). The descriptors are in core/params, and a test checks they match core/dsp. The GUI uses them for node behaviour (gain or Q drag), the band panel's visible controls and the Shape menu names; EQ Match's fitter and apply use the same gain rule (`dsp::shapeHasGain`, which the test pins to the descriptors) (2026-11-16)
-- [ ] Record the deferred category hint in the post-v1 backlog (Product designer, Phase 4)
+- [x] Record the deferred category hint in the post-v1 backlog (Product designer, Phase 4). Done 2026-11-18: [post-v1 backlog](../post-v1-backlog.md)
 
 ## Acceptance tests
 
