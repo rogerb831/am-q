@@ -5,6 +5,7 @@
 #include <doctest/doctest.h>
 
 #include <algorithm>
+#include <cstdio>
 #include <cstring>
 #include <string>
 #include <tuple>
@@ -253,4 +254,174 @@ TEST_CASE("Resampling 44.1 to 48 kHz keeps a tone's level and frequency") {
     for (size_t i = 10000; i < 38000; ++i)
         worst = std::max(worst, std::abs(f.channels[0][i] - 0.5 * std::sin(2 * kPi * 3000.0 * i / 48000.0)));
     CHECK(worst < 0.5 * (std::pow(10.0, 0.05 / 20.0) - 1.0) + 1e-3);  // within 0.05 dB
+}
+
+// Report (area 18 task "prototype magnitude versus power averaging and peak versus broadband
+// gating on test material"). Frames are made in the spectral domain: a windowed noise frame's bin
+// powers are the model spectrum times independent exponential draws (chi-square, 2 degrees of
+// freedom), so every variant sees the same frames. The EQ curve is reference minus input in dB per
+// 1/3 octave, 25 Hz to 16 kHz. Run with
+//   amq_analysis_tests -tc="EQ Match averaging and gating*" --no-skip
+TEST_CASE("EQ Match averaging and gating prototype (report)" * doctest::skip()) {
+    constexpr double fs = 48000.0;
+    constexpr int bins = 2049;  // 4096-point frames
+    constexpr double binHz = fs / 4096.0;
+    std::vector<double> centres;
+    for (double f = 25.0; f <= 16000.0 * 1.01; f *= std::exp2(1.0 / 3.0)) centres.push_back(f);
+    const size_t nb = centres.size();
+    std::vector<int> band(bins, -1);
+    for (int k = 0; k < bins; ++k)
+        for (size_t b = 0; b < nb; ++b)
+            if (k * binHz >= centres[b] * std::exp2(-1.0 / 6.0) && k * binHz < centres[b] * std::exp2(1.0 / 6.0))
+                band[static_cast<size_t>(k)] = static_cast<int>(b);
+    using Spec = std::vector<double>;  // model power per bin
+    auto shelf = [&](double cornerHz, double db) {  // a smooth high shelf, in power
+        Spec s(bins);
+        for (int k = 0; k < bins; ++k) {
+            const double x = std::log2(std::max(k * binHz, 1.0) / cornerHz);
+            s[static_cast<size_t>(k)] = std::pow(10.0, db / 10.0 * (0.5 + 0.5 * std::tanh(2.0 * x)));
+        }
+        return s;
+    };
+    auto tilt = [&](double dbPerOct) {
+        Spec s(bins);
+        for (int k = 0; k < bins; ++k)
+            s[static_cast<size_t>(k)] = std::pow(10.0, dbPerOct / 10.0 * std::log2(std::max(k * binHz, 20.0) / 1000.0));
+        return s;
+    };
+    auto scaled = [](Spec s, double db) {
+        for (auto& v : s) v *= std::pow(10.0, db / 10.0);
+        return s;
+    };
+    auto times = [](Spec a, const Spec& b) {
+        for (size_t i = 0; i < a.size(); ++i) a[i] *= b[i];
+        return a;
+    };
+    struct Capture {  // per-bin sums of power and of magnitude over the counted frames
+        Spec pow, mag;
+        double counted = 0;
+        explicit Capture(int n) : pow(static_cast<size_t>(n), 0.0), mag(static_cast<size_t>(n), 0.0) {}
+    };
+    enum class Gate { None, Broadband, Peak };
+    auto add = [&](Capture& c, const Spec& model, std::mt19937& rng, Gate gate) {
+        std::exponential_distribution<double> ex(1.0);
+        Spec frame(bins);
+        double sum = 0.0, peak = 0.0;
+        int inRange = 0;
+        for (int k = 0; k < bins; ++k) {
+            const double p = model[static_cast<size_t>(k)] * ex(rng);
+            frame[static_cast<size_t>(k)] = p;
+            if (k * binHz >= 20.0 && k * binHz <= 20000.0) sum += p, ++inRange, peak = std::max(peak, p);
+        }
+        if (gate == Gate::Broadband && 10.0 * std::log10(sum / inRange + 1e-300) < -90.0) return;
+        if (gate == Gate::Peak && 10.0 * std::log10(peak + 1e-300) < -90.0) return;
+        for (int k = 0; k < bins; ++k) {
+            c.pow[static_cast<size_t>(k)] += frame[static_cast<size_t>(k)];
+            c.mag[static_cast<size_t>(k)] += std::sqrt(frame[static_cast<size_t>(k)]);
+        }
+        c.counted += 1;
+    };
+    // Per band: dB of the mean power (power averaging) or of the squared mean magnitude.
+    auto bandsDb = [&](const Capture& c, bool magnitude) {
+        std::vector<double> acc(nb, 0.0), cnt(nb, 0.0);
+        for (int k = 0; k < bins; ++k) {
+            const int b = band[static_cast<size_t>(k)];
+            if (b < 0) continue;
+            const double m = magnitude ? std::pow(c.mag[static_cast<size_t>(k)] / c.counted, 2.0)
+                                       : c.pow[static_cast<size_t>(k)] / c.counted;
+            acc[static_cast<size_t>(b)] += m, cnt[static_cast<size_t>(b)] += 1;
+        }
+        std::vector<double> db(nb);
+        for (size_t b = 0; b < nb; ++b) db[b] = 10.0 * std::log10(acc[b] / std::max(cnt[b], 1.0));
+        return db;
+    };
+    auto modelBandsDb = [&](const std::vector<Spec>& sections) {  // equal time in each section
+        std::vector<double> acc(nb, 0.0), cnt(nb, 0.0);
+        for (int k = 0; k < bins; ++k) {
+            const int b = band[static_cast<size_t>(k)];
+            if (b < 0) continue;
+            double m = 0.0;
+            for (const auto& s : sections) m += s[static_cast<size_t>(k)] / sections.size();
+            acc[static_cast<size_t>(b)] += m, cnt[static_cast<size_t>(b)] += 1;
+        }
+        std::vector<double> db(nb);
+        for (size_t b = 0; b < nb; ++b) db[b] = 10.0 * std::log10(acc[b] / std::max(cnt[b], 1.0));
+        return db;
+    };
+    auto maxAbsDiff = [&](const std::vector<double>& a, const std::vector<double>& b) {
+        double m = 0.0;
+        for (size_t i = 0; i < a.size(); ++i) m = std::max(m, std::abs(a[i] - b[i]));
+        return m;
+    };
+    auto minus = [](std::vector<double> a, const std::vector<double>& b) {
+        for (size_t i = 0; i < a.size(); ++i) a[i] -= b[i];
+        return a;
+    };
+
+    // A. Level-dependent material, 60 s (700 frames): the input alternates loud, brighter sections
+    // with quiet, darker ones; the reference is a different take of the same pattern, with a +6 dB
+    // shelf above 4 kHz in its loud sections only. Truth: the ratio of the long-term power spectra.
+    for (double quietDb : {-24.0, -8.0}) {
+        const Spec inLoud = scaled(tilt(-1.5), -20.0), inQuiet = scaled(tilt(-4.5), -20.0 + quietDb);
+        const Spec refLoud = times(inLoud, shelf(4000.0, 6.0)), refQuiet = inQuiet;
+        std::mt19937 rng(3);
+        Capture in(bins), ref(bins);
+        for (int f = 0; f < 700; ++f) {
+            const bool loud = (f / 12) % 2 == 0;  // about 0.5 s sections
+            add(in, loud ? inLoud : inQuiet, rng, Gate::Broadband);
+            add(ref, loud ? refLoud : refQuiet, rng, Gate::Broadband);
+        }
+        const auto truth = minus(modelBandsDb({refLoud, refQuiet}), modelBandsDb({inLoud, inQuiet}));
+        const auto powEq = minus(bandsDb(ref, false), bandsDb(in, false));
+        const auto magEq = minus(bandsDb(ref, true), bandsDb(in, true));
+        std::printf("A. Level-dependent material, quiet sections %+.0f dB (60 s): max |EQ curve - long-term power truth|\n",
+                    quietDb);
+        std::printf("   power averaging %.2f dB, magnitude averaging %.2f dB (at 16 kHz: truth %+.2f, power %+.2f, magnitude %+.2f)\n",
+                    maxAbsDiff(powEq, truth), maxAbsDiff(magEq, truth), truth.back(), powEq.back(), magEq.back());
+    }
+    // B. Stationary material, short captures (3 s, 35 frames), 20 seeds: spread of the EQ curve.
+    {
+        const Spec s = scaled(tilt(-3.0), -20.0);
+        std::vector<std::vector<double>> pw, mg;
+        for (int seed = 0; seed < 20; ++seed) {
+            std::mt19937 rng(100 + seed);
+            Capture in(bins), ref(bins);
+            for (int f = 0; f < 35; ++f) add(in, s, rng, Gate::Broadband), add(ref, s, rng, Gate::Broadband);
+            pw.push_back(minus(bandsDb(ref, false), bandsDb(in, false)));
+            mg.push_back(minus(bandsDb(ref, true), bandsDb(in, true)));
+        }
+        auto spread = [&](const std::vector<std::vector<double>>& v, size_t b) {
+            double m = 0.0, q = 0.0;
+            for (const auto& x : v) m += x[b];
+            m /= static_cast<double>(v.size());
+            for (const auto& x : v) q += (x[b] - m) * (x[b] - m);
+            return std::sqrt(q / static_cast<double>(v.size() - 1));
+        };
+        std::printf("B. Stationary material, 3 s captures, 20 seeds: standard deviation of the EQ curve (truth 0 dB)\n");
+        for (size_t b : {size_t{0}, nb / 2, nb - 1})
+            std::printf("   at %5.0f Hz: power %.2f dB, magnitude %.2f dB\n", centres[b], spread(pw, b), spread(mg, b));
+    }
+    // C. Gating: 20 s of programme, then 20 s of silence (a -140 dB floor) with a 50 Hz hum line at
+    // -60 dB in its bin. Broadband gate: mean bin power over 20 Hz-20 kHz >= -90 dB. Peak gate: the
+    // loudest bin >= -90 dB. The average, against the programme alone.
+    {
+        const Spec prog = scaled(tilt(-3.0), -30.0);
+        size_t b50 = 0;
+        for (size_t b = 0; b < nb; ++b)
+            if (std::abs(std::log2(centres[b] / 50.0)) < 1.0 / 6.0) b50 = b;
+        for (double humDb : {-80.0, -70.0, -60.0, -50.0})
+        for (Gate g : {Gate::Broadband, Gate::Peak}) {
+            Spec hum(bins, std::pow(10.0, -14.0));
+            hum[static_cast<size_t>(std::lround(50.0 / binHz))] = std::pow(10.0, humDb / 10.0);
+            std::mt19937 rng(5);
+            Capture c(bins);
+            for (int f = 0; f < 234; ++f) add(c, prog, rng, Gate::None);
+            const Capture alone = c;
+            for (int f = 0; f < 234; ++f) add(c, hum, rng, g);
+            const auto with = bandsDb(c, false), without = bandsDb(alone, false);
+            std::printf("C. hum %+3.0f dB, %s gate: %3.0f of 234 silent frames counted; %3.0f Hz %+.2f dB, %5.0f Hz %+.2f dB\n",
+                        humDb, g == Gate::Broadband ? "broadband" : "peak     ", c.counted - alone.counted, centres[b50],
+                        with[b50] - without[b50], centres[nb / 2], with[nb / 2] - without[nb / 2]);
+        }
+    }
 }
