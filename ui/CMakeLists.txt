@@ -12,7 +12,8 @@ add_library(amq_ui_model STATIC
     src/band_panel.cpp
     src/eq_match_apply.cpp
     src/display_format.cpp
-    src/editor_layout.cpp)
+    src/editor_layout.cpp
+    src/graph_accessible.cpp)
 add_library(amq::ui_model ALIAS amq_ui_model)
 target_include_directories(amq_ui_model PUBLIC include)
 target_link_libraries(amq_ui_model PUBLIC amq::params amq::dsp amq::analysis)

@@ -10,6 +10,7 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+#include <dxgi1_4.h>
 #include <psapi.h>
 
 #include <algorithm>
@@ -74,6 +75,29 @@ double xOfHz(double hz) { return (kW - kGutter) * std::log(hz / 10.0) / std::log
 double yOfDb(double db) {
     const double plotH = kH - 2 * kBar - 2 * kInset;
     return kBar + kInset + 0.5 * plotH - db / kRange * 0.5 * plotH;
+}
+
+// GPU memory this process holds on every adapter (DXGI 1.4 QueryVideoMemoryInfo, local and
+// non-local segments): the GPU-object counter for the editor soak (area 12 R1, R8). Visage's GPU
+// objects are internal; their memory is what a leak would show. 0 if DXGI 1.4 is unavailable.
+uint64_t gpuBytes() {
+    IDXGIFactory1* factory = nullptr;
+    if (FAILED(CreateDXGIFactory1(__uuidof(IDXGIFactory1), reinterpret_cast<void**>(&factory)))) return 0;
+    uint64_t total = 0;
+    IDXGIAdapter1* adapter = nullptr;
+    for (UINT i = 0; factory->EnumAdapters1(i, &adapter) != DXGI_ERROR_NOT_FOUND; ++i) {
+        IDXGIAdapter3* a3 = nullptr;
+        if (SUCCEEDED(adapter->QueryInterface(__uuidof(IDXGIAdapter3), reinterpret_cast<void**>(&a3)))) {
+            for (auto group : {DXGI_MEMORY_SEGMENT_GROUP_LOCAL, DXGI_MEMORY_SEGMENT_GROUP_NON_LOCAL}) {
+                DXGI_QUERY_VIDEO_MEMORY_INFO info{};
+                if (SUCCEEDED(a3->QueryVideoMemoryInfo(0, group, &info))) total += info.CurrentUsage;
+            }
+            a3->Release();
+        }
+        adapter->Release();
+    }
+    factory->Release();
+    return total;
 }
 
 size_t privateBytes() {
@@ -437,10 +461,12 @@ int main(int argc, char** argv) {
     cycles(250, true);
     const DWORD h0 = handles();
     const size_t a0 = privateBytes();
+    const uint64_t g0 = gpuBytes();
     cycles(100, true);
     const size_t a1 = privateBytes();
     cycles(100, true);
     const size_t a2 = privateBytes();
+    const uint64_t g2 = gpuBytes();
     const DWORD h1 = handles();
     std::printf("  soak attached (second editor open): warm-up %.2f -> %.2f MB, objects %lu -> %lu; then %.2f -> %.2f -> "
                 "%.2f MB, objects %lu -> %lu\n",
@@ -448,6 +474,12 @@ int main(int argc, char** argv) {
     check(h0 <= hw + 8, "attached warm-up (250 cycles): GDI/USER objects bounded (+8 at most)");
     check(h1 <= h0, "200 attached open/close cycles after warm-up: no GDI/USER object growth");
     check(a2 < a0 + 1024 * 1024, "200 attached open/close cycles after warm-up: memory growth under 1 MB (5 KB per cycle)");
+    // GPU objects: each attached cycle creates and releases a swap chain, layers and textures, so a
+    // leaked per-editor object keeps growing GPU memory by its size (a 1280x720 back buffer is
+    // 3.5 MB) on every cycle. Bounded here at 4 MB over 200 cycles, after the same warm-up.
+    std::printf("  GPU memory (DXGI, this process): %.2f -> %.2f MB over 200 attached cycles\n", g0 / kMB, g2 / kMB);
+    if (g0 == 0 && g2 == 0) std::printf("  (DXGI 1.4 video memory info unavailable: GPU check skipped)\n");
+    else check(g2 < g0 + 4 * 1024 * 1024, "200 attached open/close cycles after warm-up: GPU memory growth under 4 MB");
     holderGui->destroy(holder);
     holder->destroy(holder);
     DestroyWindow(holderTop);

@@ -11,6 +11,7 @@
 #include "amq/ui/editor_layout.hpp"
 #include "amq/ui/eq_match_apply.hpp"
 #include "amq/ui/file_dialog.hpp"
+#include "amq/ui/graph_accessible.hpp"
 #include "amq/ui/graph_model.hpp"
 #include "amq/ui/key_dispatcher.hpp"
 #include "amq/ui/snapshot_poller.hpp"
@@ -53,7 +54,6 @@ std::atomic<int> gLiveEditors{0};
 
 Modifiers modsOf(const visage::MouseEvent& e) { return {e.isShiftDown(), e.isAltDown(), e.isMainModifier()}; }
 
-std::string bandLabel(int b) { return "Band " + std::to_string(b + 1); }
 
 // ---------------------------------------------------------------------------
 // Shared editor state
@@ -2831,72 +2831,6 @@ private:
 // Accessible-control model (area 15 R12)
 // ---------------------------------------------------------------------------
 
-class BandNodeAccessible : public AccessibleControl {
-public:
-    BandNodeAccessible(EditController& c, GraphInteraction& m, int band) : c_(c), m_(m), band_(band) {}
-    std::string accessibleName() const override { return bandLabel(band_); }
-    AccessibleRole accessibleRole() const override { return AccessibleRole::GraphNode; }
-    std::string accessibleValueText() const override {
-        const auto f = params::bandParam(band_, BandField::Freq);
-        const auto g = params::bandParam(band_, BandField::Gain);
-        return params::formatPlain(*params::specAt(f), c_.table().value(f)) + ", " +
-               params::formatPlain(*params::specAt(g), c_.table().value(g));
-    }
-    double accessibleValueNormalised() const override {
-        const auto f = params::bandParam(band_, BandField::Freq);
-        return params::toNormalised(*params::specAt(f), c_.table().value(f));
-    }
-    std::vector<AccessibleAction> accessibleActions() const override {
-        return {AccessibleAction::Press, AccessibleAction::Increment, AccessibleAction::Decrement, AccessibleAction::SetValue};
-    }
-    // Press selects; Increment/Decrement nudge gain by 1 dB (PROVISIONAL step); SetValue sets
-    // the normalised frequency. All through gestures.
-    bool performAccessibleAction(AccessibleAction a, double value) override {
-        if (!accessibleVisible()) return false;
-        const auto g = params::bandParam(band_, BandField::Gain);
-        const auto f = params::bandParam(band_, BandField::Freq);
-        switch (a) {
-            case AccessibleAction::Press: m_.setSelection({band_}, band_); return true;
-            case AccessibleAction::Increment:
-            case AccessibleAction::Decrement: {
-                EditGesture e(c_, {g});
-                e.set(g, c_.table().value(g) + (a == AccessibleAction::Increment ? 1.0 : -1.0));
-                return true;
-            }
-            case AccessibleAction::SetValue: {
-                EditGesture e(c_, {f});
-                e.set(f, params::fromNormalised(*params::specAt(f), value));
-                return true;
-            }
-            default: return false;
-        }
-    }
-    bool accessibleVisible() const override { return m_.node(band_).used; }
-
-private:
-    EditController& c_;
-    GraphInteraction& m_;
-    int band_;
-};
-
-class GraphAccessible : public AccessibleControl {
-public:
-    explicit GraphAccessible(std::array<std::unique_ptr<BandNodeAccessible>, params::kBandCount>& nodes) : nodes_(nodes) {}
-    std::string accessibleName() const override { return "Response graph"; }
-    AccessibleRole accessibleRole() const override { return AccessibleRole::Group; }
-    std::vector<AccessibleAction> accessibleActions() const override { return {}; }
-    bool performAccessibleAction(AccessibleAction, double) override { return false; }
-    std::vector<AccessibleControl*> accessibleChildren() const override {
-        std::vector<AccessibleControl*> v;
-        for (auto& n : nodes_)
-            if (n->accessibleVisible()) v.push_back(n.get());
-        return v;
-    }
-
-private:
-    std::array<std::unique_ptr<BandNodeAccessible>, params::kBandCount>& nodes_;
-};
-
 class RootAccessible : public AccessibleControl {
 public:
     explicit RootAccessible(GraphAccessible& g) : g_(g) {}
@@ -2933,7 +2867,6 @@ struct Editor::Impl : params::ParameterListener {
     GraphTop top;
     TopBar topBar;
     StatusBar statusBar;
-    std::array<std::unique_ptr<BandNodeAccessible>, params::kBandCount> nodeAccess;
     GraphAccessible graphAccess;
     RootAccessible rootAccess;
 
@@ -2948,10 +2881,8 @@ struct Editor::Impl : params::ParameterListener {
           top(x, overlay),
           topBar(x, overlay, top),
           statusBar(x, overlay),
-          graphAccess(nodeAccess),
+          graphAccess(ctl, x.interaction),
           rootAccess(graphAccess) {
-        for (int b = 0; b < params::kBandCount; ++b)
-            nodeAccess[static_cast<size_t>(b)] = std::make_unique<BandNodeAccessible>(ctl, x.interaction, b);
         x.keys.writeSystemClipboard = [](const std::string& s) { visage::setClipboardText(s); };
         x.keys.readSystemClipboard = [] { return visage::readClipboardText(); };
         x.redrawGraph = [this] {

@@ -56,6 +56,47 @@ public:
 
     // Children in focus order (for groups). Leaf controls return an empty list.
     virtual std::vector<AccessibleControl*> accessibleChildren() const { return {}; }
+
+    // Focus (area 15 R3, R12). One focus is shared by the keys and assistive tools: a control
+    // reports whether it holds the editor's focus and can be asked to take it. Groups are not
+    // focusable themselves; their focusable descendants are.
+    virtual bool accessibleFocusable() const {
+        return accessibleRole() != AccessibleRole::Group && accessibleEnabled() && accessibleVisible();
+    }
+    virtual bool accessibleFocused() const { return false; }
+    // Takes the editor's focus; returns false if the control cannot.
+    virtual bool setAccessibleFocus() { return false; }
 };
+
+// The focusable controls under root, in focus order (depth first, children in their order).
+inline void accessibleFocusOrder(AccessibleControl& root, std::vector<AccessibleControl*>& out) {
+    if (root.accessibleFocusable()) out.push_back(&root);
+    for (AccessibleControl* c : root.accessibleChildren())
+        if (c && c->accessibleVisible()) accessibleFocusOrder(*c, out);
+}
+
+// The control holding the focus, or nullptr.
+inline AccessibleControl* accessibleFocusedControl(AccessibleControl& root) {
+    std::vector<AccessibleControl*> order;
+    accessibleFocusOrder(root, order);
+    for (AccessibleControl* c : order)
+        if (c->accessibleFocused()) return c;
+    return nullptr;
+}
+
+// Moves the focus to the next (direction > 0) or previous focusable control, wrapping; with no
+// focus, to the first or last. Returns the newly focused control, or nullptr if there is none.
+inline AccessibleControl* accessibleFocusNext(AccessibleControl& root, int direction) {
+    std::vector<AccessibleControl*> order;
+    accessibleFocusOrder(root, order);
+    if (order.empty()) return nullptr;
+    const int n = static_cast<int>(order.size());
+    int k = -1;
+    for (int i = 0; i < n; ++i)
+        if (order[static_cast<size_t>(i)]->accessibleFocused()) k = i;
+    k = k < 0 ? (direction > 0 ? 0 : n - 1) : ((k + (direction > 0 ? 1 : -1)) % n + n) % n;
+    AccessibleControl* c = order[static_cast<size_t>(k)];
+    return c->setAccessibleFocus() ? c : nullptr;
+}
 
 }  // namespace amq::ui
