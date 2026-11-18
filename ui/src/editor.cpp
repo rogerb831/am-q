@@ -1949,6 +1949,7 @@ private:
         }
         if (P.mode == PanelMode::Strip) r = P.expanded;  // expanded strip: the compact panel over the plot
         theme::panel(c, r, 16.0f);
+        add(r, kNone);  // the panel swallows clicks; first, so its controls (added after) win in hitAt
         const float cy0 = r.y + P.padY;
         const float rowBottom = cy0 + P.row1H;
         float x = r.x + P.padX;
@@ -2094,7 +2095,6 @@ private:
         add(delR, kDelete);
         panelRect_ = r;
         x_.focusRings(c, hits_);
-        add(r, kNone);  // the panel swallows clicks
     }
 
     // --- band list (panels §2.4, §4.5) ---
@@ -2105,6 +2105,7 @@ private:
         const Rect r{16.0f, 16.0f, 260.0f, h};
         bandListRect_ = r;
         theme::panel(c, r, 16.0f);
+        add(r, kNone);  // first: the rows registered after it win (hitAt searches from the last)
         text(c, F.semi12, "BANDS", r.x + 18.0f, r.y + 12.0f, 100.0f, 14.0f, tok::inkMuted);
         text(c, F.caption12, std::to_string(used.size()) + " of 24", r.x, r.y + 11.0f, r.w - 18.0f, 16.0f, tok::inkMuted,
              visage::Font::kRight);
@@ -2150,7 +2151,6 @@ private:
         text(c, F.caption12, "\xE2\x86\x91 \xE2\x86\x93 move \xC2\xB7 Shift adds \xC2\xB7 Enter enables", r.x + 18.0f, r.bottom() - 42.0f,
              r.w - 28.0f, 16.0f, tok::inkMuted);
         text(c, F.caption12, "Del removes", r.x + 18.0f, r.bottom() - 26.0f, r.w - 28.0f, 16.0f, tok::inkMuted);
-        add(r, kNone);
     }
 
     void drawLegendPanel(visage::Canvas& c, const std::vector<std::pair<std::string, int>>& entries) {

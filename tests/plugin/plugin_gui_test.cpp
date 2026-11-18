@@ -368,6 +368,37 @@ int main(int argc, char** argv) {
               e2.count(CLAP_EVENT_PARAM_VALUE) >= 10,
           "drag is one begin and one end per parameter (frequency, gain) with values in between");
 
+    // 2b. The band panel takes clicks (it did not between 2026-11-17 and 2026-11-18: its catch-all hit
+    //     sat above its controls). Band 1 is selected: a static Bell's panel, 632 wide, centred, its
+    //     bottom 32 above the graph's; the Enabled button is at the top right of its first column.
+    {
+        clap_id enabled1 = 0;
+        for (uint32_t i = 0; i < params->count(p); ++i) {
+            clap_param_info info{};
+            params->get_info(p, i, &info);
+            if (!std::strcmp(info.name, "Band 1 Enabled")) enabled1 = info.id;
+        }
+        const double panelX = (kW - 632) / 2, panelTop = kH - 44 - 32 - 166;
+        const double ex = panelX + 20 + 148 - 14, ey = panelTop + 16 + 14;
+        auto clickAt = [&](double x, double y) {
+            post(WM_MOUSEMOVE, 0, x, y);
+            pump(30);
+            post(WM_LBUTTONDOWN, MK_LBUTTON, x, y);
+            post(WM_LBUTTONUP, 0, x, y);
+            pump(150);
+        };
+        double en = -1;
+        clickAt(ex, ey);
+        Events eb;
+        processOnce(eb);
+        params->get_value(p, enabled1, &en);
+        check(en == 0.0, "a click on the band panel's Enabled button disables the band");
+        clickAt(ex, ey);
+        processOnce(eb);
+        params->get_value(p, enabled1, &en);
+        check(en == 1.0, "a second click enables it again");
+    }
+
     // 3. Host automation while the editor is open asks for a main-thread refresh.
     clap_event_param_value pv{};
     pv.header = {sizeof(pv), 0, CLAP_CORE_EVENT_SPACE_ID, CLAP_EVENT_PARAM_VALUE, 0};
