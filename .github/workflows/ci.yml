@@ -11,7 +11,7 @@
 #                   then.
 #
 # The windows job also uploads the binary build: Am-Q-<version>-windows-x64 (Am-Q.clap, the
-# Am-Q.vst3 bundle, INSTALL.txt and THIRD_PARTY_NOTICES.txt) and its debug symbols as a separate
+# Am-Q.vst3 bundle, INSTALL.txt, LICENSE.txt and THIRD_PARTY_NOTICES.txt) and its debug symbols as a separate
 # -symbols artifact. A v* tag also runs the release job, which publishes both as a GitHub Release.
 #
 # Validator binaries are pinned by version and SHA-256 in tools/ci/fetch_validators.sh.
@@ -140,6 +140,7 @@ jobs:
           cp "$(dirname "$clap")/Am-Q.pdb" "dist/$pkg-symbols/Am-Q.clap.pdb"
           # The licences of everything linked or embedded in the binaries (they require it).
           bash tools/ci/third_party_notices.sh build "dist/$pkg/THIRD_PARTY_NOTICES.txt"
+          cp LICENSE "dist/$pkg/LICENSE.txt"
           cat > "dist/$pkg/INSTALL.txt" <<EOF
           Am-Q $ver (Windows, x64)
           Built from commit $GITHUB_SHA.
@@ -148,7 +149,7 @@ jobs:
           VST3: copy the Am-Q.vst3 folder to C:\Program Files\Common Files\VST3
           Then rescan plugins in your host.
 
-          Third-party licences: THIRD_PARTY_NOTICES.txt
+          Licence: LICENSE.txt. Third-party licences: THIRD_PARTY_NOTICES.txt
           EOF
           echo "PKG=$pkg" >> "$GITHUB_ENV"
 

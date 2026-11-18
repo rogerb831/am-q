@@ -69,3 +69,9 @@ Options: `--quick` (small grid), `--no-bilinear`, `--default-only`, `--order-n` 
 correction biquad), `--always-extra` (always try it), `--threads N`, `--strict` (exit 1 if any
 case misses the revised R12 tolerance; TBD cases excluded), `--case <shapeId> <slopeId> <f0> <gainDb> <q> <fs>` (per-section dump and
 fine scan of one band), `--bench` (single-thread design cost per method).
+
+## Licence
+
+Copyright (c) 2026 Spydah. All rights reserved. The source is public for reference only; no
+licence to use, copy or redistribute it is granted (see [LICENSE](LICENSE)). Third-party
+components keep their own licences ([THIRD_PARTY.md](THIRD_PARTY.md)).
