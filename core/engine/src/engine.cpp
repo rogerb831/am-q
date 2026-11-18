@@ -1242,6 +1242,16 @@ void Engine::runDynamics(const double* const* w, const float* const* sc, uint32_
     // The dB-domain chain is the same arithmetic for every band: two bands per SSE2 step
     // (dynamics_lanes.hpp; bit-identical to running them one by one).
     uint32_t k = 0;
+    static const bool avx2 = dsp::cpuHasAvx2();
+    if (avx2)  // four bands per AVX2 step where the CPU has it (the same bits as the pairs)
+        for (; k + 3 < count; k += 4) {
+            dsp::GainLane* const L[4] = {&laneState[k], &laneState[k + 1], &laneState[k + 2], &laneState[k + 3]};
+            double* const B[4] = {dynW_.data() + static_cast<size_t>(lanes[k]) * maxFrames_ + off,
+                                  dynW_.data() + static_cast<size_t>(lanes[k + 1]) * maxFrames_ + off,
+                                  dynW_.data() + static_cast<size_t>(lanes[k + 2]) * maxFrames_ + off,
+                                  dynW_.data() + static_cast<size_t>(lanes[k + 3]) * maxFrames_ + off};
+            dsp::gainLaneQuadAvx2(L, B, n);
+        }
     for (; k + 1 < count; k += 2)
         dsp::gainLanePair(laneState[k], laneState[k + 1], dynW_.data() + static_cast<size_t>(lanes[k]) * maxFrames_ + off,
                           dynW_.data() + static_cast<size_t>(lanes[k + 1]) * maxFrames_ + off, n);

@@ -189,4 +189,9 @@ inline void gainLanePair(GainLane& A, GainLane& B, double* bufA, double* bufB, u
 #endif
 }
 
+// Four bands in AVX2 lanes (core/dsp/src/dynamics_avx2.cpp, built with AVX2 for that file only).
+// Call only when cpuHasAvx2() is true; same bits as gainLaneScalar.
+[[nodiscard]] bool cpuHasAvx2() noexcept;
+void gainLaneQuadAvx2(GainLane* const L[4], double* const buf[4], uint32_t n) noexcept;
+
 }  // namespace amq::dsp

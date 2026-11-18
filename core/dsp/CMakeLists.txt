@@ -9,7 +9,18 @@ add_library(amq_dsp STATIC
     src/partitioned_convolver.cpp
     src/nonuniform_convolver.cpp
     src/realtime_design.cpp
+    src/dynamics_avx2.cpp
 )
+# The AVX2 dynamics kernel: AVX2 for this file only, selected at run time (cpuHasAvx2), with no
+# fused multiply-adds so it gives the scalar kernel's bits.
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "AMD64|x86_64|x86|i686" OR CMAKE_GENERATOR_PLATFORM MATCHES "x64|Win32")
+    set_source_files_properties(src/dynamics_avx2.cpp PROPERTIES COMPILE_DEFINITIONS AMQ_DYN_AVX2_BUILD)
+    if(MSVC)
+        set_source_files_properties(src/dynamics_avx2.cpp PROPERTIES COMPILE_OPTIONS "/arch:AVX2;/fp:precise")
+    else()
+        set_source_files_properties(src/dynamics_avx2.cpp PROPERTIES COMPILE_OPTIONS "-mavx2;-ffp-contract=off")
+    endif()
+endif()
 add_library(amq::dsp ALIAS amq_dsp)
 
 target_include_directories(amq_dsp PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)

@@ -256,6 +256,32 @@ TEST_CASE("Dynamics lanes: the SSE2 pair gives the same bits as two scalar lanes
     }
 }
 
+TEST_CASE("Dynamics lanes: the AVX2 quad gives the same bits as four scalar lanes") {
+    if (!amq::dsp::cpuHasAvx2()) {
+        MESSAGE("no AVX2 on this CPU: skipped");
+        return;
+    }
+    std::mt19937 rng(31);
+    for (int trial = 0; trial < 20; ++trial) {
+        const uint32_t n = 1 + static_cast<uint32_t>(trial * 53 % 600);
+        amq::dsp::GainLane q[4], s1[4];
+        std::vector<double> e[4], x[4];
+        for (int k = 0; k < 4; ++k) {
+            q[k] = s1[k] = makeLane(rng, (trial + k) % 2 == 0, k == 3 ? 0.0 : 4.0 + k, -3.0 - 4.0 * k);
+            e[k] = x[k] = envelope(rng, n);
+        }
+        e[1][0] = x[1][0] = std::numeric_limits<double>::infinity();  // an infinite envelope sample
+        amq::dsp::GainLane* const L[4] = {&q[0], &q[1], &q[2], &q[3]};
+        double* const B[4] = {e[0].data(), e[1].data(), e[2].data(), e[3].data()};
+        amq::dsp::gainLaneQuadAvx2(L, B, n);
+        for (int k = 0; k < 4; ++k) {
+            amq::dsp::gainLaneScalar(s1[k], x[k].data(), n);
+            CHECK(e[k] == x[k]);
+            CHECK((q[k].ref == s1[k].ref && q[k].refCount == s1[k].refCount && q[k].zy == s1[k].zy));
+        }
+    }
+}
+
 TEST_CASE("Dynamics lanes: the scalar lane equals the object chain it replaces") {
     using namespace amq::dsp;
     std::mt19937 rng(5);
@@ -309,5 +335,18 @@ TEST_CASE("Dynamics lanes: cost report (24 bands, 1 s at 48 kHz)" * doctest::ski
             }
         return std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
     };
-    std::printf("  dB chain, scalar: %.2f %% of one core; SSE2 pairs: %.2f %%\n", 100.0 * run(false), 100.0 * run(true));
+    auto runAvx = [&] {
+        auto L = lanes;
+        const auto t0 = std::chrono::steady_clock::now();
+        for (int blk = 0; blk < 750; ++blk)
+            for (int b = 0; b < 24; b += 4) {
+                auto a = env[b], c = env[b + 1], d = env[b + 2], f = env[b + 3];
+                amq::dsp::GainLane* const P[4] = {&L[b], &L[b + 1], &L[b + 2], &L[b + 3]};
+                double* const B[4] = {a.data(), c.data(), d.data(), f.data()};
+                amq::dsp::gainLaneQuadAvx2(P, B, 64);
+            }
+        return std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+    };
+    std::printf("  dB chain, scalar: %.2f %% of one core; SSE2 pairs: %.2f %%; AVX2 quads: %.2f %%%s\n", 100.0 * run(false),
+                100.0 * run(true), 100.0 * runAvx(), amq::dsp::cpuHasAvx2() ? "" : " (no AVX2: scalar fallback)");
 }
