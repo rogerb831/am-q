@@ -120,4 +120,4 @@ On load:
 - Gesture helper and GUI attachments (areas 09, 10).
 - Audio-side ramps and block splitting (areas 01, 09).
 - Batch load.
-- The per-shape displayed-Q to design-Q convention (area 09 R12, documented in the Phase 0 DSP notes).
+- The per-shape displayed-Q to design-Q convention: see [docs/dsp/q-convention.md](../dsp/q-convention.md) (area 09 R12).

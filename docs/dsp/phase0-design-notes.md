@@ -26,13 +26,13 @@ Full harness output:
 - **All Pass:** Butterworth poles with mirrored zeros. Its magnitude is exactly 1.
 - **Brickwall:** not implemented. It is a Phase 2 design, so the harness skips it.
 
-### Q convention (R14): PROVISIONAL placeholder
+### Q convention (R14): the Phase 0 placeholder, since decided
 
 - **Bell, Notch, Band Pass:** the displayed Q is the bandwidth Q of the band-pass mapping.
 - **Cuts, shelves, Tilt Shelf, All Pass:** the displayed Q multiplies the Q of the dominant (highest-Q) Butterworth pole pair, so Q = 1 is maximally flat. 6 dB/oct shapes ignore Q.
 - **Flat Tilt:** ignores Q and slope.
 
-At Q 10–40 this turns a shelf into a section with a +20 to +46 dB resonance. Those prototypes are behind every remaining large miss (see below). The DSP lead and the Product designer still need to define this mapping (Phase 0 task).
+At Q 10–40 this turns a shelf into a section with a +20 to +46 dB resonance. Those prototypes are behind every remaining large miss (see below). Decided 2026-11-18 as built, the full Q range kept on every shape: [q-convention.md](q-convention.md).
 
 ### Analog → digital
 

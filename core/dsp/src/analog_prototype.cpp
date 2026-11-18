@@ -38,7 +38,7 @@ void appendPairFromRadiusQ(Roots& out, double r, double q) {
 }
 
 // Unit-radius Butterworth poles of order m. The dominant (highest-Q) pair has its Q
-// multiplied by qScale (PROVISIONAL Q convention, see qMappingNotes()).
+// multiplied by qScale (the Q convention, docs/dsp/q-convention.md).
 Roots butterworthPoles(int m, double qScale) {
     Roots p;
     for (int i = 0; i < m / 2; ++i) {
@@ -352,9 +352,9 @@ bool shapeHasGain(Shape s) noexcept {
     }
 }
 
-bool shapeUsesQ(Shape s) noexcept { return s != Shape::FlatTilt; }  // PROVISIONAL (R14 tilt Q curve open)
+bool shapeUsesQ(Shape s) noexcept { return s != Shape::FlatTilt; }  // docs/dsp/q-convention.md
 
-bool shapeUsesSlope(Shape s) noexcept { return s != Shape::FlatTilt; }  // PROVISIONAL
+bool shapeUsesSlope(Shape s) noexcept { return s != Shape::FlatTilt; }  // Flat Tilt has a fixed design
 
 bool slopeAllowed(Shape shape, Slope slope) noexcept {
     if (slope == Slope::Brickwall) return shape == Shape::LowCut || shape == Shape::HighCut;
@@ -369,7 +369,7 @@ int filterOrder(Shape shape, Slope slope) noexcept {
 }
 
 std::string_view qMappingNotes() noexcept {
-    return "PROVISIONAL Q convention (R14 open): "
+    return "Q convention (R14, docs/dsp/q-convention.md): "
            "Bell / Notch / Band Pass: displayed Q is the bandwidth Q of the low-pass to band-pass "
            "mapping (centre/bandwidth), prototype order = floor(order/2). "
            "Cuts, shelves, Tilt Shelf, All Pass: Butterworth sections; displayed Q multiplies the "

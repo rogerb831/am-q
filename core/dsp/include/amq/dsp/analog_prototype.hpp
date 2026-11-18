@@ -15,9 +15,8 @@
 //    higher-order Bell / Notch / Band Pass: S. J. Orfanidis, "High-Order Digital
 //    Parametric Equalizer Design", J. Audio Eng. Soc. 53(11), 1026-1046, Nov 2005.
 //
-// PROVISIONAL: the displayed-Q to section-Q mapping per shape (R14) is an Am-Q
-// decision still open (Phase 0 task "Define and document the displayed-Q to section-Q
-// mapping"). The mapping used here is a documented placeholder; see qMappingNotes().
+// The displayed-Q to section-Q mapping per shape (R14) is documented in
+// docs/dsp/q-convention.md (decided 2026-11-18); qMappingNotes() gives a one-line summary.
 
 #include "amq/dsp/fixed_vector.hpp"
 
