@@ -29,6 +29,11 @@ constexpr float opacityBandFill = 0.38f, opacityBandSelected = 0.55f, opacityBan
                 opacityPreview = 0.6f;
 }  // namespace tok
 
+// Milliseconds on a steady clock, for tooltip delays and motion (spec §7).
+double nowMs();
+// The OS asks for reduced motion (Windows: "Show animations in Windows" off): transitions are 0 ms.
+bool reducedMotion();
+
 inline uint32_t bandColour(int band) { return tok::band[static_cast<size_t>(band % 8)]; }
 inline uint32_t withAlpha(uint32_t argb, float a) {
     const auto al = static_cast<uint32_t>(std::lround(std::clamp(a, 0.0f, 1.0f) * static_cast<float>(argb >> 24)));

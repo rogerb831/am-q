@@ -54,7 +54,7 @@ public:
     [[nodiscard]] double dbOfY(float y) const noexcept;
 
 private:
-    float w_ = 1180.0f, h_ = 672.0f;
+    float w_ = 1280.0f, h_ = 632.0f;
     double rangeDb_ = 12.0;
     double lo_ = kMinHz, hi_ = kMaxHz;
 };

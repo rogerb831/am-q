@@ -117,6 +117,21 @@ struct Ctx {
 
     std::function<void()> redrawAll, relayout, redrawGraph, redrawBars;
 
+    // Tooltips (spec §4.0 layer 9): the hovered control's text, shown after 600 ms.
+    std::string tipText;
+    Rect tipAnchor;  // window coordinates
+    double tipSince = 0.0;
+    bool tipShown = false;
+    std::function<void()> tipChanged;
+    void hoverTip(const std::string& text, Rect anchor) {
+        if (text == tipText && (text.empty() || (anchor.x == tipAnchor.x && anchor.y == tipAnchor.y))) return;
+        tipText = text, tipAnchor = anchor, tipSince = theme::nowMs(), tipShown = false;
+        if (tipChanged) tipChanged();
+    }
+    void clearTip() { hoverTip("", {}); }
+    // Motion (spec §7): frames call kickAnimation() when a target changes.
+    std::function<void()> kickAnimation;
+
     [[nodiscard]] const params::ParameterTable& table() const { return c.table(); }
     [[nodiscard]] double val(params::ParamIndex i) const { return c.table().value(i); }
     [[nodiscard]] double gval(GlobalParam g) const { return val(params::globalParam(g)); }
@@ -195,6 +210,56 @@ struct Ctx {
 
 const char* kModeNames[] = {"Zero Latency", "Natural Phase", "Linear Phase"};
 
+// Tooltip text for a control (spec panels §2; PROVISIONAL wording).
+std::string tipFor(const Ctx& x, const Hit& h) {
+    auto g = [](GlobalParam p) { return params::globalParam(p); };
+    switch (h.kind) {
+        case kUndo: return "Undo (Ctrl+Z)";
+        case kRedo: return "Redo (Ctrl+Shift+Z)";
+        case kSettings: return "Interface and analyzer settings";
+        case kHelp: return x.hintMode ? "Hide the gesture hints" : "Show the gesture hints";
+        case kEqMatch: return x.matchMode ? "Leave EQ Match" : "EQ Match";
+        case kFreeze: return "Unfreeze the analyzer";
+        case kBands: return "Band list";
+        case kProcessing: return "Processing mode and latency";
+        case kAnalyzer: return "Analyzer settings";
+        case kOutputMenu: return "Output settings";
+        case kDragValue: return "Drag to change, Shift for fine, double-click to reset";
+        case kToggle:
+            if (h.id == g(GlobalParam::AnalyzerFreeze)) return "Freeze analyzer";
+            if (h.id == g(GlobalParam::Invert)) return "Invert polarity";
+            if (h.id == g(GlobalParam::Bypass)) return "Bypass plugin";
+            if (h.id == g(GlobalParam::AutoGain)) return "Keeps loudness level while you EQ";
+            switch (h.arg) {
+                case 1: return "Enable/disable band (Alt-click the handle)";
+                case 2: return "Automatic threshold and timing";
+                case 3: return "Listen to side chain";
+                case 7: return "Solo band";
+                default: return "";
+            }
+        case kDelete: return "Delete band (Del)";
+        case kShape: return "Filter shape";
+        case kSlope: return "Slope";
+        case kPlacement: return "Stereo placement";
+        case kScFilter: return "Side-chain filter";
+        case kKnob: {
+            // Attack and Release show their effective time (area 06, from the panel model).
+            const int b = static_cast<int>(h.id) / params::kBandFieldCount;
+            for (const auto& pc : bandPanel(x.table(), b))
+                if (pc.id == h.id && !pc.tooltip.empty()) return pc.tooltip;
+            return "Drag to change, Shift for fine, double-click to reset";
+        }
+        case kKnobValue: return "Click to type a value";
+        case kMatchRec: return "Record or stop this capture";
+        case kMatchReset: return "Reset this capture";
+        case kMatchPrimary:
+            if (x.match && !x.match->applier.fit().empty() && !x.match->applied) return "Writes bands as one undo step";
+            if (x.match && x.match->st.fitting) return "Stop the fit; the bands stay unchanged";
+            return "Fit bands to the difference";
+        default: return "";
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Overlay: menus, popovers and the inline editor (editor-spec-graph §4)
 // ---------------------------------------------------------------------------
@@ -216,14 +281,34 @@ public:
         setVisible(false);
     }
 
-    [[nodiscard]] Pop kind() const { return pop_; }
+    [[nodiscard]] Pop kind() const { return closing_ ? Pop::None : pop_; }
+    // Closing fades out over 80 ms (spec §7); the overlay ignores input meanwhile.
     void close() {
-        if (pop_ == Pop::None) return;
+        if (pop_ == Pop::None || closing_) return;
         x_.endDrag();
-        pop_ = Pop::None, sub_ = -1, hover_ = -1;
         x_.settingsOpen = false;
-        setVisible(false);
+        closing_ = true;
+        setIgnoresMouseEvents(true, false);
+        if (x_.kickAnimation) x_.kickAnimation();
         if (x_.redrawAll) x_.redrawAll();
+    }
+    // Advances the open and close fades; returns true while still moving.
+    bool animate(double dtMs) {
+        if (pop_ == Pop::None) return false;
+        if (closing_) {
+            alpha_ = static_cast<float>(alpha_ - dtMs / 80.0);
+            if (alpha_ <= 0.0f) {
+                finishClose();
+                return false;
+            }
+        } else if (alpha_ < 1.0f) {
+            alpha_ = static_cast<float>(std::min(1.0, alpha_ + dtMs / 120.0));
+        } else {
+            return false;
+        }
+        setAlphaTransparency(std::clamp(alpha_, 0.0f, 1.0f));
+        redraw();
+        return true;
     }
     // A menu anchored at a point (right-click) or under/over a rectangle (selects).
     void openMenu(std::string caption, float width, std::vector<Entry> items, std::function<void(int)> pick, Rect anchor,
@@ -251,6 +336,9 @@ public:
     void draw(visage::Canvas& c) override {
         hits_.clear();
         panels_.clear();
+        // Opening slides 4 px towards the anchor (spec §7); bottom-anchored overlays rise.
+        const float slide = 4.0f * (1.0f - std::clamp(alpha_, 0.0f, 1.0f)) * (anchor_.y > height() * 0.5f ? 1.0f : -1.0f);
+        c.setPosition(0.0f, slide);
         switch (pop_) {
             case Pop::Menu: drawMenu(c); break;
             case Pop::Slope: drawSlope(c); break;
@@ -267,6 +355,8 @@ public:
         }
     }
 
+    // Visage sends only mouseEnter on the move that enters a frame: treat it as a move.
+    void mouseEnter(const visage::MouseEvent& e) override { mouseMove(e); }
     void mouseMove(const visage::MouseEvent& e) override {
         const int h = hitAt(hits_, e.position.x, e.position.y);
         if (h != hover_) {
@@ -386,8 +476,21 @@ public:
     }
 
 private:
+    void finishClose() {
+        closing_ = false;
+        pop_ = Pop::None, sub_ = -1, hover_ = -1;
+        alpha_ = 0.0f;
+        setIgnoresMouseEvents(false, false);
+        setVisible(false);
+        if (x_.redrawAll) x_.redrawAll();
+    }
     void show(Pop p) {
+        closing_ = false;
+        setIgnoresMouseEvents(false, false);
         pop_ = p, sub_ = -1, hover_ = -1, fresh_ = true;
+        alpha_ = 0.0f;
+        setAlphaTransparency(0.0f);
+        if (x_.kickAnimation) x_.kickAnimation();
         setVisible(true);
         requestKeyboardFocus();
         redraw();
@@ -720,12 +823,8 @@ private:
         row(c, r, y, "Freeze", "");
         rowChip(c, r, y, 28.0f, gid(GlobalParam::AnalyzerFreeze));
         y += 38.0f;
-        // Peak hold has no parameter yet (spec C-27, P-14): shown as always on.
         row(c, r, y, "Peak hold", "");
-        {
-            const float w = chipWidth("Off");
-            chip(c, {r.right() - 16.0f - w, y, w, 28.0f}, "On", {false, false, true, false});
-        }
+        rowChip(c, r, y, 28.0f, gid(GlobalParam::AnalyzerPeakHold));
         y += 38.0f;
         row(c, r, y - 3.0f, "Collisions", "Where input and side chain overlap");
         rowChip(c, r, y - 3.0f, 34.0f, gid(GlobalParam::AnalyzerCollisions));
@@ -894,6 +993,8 @@ private:
 
     Ctx& x_;
     Pop pop_ = Pop::None;
+    bool closing_ = false;
+    float alpha_ = 1.0f;
     std::vector<Hit> hits_;
     std::vector<Rect> panels_;
     int hover_ = -1;
@@ -1033,9 +1134,11 @@ public:
             fillPoly(c, line(s->pre, true));
         }
         if (x_.gval(GlobalParam::AnalyzerCollisions) >= 0.5 && ext) drawCollisions(c, *s, n, yOf, bottom);
-        if (post) {
+        if (post && x_.gval(GlobalParam::AnalyzerPeakHold) >= 0.5) {
             c.setColor(tok::inkMuted);
             strokePoly(c, line(s->postPeak, false), 1.0f, {1.0f, 3.0f});
+        }
+        if (post) {
             c.setColor(tok::analyzerPost);
             strokePoly(c, line(s->post, false), 1.0f);
         }
@@ -1105,6 +1208,9 @@ public:
             float strokeA = 1.0f;
             if (!enabled) fillA *= tok::opacityBypassed, strokeA = tok::opacityBypassed;
             if (soloBand_ >= 0 && soloBand_ != b) fillA = tok::opacityBandIdle, strokeA = 0.5f;
+            target_[static_cast<size_t>(b)] = fillA;
+            if (fill_[static_cast<size_t>(b)] < 0.0f) fill_[static_cast<size_t>(b)] = fillA;
+            fillA = fill_[static_cast<size_t>(b)];
             Poly fill, stroke;
             fill.moveTo(g.xOfHz(hz.front()), y0);
             for (size_t i = 0; i < hz.size(); ++i) {
@@ -1136,8 +1242,26 @@ public:
         }
     }
     int soloBand_ = -1;
+    // Fill opacities move towards their targets over 100 ms (spec §7).
+    bool animate(double dtMs) {
+        bool moving = false;
+        for (size_t b = 0; b < fill_.size(); ++b) {
+            if (fill_[b] < 0.0f) continue;
+            const float step = static_cast<float>(0.4 * dtMs / 100.0);
+            if (std::abs(fill_[b] - target_[b]) <= step) fill_[b] = target_[b];
+            else fill_[b] += fill_[b] < target_[b] ? step : -step, moving = true;
+        }
+        if (moving) redraw();
+        return moving;
+    }
 
 private:
+    std::array<float, params::kBandCount> fill_ = [] {
+        std::array<float, params::kBandCount> a{};
+        a.fill(-1.0f);
+        return a;
+    }();
+    std::array<float, params::kBandCount> target_{};
     void drawLiveCurves(visage::Canvas& c) {
         const auto& g = x_.geometry;
         const auto& gr = x_.poller.gainChange();
@@ -1291,6 +1415,7 @@ public:
     // --- input ---
     void mouseDown(const visage::MouseEvent& e) override {
         requestKeyboardFocus();
+        x_.clearTip();
         const float px = e.position.x, py = e.position.y;
         const int h = hitAt(hits_, px, py);
         if (h >= 0) {
@@ -1342,16 +1467,22 @@ public:
         x_.interaction.pointerUp(e.position.x, e.position.y, modsOf(e));
         x_.redrawGraph();
     }
+    // Visage sends only mouseEnter on the move that enters a frame: treat it as a move.
+    void mouseEnter(const visage::MouseEvent& e) override { mouseMove(e); }
     void mouseMove(const visage::MouseEvent& e) override {
         pointer_ = {e.position.x, e.position.y};
         inside_ = true;
         const int h = hitAt(hits_, e.position.x, e.position.y);
         hover_ = h >= 0 ? hits_[static_cast<size_t>(h)] : Hit{};
+        Rect a = hover_.r;
+        a.y += x_.L.graph.y;
+        x_.hoverTip(h >= 0 ? tipFor(x_, hover_) : std::string(), a);
         redraw();
     }
     void mouseExit(const visage::MouseEvent&) override {
         inside_ = false;
         hover_ = {};
+        x_.clearTip();
         redraw();
     }
     bool mouseWheel(const visage::MouseEvent& e) override {
@@ -1422,6 +1553,19 @@ public:
     }
 
     [[nodiscard]] Rect plotRect() const { return x_.L.plot; }
+    // Handle size eases towards 22 px (selected) or 18 px over 100 ms (spec §7).
+    bool animate(double dtMs) {
+        bool moving = false;
+        for (int b = 0; b < params::kBandCount; ++b) {
+            auto& sz = size_[static_cast<size_t>(b)];
+            const float target = x_.interaction.node(b).selected ? 22.0f : 18.0f;
+            const float step = static_cast<float>(4.0 * dtMs / 100.0);
+            if (std::abs(sz - target) <= step) sz = target;
+            else sz += sz < target ? step : -step, moving = true;
+        }
+        redraw();
+        return moving;
+    }
     void enterMatch() {
         if (!x_.c.matchHost()) return;
         if (!x_.match) x_.match = std::make_unique<MatchUi>(x_.c);  // lazily, once (area 12 R2)
@@ -1503,7 +1647,7 @@ private:
         for (int b : order) {
             const auto n = x_.interaction.node(b);
             const bool sel = n.selected;
-            const float d = sel ? 22.0f : 18.0f;
+            const float d = size_[static_cast<size_t>(b)];
             const uint32_t col = bandColour(b);
             const float alpha = n.enabled ? 1.0f : tok::opacityBypassed;
             // shadow-handle: ground ring + drop shadow
@@ -2310,6 +2454,11 @@ private:
     bool listFocus_ = false;
     int menuOwner_ = kNone;
     int matchSlider_ = 0;
+    std::array<float, params::kBandCount> size_ = [] {
+        std::array<float, params::kBandCount> a{};
+        a.fill(18.0f);
+        return a;
+    }();
     Rect panelRect_, bandListRect_, amountRect_, bandsRect_;
 };
 
@@ -2436,13 +2585,19 @@ public:
         }
         x_.redrawAll();
     }
+    // Visage sends only mouseEnter on the move that enters a frame: treat it as a move.
+    void mouseEnter(const visage::MouseEvent& e) override { mouseMove(e); }
     void mouseMove(const visage::MouseEvent& e) override {
         const int h = hitAt(hits_, e.position.x, e.position.y);
         const Hit nh = h >= 0 ? hits_[static_cast<size_t>(h)] : Hit{};
         if (nh.kind != hover_.kind || nh.arg != hover_.arg) hover_ = nh, redraw();
+        Rect a = nh.r;
+        a.y += 0.0f;
+        x_.hoverTip(h >= 0 ? tipFor(x_, nh) : std::string(), a);
     }
     void mouseExit(const visage::MouseEvent&) override {
         hover_ = {};
+        x_.clearTip();
         redraw();
     }
 
@@ -2618,13 +2773,19 @@ public:
         if (dragging_) x_.endDrag();
         dragging_ = false;
     }
+    // Visage sends only mouseEnter on the move that enters a frame: treat it as a move.
+    void mouseEnter(const visage::MouseEvent& e) override { mouseMove(e); }
     void mouseMove(const visage::MouseEvent& e) override {
         const int h = hitAt(hits_, e.position.x, e.position.y);
         const Hit nh = h >= 0 ? hits_[static_cast<size_t>(h)] : Hit{};
         if (nh.kind != hover_.kind || nh.arg != hover_.arg) hover_ = nh, redraw();
+        Rect a = nh.r;
+        a.y += x_.L.status.y;
+        x_.hoverTip(h >= 0 ? tipFor(x_, nh) : std::string(), a);
     }
     void mouseExit(const visage::MouseEvent&) override {
         hover_ = {};
+        x_.clearTip();
         redraw();
     }
 
@@ -2639,6 +2800,31 @@ private:
     std::vector<Hit> hits_;
     Hit hover_;
     bool dragging_ = false;
+};
+
+// Tooltip (spec §4.0 layer 9): a readout chip under the hovered control, after 600 ms.
+class TipFrame : public visage::Frame {
+public:
+    explicit TipFrame(Ctx& x) : x_(x) {
+        setIgnoresMouseEvents(true, false);
+        setVisible(false);
+    }
+    void draw(visage::Canvas& c) override {
+        if (!x_.tipShown || x_.tipText.empty()) return;
+        const auto& F = fonts();
+        const float w = textWidth(F.label13, x_.tipText) + 16.0f, h = 24.0f;
+        float tx = x_.tipAnchor.x, ty = x_.tipAnchor.bottom() + 6.0f;
+        if (ty + h > height() - 4.0f) ty = x_.tipAnchor.y - 6.0f - h;
+        tx = std::clamp(tx, 4.0f, std::max(4.0f, width() - 4.0f - w));
+        c.setColor(tok::lineHairline);
+        c.roundedRectangle(tx - 1.0f, ty - 1.0f, w + 2.0f, h + 2.0f, 5.0f);
+        c.setColor(tok::surface300);
+        c.roundedRectangle(tx, ty, w, h, 4.0f);
+        text(c, F.label13, x_.tipText, tx + 8.0f, ty, w - 12.0f, h, tok::ink);
+    }
+
+private:
+    Ctx& x_;
 };
 
 // ---------------------------------------------------------------------------
@@ -2735,6 +2921,10 @@ struct Editor::Impl : params::ParameterListener {
     visage::ApplicationWindow app;
     visage::EventTimer pollTimer;
     Overlay overlay;
+    TipFrame tip;
+    visage::EventTimer animTimer;
+    double lastAnim = 0.0;
+    bool animating = false;
     visage::Frame graphRegion;
     GroundFrame ground;
     SpectrumFrame spectrum;
@@ -2750,6 +2940,7 @@ struct Editor::Impl : params::ParameterListener {
     explicit Impl(UndoController& ctl)
         : x(ctl),
           overlay(x),
+          tip(x),
           ground(x),
           spectrum(x),
           curves(x),
@@ -2764,6 +2955,7 @@ struct Editor::Impl : params::ParameterListener {
         x.keys.writeSystemClipboard = [](const std::string& s) { visage::setClipboardText(s); };
         x.keys.readSystemClipboard = [] { return visage::readClipboardText(); };
         x.redrawGraph = [this] {
+            x.kickAnimation();
             curves.redraw();
             top.redraw();
             statusBar.redraw();
@@ -2773,6 +2965,7 @@ struct Editor::Impl : params::ParameterListener {
             statusBar.redraw();
         };
         x.redrawAll = [this] {
+            if (x.kickAnimation) x.kickAnimation();
             const auto before = x.L.panel.rect;
             const auto mode = x.L.panel.mode;
             computeLayout();
@@ -2787,6 +2980,30 @@ struct Editor::Impl : params::ParameterListener {
             overlay.redraw();
         };
         x.relayout = [this] { layout(); };
+        // Motion (spec §7): one timer drives every transition while any is moving; reduced
+        // motion jumps straight to the end.
+        x.kickAnimation = [this] {
+            if (animating) return;
+            animating = true;
+            lastAnim = theme::nowMs();
+            animTimer.startTimer(8);
+        };
+        animTimer.onTimerCallback() += [this] {
+            const double now = theme::nowMs();
+            const double dt = theme::reducedMotion() ? 1e6 : now - lastAnim;
+            lastAnim = now;
+            bool moving = overlay.animate(dt);
+            moving = top.animate(dt) || moving;
+            moving = curves.animate(dt) || moving;
+            if (!moving) {
+                animTimer.stopTimer();
+                animating = false;
+            }
+        };
+        x.tipChanged = [this] {
+            tip.setVisible(false);
+            tip.redraw();
+        };
         x.interaction.onSelectionChanged = [this] {
             x.stripExpanded = false;
             x.redrawAll();
@@ -2802,6 +3019,11 @@ struct Editor::Impl : params::ParameterListener {
                 top.redraw();
             }
             top.pollMatch();  // EQ Match status and fits, only while EQ Match mode is on
+            if (!x.tipShown && !x.tipText.empty() && theme::nowMs() - x.tipSince >= 600.0 && overlay.kind() == Pop::None) {
+                x.tipShown = true;
+                tip.setVisible(true);
+                tip.redraw();
+            }
             checkShotRequest();
         };
         // Design-review screenshots (tests/plugin/plugin_gui_shot.cpp): when AMQ_GUI_SHOT names a
@@ -2819,6 +3041,7 @@ struct Editor::Impl : params::ParameterListener {
     }
     ~Impl() override {
         pollTimer.stopTimer();
+        animTimer.stopTimer();
         x.c.removeListener(this);
     }
 
@@ -2919,6 +3142,7 @@ struct Editor::Impl : params::ParameterListener {
         meters.setBounds(L.graph.w - GraphGeometry::kRight, 0, GraphGeometry::kRight, L.graph.h);
         top.setBounds(0, 0, L.graph.w, L.graph.h);
         overlay.setBounds(0, 0, L.width, L.height);
+        tip.setBounds(0, 0, L.width, L.height);
         relayoutCurve();
         topBar.redraw();
         statusBar.redraw();
@@ -2955,7 +3179,8 @@ struct Editor::Impl : params::ParameterListener {
             x.curve.markAllDirty();
             curves.redraw();
             statusBar.redraw();
-        } else if (i >= params::globalParam(GlobalParam::AnalyzerShowPre) && i <= params::globalParam(GlobalParam::AnalyzerGrab)) {
+        } else if ((i >= params::globalParam(GlobalParam::AnalyzerShowPre) && i <= params::globalParam(GlobalParam::AnalyzerGrab)) ||
+                   i == params::globalParam(GlobalParam::AnalyzerPeakHold)) {
             spectrum.redraw();
             ground.redraw();
             statusBar.redraw();
@@ -3008,6 +3233,8 @@ Editor::Editor(UndoController& controller, uint32_t logicalWidth, uint32_t logic
     app.addChild(&m.statusBar);
     app.addChild(&m.overlay);
     m.overlay.setOnTop(true);
+    app.addChild(&m.tip);
+    m.tip.setOnTop(true);
     // Add to (not replace) Visage's own resize callback, which keeps its top-level frame in step.
     app.onResize() += [this] { impl_->layout(); };
     impl_->layout();

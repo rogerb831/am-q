@@ -68,7 +68,7 @@ struct Events {
 // Graph geometry of the editor (docs/design/editor-spec.md §1.1; ui/include/amq/ui/editor_layout.hpp
 // and graph_model.hpp): the graph sits between the 44 px bars, its plot runs from the left edge to
 // a 100 px gutter with 24 px top and bottom insets, over 10 Hz to 30 kHz and +/-12 dB.
-double kW = 1180, kH = 672;  // logical editor size; changed by the resize test
+double kW = 1280, kH = 720;  // logical editor size; changed by the resize test
 constexpr double kBar = 44, kInset = 24, kGutter = 100, kRange = 12;
 double xOfHz(double hz) { return (kW - kGutter) * std::log(hz / 10.0) / std::log(3000.0); }
 double yOfDb(double db) {
@@ -150,7 +150,7 @@ int main(int argc, char** argv) {
     wc.hInstance = GetModuleHandleW(nullptr);
     wc.lpszClassName = L"AmQGuiTest";
     RegisterClassW(&wc);
-    HWND top = CreateWindowW(wc.lpszClassName, L"Am-Q GUI test", WS_OVERLAPPEDWINDOW, 100, 100, 1220, 740, nullptr,
+    HWND top = CreateWindowW(wc.lpszClassName, L"Am-Q GUI test", WS_OVERLAPPEDWINDOW, 100, 100, 1340, 800, nullptr,
                              nullptr, wc.hInstance, nullptr);
     ShowWindow(top, SW_SHOW);
     check(gui->create(p, CLAP_WINDOW_API_WIN32, false), "gui.create");
@@ -317,10 +317,10 @@ int main(int argc, char** argv) {
         gui->get_size(p, &gw, &gh);
         std::printf("  reopened at %ux%u\n", gw, gh);
         check(gw == w && gh == h, "the editor reopens at its last size");
-        gui->set_size(p, static_cast<uint32_t>(std::lround(1180 * scale)), static_cast<uint32_t>(std::lround(672 * scale)));
+        gui->set_size(p, static_cast<uint32_t>(std::lround(1280 * scale)), static_cast<uint32_t>(std::lround(720 * scale)));
         pump(50);
-        kW = 1180;
-        kH = 672;
+        kW = 1280;
+        kH = 720;
     }
     gui->destroy(p);
     pump(100);

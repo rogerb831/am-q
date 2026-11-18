@@ -115,3 +115,20 @@ TEST_CASE("Value formats (panels §2.10)") {
     CHECK(pan(-12, false) == "12.0 L");
     CHECK(pan(30, true) == "30.0 S");
 }
+
+#include "amq/params/mappings.hpp"
+
+TEST_CASE("Host-facing text equals the editor's formats (spec C-29)") {
+    using namespace params;
+    const auto& freq = *specAt(bandParam(0, BandField::Freq));
+    const auto& gain = *specAt(bandParam(0, BandField::Gain));
+    const auto& q = *specAt(bandParam(0, BandField::Q));
+    for (double hz : {12.3, 32.4, 180.0, 999.0, 1000.0, 1820.0, 9990.0, 14500.0, 29000.0})
+        CHECK(formatPlain(freq, std::log2(hz)) == ui::fmt::hz(hz));
+    for (double db : {-30.0, -3.5, -0.04, 0.0, 4.5, 12.25})
+        CHECK(formatPlain(gain, db) == ui::fmt::db(db));
+    for (double qq : {0.1, 0.707, 4.0, 12.5})
+        CHECK(formatPlain(q, positionFromQ(qq)) == ui::fmt::q(qq));
+    CHECK(*parsePlain(gain, kM + "3.5 dB") == doctest::Approx(-3.5));  // U+2212 parses
+    CHECK(formatPlain(*specAt(bandParam(0, BandField::Attack)), 50.0) == "50 %");
+}

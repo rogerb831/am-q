@@ -7,7 +7,7 @@
 //     32-bit only (pinned: clap-wrapper v0.17.0 refuses kSample64, see below). Latency 0.
 //  3. Stereo pass-through is bit-exact with an odd block size; a loud side chain on the active
 //     aux bus leaves the main output bit-exact (dynamics off).
-//  4. Parameters: 573 exposed, ids equal the frozen CLAP host ids, one bypass parameter,
+//  4. Parameters: 574 exposed, ids equal the frozen CLAP host ids, one bypass parameter,
 //     readable choices, text to value.
 //  5. Sample-accurate automation: an Output Level point at offset k first changes the output
 //     at sample k (offsets 0, 1, 37, 255, 511 in a 512-sample block).
@@ -59,7 +59,7 @@ void check(bool ok, const char* what) {
 }
 
 constexpr ParamID kBand01Freq = 1279620887u;  // tests/params/host_ids.golden.txt
-constexpr int32 kParamCount = 573;
+constexpr int32 kParamCount = 574;
 
 class Handler : public IComponentHandler {
 public:
@@ -272,7 +272,7 @@ int main(int argc, char** argv) {
 
     // 4. Parameters.
     const int32 count = p.ctrl->getParameterCount();
-    check(count == kParamCount, "573 parameters exposed (24 bands x 23 fields + 21 globals)");
+    check(count == kParamCount, "574 parameters exposed (24 bands x 23 fields + 22 globals)");
     std::vector<ParamID> ids;
     int bypass = 0;
     bool idsOk = true, hasFreq = false;
@@ -313,8 +313,8 @@ int main(int argc, char** argv) {
     {
         const ParamValue nv = p.norm(gainId, u"+6 dB");
         const std::string back = p.text(gainId, nv);
-        if (back != "+6.00 dB") std::printf("  \"+6 dB\" parsed to %.12g, which reads \"%s\"\n", nv, back.c_str());
-        check(back == "+6.00 dB", "text to value: Band 1 Gain \"+6 dB\" reads back \"+6.00 dB\"");
+        if (back != "+6.0 dB") std::printf("  \"+6 dB\" parsed to %.12g, which reads \"%s\"\n", nv, back.c_str());
+        check(back == "+6.0 dB", "text to value: Band 1 Gain \"+6 dB\" reads back \"+6.0 dB\"");
     }
 
     // 5. Sample-accurate automation through IParameterChanges.
@@ -348,7 +348,7 @@ int main(int argc, char** argv) {
     auto gainIs75 = [&](const Plugin& x) {
         const ParamValue n = x.ctrl->getParamNormalized(gainId);
         const std::string t = x.text(gainId, n);
-        const bool ok = std::abs(n - gain75) <= 1e-9 && t == "+7.50 dB";
+        const bool ok = std::abs(n - gain75) <= 1e-9 && t == "+7.5 dB";
         if (!ok) std::printf("  Band 1 Gain is %.12g (\"%s\"), expected %.12g (\"+7.50 dB\")\n", n, t.c_str(), gain75);
         return ok;
     };
@@ -368,7 +368,7 @@ int main(int argc, char** argv) {
         ms->seek(0, IBStream::kIBSeekSet, nullptr);
         q.ctrl->setComponentState(ms);
         pump(100);
-        check(saved && loaded && gainIs75(q), "state round trip into a new instance keeps Band 1 Gain at +7.50 dB");
+        check(saved && loaded && gainIs75(q), "state round trip into a new instance keeps Band 1 Gain at +7.5 dB");
         auto junk = stream();
         const char bytes[] = "not an Am-Q state chunk";
         int32 written = 0;

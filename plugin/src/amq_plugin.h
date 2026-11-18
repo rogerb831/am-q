@@ -183,9 +183,9 @@ private:
     std::unique_ptr<ui::Editor> editor_;
     // Editor size, for size queries off the main thread and for reopening at the same size.
     // Written on the main thread after every editor layout.
-    std::atomic<uint32_t> guiHostW_{1180}, guiHostH_{672};  // = ui::Editor defaults (checked in the .cpp)
+    std::atomic<uint32_t> guiHostW_{1280}, guiHostH_{720};  // = ui::Editor defaults (checked in the .cpp)
     std::atomic<double> guiScale_{1.0};
-    uint32_t guiLogicalW_ = 1180, guiLogicalH_ = 672;  // main thread
+    uint32_t guiLogicalW_ = 1280, guiLogicalH_ = 720;  // main thread
 };
 
 }  // namespace amq::plugin

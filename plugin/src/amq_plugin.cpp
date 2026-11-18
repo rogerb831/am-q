@@ -575,7 +575,7 @@ bool AmqPlugin::guiGetSize(uint32_t* width, uint32_t* height) noexcept {
     return true;
 }
 
-static_assert(ui::Editor::kDefaultWidth == 1180 && ui::Editor::kDefaultHeight == 672,
+static_assert(ui::Editor::kDefaultWidth == 1280 && ui::Editor::kDefaultHeight == 720,
               "keep the size defaults in amq_plugin.h in step with ui::Editor");
 
 bool AmqPlugin::guiGetResizeHints(clap_gui_resize_hints_t* hints) noexcept {

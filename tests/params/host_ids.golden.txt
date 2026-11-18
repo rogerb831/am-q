@@ -573,3 +573,4 @@ analyzer.freeze 325550360
 analyzer.collisions 494151710
 analyzer.grab 144509173
 display.range 1776600238
+analyzer.peakHold 724153941

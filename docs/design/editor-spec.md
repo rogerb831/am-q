@@ -406,7 +406,7 @@ Each conflict lists what the boards show, what `docs/plan` (or the parameter tab
 
 | # | Topic | Boards | Plan | This spec |
 | --- | --- | --- | --- | --- |
-| C-1 | Default editor size | 1280×760 | 1180×672, **PROVISIONAL** pending this region map (area 12; `ui::Editor`) | Plan wins until changed. All regions are anchored, so the layout works at both sizes. Recommendation: adopt 1280×760 as the default, a plan change for the Product designer and GUI engineer |
+| C-1 | Default editor size | 1280×760 | 1180×672, **PROVISIONAL** pending this region map (area 12; `ui::Editor`) | Resolved 2026-11-17: the project owner chose 1280×720. All regions are anchored, so the layout works at any size |
 | C-2 | Interface scale | User Scale 100/150/200/300 % | R16 requires 100–300 % scaling; the editor follows OS DPI and declines `gui.set_scale`; no user zoom setting | **PROPOSED** P-7 adds a user zoom on top of DPI; the designer must confirm the setting exists |
 | C-3 | Linear Phase resolution labels | Low, Med, High, V. High, Max (five, default Med) | `global.resolution`: Low, Medium, High, Very High, Maximum (area 02 R11), default Medium **PROVISIONAL** | No conflict in count or default. The segments use the abbreviated labels; the accessible names use the full choice names |
 | C-4 | Latency figures | "320 smp" for Natural Phase; "[latency]" and "[from area 02 latency function]" for Linear Phase | `latencySamples()`: Natural Phase 320 at every rate; Linear Phase FIR/2 + partition × rate factor | From code at the session rate: Natural Phase 320. Linear Phase at 44.1/48 kHz: 2,112 · 4,160 · 8,256 · 16,448 · 65,600 smp (Low to Maximum). These double at each rate step (≤ 100 kHz × 2, ≤ 200 kHz × 4, above × 8) |
@@ -465,15 +465,16 @@ The editor in `ui/src/editor.cpp` follows this spec. The region map and reflow l
 
 - **Font.** Inter isn't bundled (bundling it is a licence and download decision). The editor uses the spec's first fallback, Segoe UI from the system on Windows, and the embedded Lato elsewhere.
 - **Interface scale (P-7).** The segments are drawn but inactive.
-- **Peak hold.** It shows as always on, because it has no parameter yet (C-27).
+- **Peak hold.** Done 2026-11-17: `analyzer.peakHold` (non-automatable, default On) drives the toggle and the layer (C-27).
 - **`analyzer.grab`** is not placed (C-28).
 - **Presets.** The preset button shows "Untitled", with "(edited)" while there is undo history. Previous, next and the preset menu (P-28) wait for area 21's preset system.
 - **A/B and Full screen.** A/B is drawn but inactive, and Full screen is hidden. Both are pending a decision (C-25, C-26).
-- **Tooltips.** Not built. Accessible names exist on the band nodes.
+- **Tooltips.** Done 2026-11-17: a tooltip frame on top shows the hovered control's text after 600 ms; Attack and Release show their effective time.
 - **Side-chain range in Band mode.** It displays one octave either side of the band frequency. This is provisional, until the engine exposes the derived range.
 - **Collisions.** The hatch uses a provisional −60 dBFS activity floor.
-- **Motion.** Not built: state changes are instant. Reduced motion is therefore met trivially.
-- **Default size.** The default stays at the plan's 1180×672 (C-1).
+- **Motion.** Done 2026-11-17 for the main transitions: menus and popovers fade in over 120 ms with a 4 px slide and out over 80 ms; handles grow 18 → 22 over 100 ms; band fills ease over 100 ms; Windows' "Show animations" off makes them instant. Hover colour changes are still instant.
+- **Default size.** 1280×720, decided by the project owner on 2026-11-17 (C-1). The boards are 1280×760, so the default graph is 40 px shorter than on the boards.
+- **Value formats.** Done 2026-11-17: the host-facing formatters in `core/params` use the spec's formats (C-29), and a test pins them to the editor's.
 
 ## PROPOSED items for the designer
 

@@ -87,7 +87,7 @@ TEST_CASE("Attachment binds by string id and follows external changes") {
     c.dispatchNotifications();
     CHECK(seen == 4.5);
     CHECK(src == ParamSource::Host);
-    CHECK(a.text() == "+4.50 dB");
+    CHECK(a.text() == "+4.5 dB");
     CHECK(a.setText("-6"));
     CHECK(c.t.value(a.index()) == -6.0);
     CHECK(c.count('B') == 1);

@@ -16,7 +16,7 @@ using namespace amq::params;
 TEST_CASE("Table shape: 24 complete band blocks plus globals, no reserved ids") {
     const auto& specs = parameterSpecs();
     CHECK(specs.size() == kParamCount);
-    CHECK(kParamCount == 24 * 23 + 21);
+    CHECK(kParamCount == 24 * 23 + 22);
     for (int b = 0; b < kBandCount; ++b) {
         char id[32];
         std::snprintf(id, sizeof(id), "band%02d.spectralTilt", b + 1);

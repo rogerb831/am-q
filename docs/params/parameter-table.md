@@ -75,6 +75,7 @@ owner confirms them before release. Changing one is a one-line edit in
 | analyzer.speed | Choice | Very Slow … Very Fast **PROVISIONAL** | Medium | not automatable |
 | analyzer.tilt | Continuous | 0–6 dB/oct **PROVISIONAL** range | 4.5 dB/oct | not automatable |
 | analyzer.freeze / collisions / grab | Toggle | | Off / Off / On | not automatable |
+| analyzer.peakHold | Toggle | | On | not automatable; shows or hides the post peak-hold line (added 2026-11-17, editor-spec C-27); appended last so other host ids stay put |
 | display.range | Choice | 3, 6, 12, 30 dB **PROVISIONAL** | 12 dB | not automatable |
 
 The analyzer and display settings are table parameters because area 21 R2 lists them as globals, and area 12 R15 wants them saved with the state. They are not automatable. Whether they belong in the host list at all, or should be editor state saved in the chunk, is an open question for the Plugin and host engineer.

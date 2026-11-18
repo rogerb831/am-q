@@ -75,7 +75,7 @@ inline constexpr int kBandFieldCount = static_cast<int>(BandField::Count);
 enum class GlobalParam : uint8_t {
     Mode, Resolution, GainScale, OutputLevel, OutputPan, PanMode, Invert, Bypass, AutoGain, SoloGain,
     AnalyzerShowPre, AnalyzerShowPost, AnalyzerShowExternal, AnalyzerRange, AnalyzerResolution,
-    AnalyzerSpeed, AnalyzerTilt, AnalyzerFreeze, AnalyzerCollisions, AnalyzerGrab, DisplayRange,
+    AnalyzerSpeed, AnalyzerTilt, AnalyzerFreeze, AnalyzerCollisions, AnalyzerGrab, DisplayRange, AnalyzerPeakHold,
     Count
 };
 inline constexpr int kGlobalCount = static_cast<int>(GlobalParam::Count);

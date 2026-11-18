@@ -129,7 +129,7 @@ TEST_CASE("Band panel: visibility by shape keeps hidden values; Auto greys timin
     auto p = ui::bandPanel(h.t, 0);
     CHECK(find(p, "Gain").visible);
     CHECK(find(p, "Slope").visible);  // Bells have slopes (minimum order 2, area 01 R10)
-    CHECK(find(p, "Gain").text == "+6.00 dB");
+    CHECK(find(p, "Gain").text == "+6.0 dB");
     CHECK_FALSE(find(p, "Range").enabled);  // dynamics off
     ops.setShape({0}, dsp::Shape::LowCut);
     p = ui::bandPanel(h.t, 0);

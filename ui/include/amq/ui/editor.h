@@ -29,9 +29,9 @@ namespace amq::ui {
 
 class Editor {
 public:
-    // Logical pixels. Default and limits are PROVISIONAL (spec C-1: the boards are 1280x760).
-    static constexpr uint32_t kDefaultWidth = 1180;
-    static constexpr uint32_t kDefaultHeight = 672;
+    // Logical pixels. Default 1280x720 (decided 2026-11-17, spec C-1); limits PROVISIONAL.
+    static constexpr uint32_t kDefaultWidth = 1280;
+    static constexpr uint32_t kDefaultHeight = 720;
     static constexpr uint32_t kMinWidth = 640;
     static constexpr uint32_t kMinHeight = 360;
     static constexpr uint32_t kMaxWidth = 3840;

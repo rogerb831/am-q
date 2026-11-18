@@ -1,8 +1,19 @@
 #include "editor_theme.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdlib>
 #include <filesystem>
+
+#if defined(_WIN32)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
 
 namespace amq::ui::theme {
 
@@ -35,6 +46,19 @@ Fonts::Fonts()
       micro10(loadFont(10.0f, "seguisb.ttf")),
       preset15(loadFont(15.0f, "seguisb.ttf")),
       wordmark30(loadFont(30.0f, "segoeuib.ttf")) {}
+
+double nowMs() {
+    using namespace std::chrono;
+    return duration<double, std::milli>(steady_clock::now().time_since_epoch()).count();
+}
+
+bool reducedMotion() {
+#if defined(_WIN32)
+    BOOL animations = TRUE;
+    if (SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &animations, 0)) return animations == FALSE;
+#endif
+    return false;
+}
 
 const Fonts& fonts() {
     static const Fonts f;

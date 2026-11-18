@@ -4,7 +4,7 @@
 //  2. Audio ports and latency.
 //  3. Stereo pass-through is bit-exact (skeleton behaviour).
 //  4. State save/load round trip; foreign data is rejected.
-//  5. Parameters: 573 exposed, frozen ids, readable choices, automation, state round trip,
+//  5. Parameters: 574 exposed, frozen ids, readable choices, automation, state round trip,
 //     shape ids pinned by a frozen state chunk (area 15 R7).
 //  6. Off-main-thread calls a wrapped VST3 host may make (latency, audio ports, params, state,
 //     GUI size) do not abort and return correct values (area 01, docs/plan/decisions.md D1).
@@ -190,7 +190,7 @@ int main(int argc, char** argv) {
 
     // 5. Parameters: table shape, frozen ids, readable choices, host automation, state round trip.
     const auto* params = ext<clap_plugin_params>(p, CLAP_EXT_PARAMS);
-    check(params && params->count(p) == 573, "573 parameters exposed (24 bands x 23 fields + 21 globals)");
+    check(params && params->count(p) == 574, "574 parameters exposed (24 bands x 23 fields + 22 globals)");
     bool idsUnique = true, rangesOk = true;
     std::vector<clap_id> ids;
     int bypassCount = 0;
@@ -498,7 +498,7 @@ int main(int argc, char** argv) {
         sizeOff = gui->get_size(p, &w, &h);
     });
     t.join();
-    check(latOff == 0 && countOff == 2 && paramCountOff == 573 && paramOff && saveOff && loadOff && sizeOff && w > 0 &&
+    check(latOff == 0 && countOff == 2 && paramCountOff == 574 && paramOff && saveOff && loadOff && sizeOff && w > 0 &&
               h > 0,
           "off-main-thread latency, audio-ports, params, state and gui-size calls");
     p->on_main_thread(p);  // deferred params.rescan

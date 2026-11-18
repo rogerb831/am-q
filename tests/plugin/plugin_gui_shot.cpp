@@ -285,6 +285,14 @@ int main(int argc, char** argv) {
     click(W - 24 - 28 - 8 - 28 - 8 - 60, 22);  // EQ Match
     shot("11-eq-match");
     click(W - 24 - 50, 22);  // EQ Match (in EQ Match mode the button sits at the right edge)
+    // Tooltip on the Settings button after the 600 ms delay.
+    post(WM_MOUSEMOVE, 0, 600, 300);
+    pump(60);
+    post(WM_MOUSEMOVE, 0, W - 24 - 28 - 8 - 14, 22);
+    pump(900);
+    shot("11b-tooltip");
+    post(WM_MOUSEMOVE, 0, 400, 300);
+    pump(100);
     // Smaller sizes.
     for (auto [ww, hh, name] : {std::tuple{1180.0, 560.0, "12-compact"}, std::tuple{640.0, 360.0, "13-minimum"}}) {
         W = ww, H = hh;

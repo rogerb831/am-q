@@ -141,6 +141,9 @@ void addGlobals(std::vector<ParamSpec>& v) {
     v.push_back(toggle("analyzer.collisions", "Analyzer Collisions", "Analyzer", false, false));
     v.push_back(toggle("analyzer.grab", "Spectrum Grab", "Analyzer", true, false));
     v.push_back(choice("display.range", "Display Range", "Analyzer", {"3 dB", "6 dB", "12 dB", "30 dB"}, 2, true, false));
+    // Peak hold display toggle (editor-spec C-27, added 2026-11-17): the display follower keeps the
+    // hold either way; this only shows or hides it. Appended so existing host ids stay put.
+    v.push_back(toggle("analyzer.peakHold", "Analyzer Peak Hold", "Analyzer", true, false));
 }
 
 struct Registry {
@@ -243,6 +246,18 @@ double fromNormalised(const ParamSpec& s, double n) noexcept {
 
 std::string formatPlain(const ParamSpec& s, double plain) { return formatPlain(s, plain, DisplayContext{}); }
 
+namespace {
+constexpr const char* kUnicodeMinus = "\xE2\x88\x92";  // U+2212, three UTF-8 bytes
+// fmt-dB (editor-spec-panels §2.10): a sign always ("+" for positive and zero, U+2212 for
+// negative), one decimal.
+std::string signedDb(double v) {
+    const double r = std::round(v * 10.0) / 10.0;
+    char b[32];
+    std::snprintf(b, sizeof(b), "%.1f dB", std::abs(r));
+    return (r < 0.0 ? std::string(kUnicodeMinus) : std::string("+")) + b;
+}
+}  // namespace
+
 std::string formatPlain(const ParamSpec& s, double plain, const DisplayContext& ctx) {
     plain = clampPlain(s, plain);
     char buf[64];
@@ -254,16 +269,20 @@ std::string formatPlain(const ParamSpec& s, double plain, const DisplayContext& 
     switch (s.unit) {
         case Unit::Log2Hz: {
             const double hz = std::exp2(plain);
-            if (hz >= 10000.0) std::snprintf(buf, sizeof(buf), "%.1f kHz", hz / 1000.0);
-            else if (hz >= 1000.0) std::snprintf(buf, sizeof(buf), "%.2f kHz", hz / 1000.0);
-            else if (hz >= 100.0) std::snprintf(buf, sizeof(buf), "%.0f Hz", hz);
-            else std::snprintf(buf, sizeof(buf), "%.1f Hz", hz);
+            // docs/design/editor-spec-panels.md §2.10 fmt-Hz (spec C-29).
+            if (hz >= 9995.0) std::snprintf(buf, sizeof(buf), "%.1f kHz", hz / 1000.0);
+            else if (hz >= 999.5) std::snprintf(buf, sizeof(buf), "%.2f kHz", hz / 1000.0);
+            else std::snprintf(buf, sizeof(buf), "%.0f Hz", hz);
             break;
         }
-        case Unit::Db: std::snprintf(buf, sizeof(buf), "%+.2f dB", plain); break;
-        case Unit::QPosition: std::snprintf(buf, sizeof(buf), "%.3g", qFromPosition(plain)); break;
-        case Unit::Percent: std::snprintf(buf, sizeof(buf), "%.1f %%", plain); break;
-        case Unit::Knob: std::snprintf(buf, sizeof(buf), "%.1f", plain); break;
+        case Unit::Db: return signedDb(plain);
+        case Unit::QPosition: {
+            const double q = qFromPosition(plain);
+            std::snprintf(buf, sizeof(buf), q < 9.995 ? "%.2f" : "%.1f", q);
+            break;
+        }
+        case Unit::Percent:
+        case Unit::Knob: std::snprintf(buf, sizeof(buf), "%.0f %%", plain); break;
         case Unit::Pan:
             if (std::abs(plain) < 0.05) return "C";
             // M/S: left lowers Side (towards Mid), right lowers Mid (towards Side), area 04 R3.
@@ -272,8 +291,7 @@ std::string formatPlain(const ParamSpec& s, double plain, const DisplayContext& 
             break;
         case Unit::OutputLevelDb:
             if (plain <= kOutputSilenceDb) return "-inf dB";
-            std::snprintf(buf, sizeof(buf), "%+.2f dB", plain);
-            break;
+            return signedDb(plain);
         case Unit::DbPerOctave: std::snprintf(buf, sizeof(buf), "%.1f dB/oct", plain); break;
         case Unit::None: std::snprintf(buf, sizeof(buf), "%g", plain); break;
     }
@@ -308,8 +326,10 @@ std::optional<double> leadingNumber(std::string_view t, std::string_view* rest =
 
 }  // namespace
 
-std::optional<double> parsePlain(const ParamSpec& s, std::string_view text) {
-    text = trim(text);
+std::optional<double> parsePlain(const ParamSpec& s, std::string_view input) {
+    std::string norm(input);
+    for (size_t p; (p = norm.find(kUnicodeMinus)) != std::string::npos;) norm.replace(p, 3, "-");
+    std::string_view text = trim(norm);
     const std::string t = lower(text);
     if (s.type == ParamType::Toggle) {
         if (t == "on" || t == "1" || t == "true" || t == "yes") return 1.0;
