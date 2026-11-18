@@ -249,6 +249,159 @@ int main(int argc, char** argv) {
         pump(100);
     };
 
+    // The user guide's screenshots (docs/manual): run with a third argument --manual. At the default
+    // size, 1280x720. Band panel positions follow the layout: the panel's bottom is 32 above the
+    // graph's bottom, its knob row and selects at fixed offsets from there (editor-spec panels §2.3).
+    if (argc >= 4 && !std::strcmp(argv[3], "--manual")) {
+        W = 1280, H = 720;
+        w = static_cast<uint32_t>(std::lround(W * scale)), h = static_cast<uint32_t>(std::lround(H * scale));
+        SetWindowPos(top, nullptr, 0, 0, static_cast<int>(w) + 40, static_cast<int>(h) + 80, SWP_NOMOVE | SWP_NOZORDER);
+        gui->set_size(p, w, h);
+        pump(400);
+        auto key = [&](UINT vk) {
+            const LPARAM sc = static_cast<LPARAM>(MapVirtualKeyW(vk, MAPVK_VK_TO_VSC)) << 16;
+            PostMessageW(gChild, WM_KEYDOWN, vk, sc | 1);
+            PostMessageW(gChild, WM_KEYUP, vk, sc | 1 | (LPARAM(3) << 30));
+            pump(100);
+        };
+        auto away = [&] { post(WM_MOUSEMOVE, 0, W - 140, 60); pump(60); };
+        auto setParam = [&](clap_id pid, double v) {
+            ParamEvents e;
+            e.add(pid, v);
+            process(&e, 1);
+            process(nullptr, 20);
+            p->on_main_thread(p);
+            pump(200);
+        };
+        const double panelBottom = H - 44 - 32;           // the band panel's bottom edge
+        const double shapeY = panelBottom - 166 + 16 + 36 + 16, slopeY = shapeY + 40;
+        const double dynX0 = (W - 1112) / 2;              // a dynamic band's panel (1112 wide)
+        // The band panel's controls, relative to the dynamic panel at 1280 wide.
+        const double scFilterX = dynX0 + 844, soloX = dynX0 + 1049, attackX = dynX0 + 655, knobY = panelBottom - 86;
+        click(xOf(1820), yOf(4.5));
+        away();
+        shot("overview");
+        click(xOf(500), yOf(9));                          // empty plot: clears the selection
+        post(WM_MOUSEMOVE, 0, xOf(600), yOf(-8));
+        pump(150);
+        shot("add-band");
+        click(xOf(9000), yOf(3.0));
+        away();
+        shot("band-static");
+        click(xOf(1820), yOf(4.5));
+        away();
+        shot("band-dynamic");
+        click(dynX0 + 94, shapeY);
+        shot("shape-menu");
+        click(W / 2 - 200, 22);                           // outside: closes the menu, keeps the selection
+        click(scFilterX, shapeY + 20);
+        shot("sidechain-filter");
+        click(W / 2 - 200, 22);
+        post(WM_MOUSEMOVE, 0, 600, 300);
+        pump(60);
+        post(WM_MOUSEMOVE, 0, attackX, knobY);
+        pump(900);
+        shot("tooltip-attack");
+        away();
+        click(soloX, slopeY + 2);
+        away();
+        shot("solo");
+        click(soloX, slopeY + 2);
+        away();
+        // Double-click the node: the inline value editor.
+        post(WM_MOUSEMOVE, 0, xOf(1820), yOf(4.5));
+        pump(30);
+        for (int k = 0; k < 2; ++k) {
+            post(WM_LBUTTONDOWN, MK_LBUTTON, xOf(1820), yOf(4.5));
+            post(WM_LBUTTONUP, 0, xOf(1820), yOf(4.5));
+            pump(40);
+        }
+        pump(200);
+        shot("inline-editor");
+        escape();
+        click(xOf(1820), yOf(4.5), true);
+        pump(100);
+        shot("band-menu");
+        escape();
+        click(xOf(32), yOf(0));                           // the Low Cut band: a gainless panel, 528 wide
+        // A gainless panel has no 88 Gain knob, so it is 142 tall: its Slope select sits lower.
+        click((W - 528) / 2 + 20 + 74, panelBottom - 142 + 16 + 36 + 40 + 16);
+        shot("slope-picker");
+        escape();
+        // Lasso: drag over empty plot around bands 2 and 3.
+        click(xOf(500), yOf(9));
+        post(WM_MOUSEMOVE, 0, xOf(120), yOf(9));
+        pump(30);
+        post(WM_LBUTTONDOWN, MK_LBUTTON, xOf(120), yOf(9));
+        for (int k = 1; k <= 10; ++k) {
+            post(WM_MOUSEMOVE, MK_LBUTTON, xOf(120) + (xOf(2600) - xOf(120)) * k / 10.0, yOf(9) + (yOf(-8) - yOf(9)) * k / 10.0);
+            pump(20);
+        }
+        shot("lasso");
+        post(WM_LBUTTONUP, 0, xOf(2600), yOf(-8));
+        pump(100);
+        away();
+        shot("multi-select");
+        click(xOf(500), yOf(9));
+        // A spectral band: band 3 made spectral.
+        click(xOf(1820), yOf(4.5));
+        setParam(id(3, "Spectral"), 1);
+        away();
+        shot("band-spectral");
+        setParam(id(3, "Spectral"), 0);
+        // Bars and their overlays.
+        click(60, H - 22);
+        shot("band-list");
+        click(60, H - 22);
+        click(200, H - 22);
+        shot("processing");
+        click(W / 2 - 200, 22);
+        click(W - 24 - 28 - 16 - 28 - 16 - 64 - 16 - 20, H - 22);
+        shot("output");
+        click(W / 2 - 200, 22);
+        click(W - 24 - 28 - 8 - 14, 22);
+        shot("settings");
+        click(W / 2 - 200, 22);
+        click(W - 24 - 14, 22);
+        shot("hint-mode");
+        click(W - 24 - 14, 22);
+        click(W / 2, 22);
+        shot("preset-menu");
+        escape();
+        click(W - 24 - 28 - 8 - 28 - 8 - 60, 22);
+        away();
+        shot("eq-match");
+        click(W - 24 - 50, 22);
+        // The keyboard: Enter moves into the band's panel; two Tabs reach Gain.
+        click(xOf(1820), yOf(4.5));
+        key(VK_RETURN);
+        key(VK_TAB);
+        key(VK_TAB);
+        away();
+        shot("keyboard-panel");
+        key(VK_ESCAPE);
+        // Smaller windows.
+        for (auto [ww, hh, name] : {std::tuple{1180.0, 560.0, "compact"}, std::tuple{640.0, 360.0, "strip"}}) {
+            W = ww, H = hh;
+            w = static_cast<uint32_t>(std::lround(W * scale)), h = static_cast<uint32_t>(std::lround(H * scale));
+            SetWindowPos(top, nullptr, 0, 0, static_cast<int>(w) + 40, static_cast<int>(h) + 80, SWP_NOMOVE | SWP_NOZORDER);
+            gui->set_size(p, w, h);
+            pump(300);
+            click(xOf(1820), yOf(4.5));
+            away();
+            shot(name);
+        }
+        click(W / 2 + 210 - 22, 44 + (H - 88) - 16 - 22);
+        away();
+        shot("strip-expanded");
+        gui->destroy(p);
+        p->stop_processing(p);
+        p->deactivate(p);
+        p->destroy(p);
+        entry->deinit();
+        return 0;
+    }
+
     post(WM_MOUSEMOVE, 0, xOf(400), yOf(8));
     shot("01-no-selection");
     click(xOf(1820), yOf(4.5));
