@@ -70,6 +70,20 @@ TEST_CASE("Reflow: wrapping, compact and strip modes, bar collapse (spec §1.2)"
     L = EditorLayout::compute(640, 360, c);  // graph 272 high: strip
     CHECK(L.panel.mode == PanelMode::Strip);
     CHECK(L.panel.rect.h == 44);
+    // Expanded, the strip is the compact panel, tightened to fit inside the graph.
+    CHECK(L.panel.wrapped);
+    CHECK(L.panel.expanded.h > 44);
+    CHECK(L.panel.expanded.y >= 4);
+    CHECK(L.panel.expanded.bottom() <= L.graph.h - 4 + 0.01f);
+    CHECK(L.panel.expanded.w <= 640);
+    {
+        PanelContent st;  // a static band needs no tightening
+        st.band = true;
+        const auto S = EditorLayout::compute(640, 360, st);
+        CHECK(S.panel.padY == 12);
+        CHECK(S.panel.rowGap == 16);
+        CHECK(S.panel.expanded.bottom() == doctest::Approx(S.graph.h - 16));
+    }
     CHECK(L.hidePrevNext);
     CHECK(L.hideAutoGain);
     CHECK(L.hideAnalyzerCaption);

@@ -6,6 +6,8 @@ namespace amq::ui {
 
 namespace {
 
+void panelBlock(PanelGeometry& p, const PanelContent& c, float gw, float gh, float offset);
+
 void panelGeometry(EditorLayout& L, const PanelContent& c) {
     auto& p = L.panel;
     const float gw = L.graph.w, gh = L.graph.h;
@@ -21,12 +23,29 @@ void panelGeometry(EditorLayout& L, const PanelContent& c) {
     p.control = compact ? 28.0f : 32.0f;
     p.padX = compact ? 16.0f : 20.0f;
     p.padY = compact ? 12.0f : 16.0f;
+    p.rowGap = 16.0f;
     const float offset = compact ? 16.0f : 32.0f;
+    panelBlock(p, c, gw, gh, offset);
     if (p.mode == PanelMode::Strip) {
+        // The expanded strip: the compact panel over the plot, above the bottom offset if it fits;
+        // if not, tightened until it fits 4 from the graph's top and bottom.
+        const float room = p.rect.h <= gh - offset - 4.0f ? gh - offset - 4.0f : gh - 8.0f;
+        for (int step = 0; step < 4 && p.rect.h > room; ++step) {
+            if (step == 0) p.padY = 8.0f;
+            if (step == 1) p.rowGap = 8.0f;
+            if (step == 2) p.knobDyn = 32.0f;
+            if (step == 3) p.rowGap = 6.0f;
+            panelBlock(p, c, gw, gh, offset);
+        }
+        p.expanded = p.rect;
+        p.expanded.y = std::max(4.0f, gh - offset - p.rect.h);
         const float w = std::min(420.0f, gw - 32.0f);
         p.rect = {(gw - w) * 0.5f, gh - offset - 44.0f, w, 44.0f};
-        return;
     }
+}
+
+// The panel's rows, size and rect for the current knob sizes and spacing.
+void panelBlock(PanelGeometry& p, const PanelContent& c, float gw, float gh, float offset) {
     using E = EditorLayout;
     // Row 1: A | knobs | D. Row 2 (or inline): dynamics group | SIDE CHAIN.
     float knobs = p.knobSm;  // Freq
@@ -53,7 +72,7 @@ void panelGeometry(EditorLayout& L, const PanelContent& c) {
     float w = 0.0f, h = 0.0f;
     if (p.wrapped) {
         w = std::max(p.mainRowW, p.dynRowW);
-        h = p.row1H + 16.0f + 1.0f + 16.0f + p.row2H;
+        h = p.row1H + p.rowGap + 1.0f + p.rowGap + p.row2H;
     } else {
         w = oneRow;
         h = std::max(p.row1H, p.row2H);

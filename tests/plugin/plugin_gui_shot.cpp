@@ -315,6 +315,10 @@ int main(int argc, char** argv) {
         click(xOf(1820), yOf(4.5));
         shot(name);
     }
+    // The strip's expand chevron at 640x360 (strip 420 wide, centred, 16 above the graph's bottom).
+    click(W / 2 + 210 - 22, 44 + (H - 88) - 16 - 22);
+    shot("13b-strip-expanded");
+    escape();
     // The preset menu (editor-spec-graph §4.10).
     click(W / 2, 22);
     shot("15-preset-menu");

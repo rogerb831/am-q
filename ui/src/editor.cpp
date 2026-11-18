@@ -1557,6 +1557,11 @@ public:
                 return true;
             }
         }
+        if (e.keyCode() == visage::KeyCode::Escape && x_.stripExpanded && !listFocus_) {
+            x_.stripExpanded = false;  // Escape collapses the expanded strip (editor-spec §1.2)
+            x_.redrawAll();
+            return true;
+        }
         if (listFocus_ && x_.bandListOpen) {  // band list keys (spec §6.3)
             const auto used = sortedBands();
             int i = static_cast<int>(std::find(used.begin(), used.end(), x_.interaction.focused()) - used.begin());
@@ -1759,12 +1764,7 @@ private:
         }
         if (f >= 0 && x_.interaction.node(f).used) {
             const auto n = x_.interaction.node(f);
-            const auto info = params::shapeInfo(static_cast<dsp::Shape>(static_cast<int>(x_.bval(f, BandField::Shape))));
-            std::string t = fmt::hz(n.hz);
-            const std::string dot = " \xC2\xB7 ";
-            if (info.hasGain) t += dot + fmt::db(x_.bval(f, BandField::Gain));
-            if (info.hasQ) t += dot + "Q " + fmt::q(params::qFromPosition(x_.bval(f, BandField::Q)));
-            chipAt(c, n.x + 18.0f, n.y - 44.0f, n.x, t, bandColour(f));
+            chipAt(c, n.x + 18.0f, n.y - 44.0f, n.x, bandReadout(f), bandColour(f));
             return;
         }
         // Hover readout and add cursor over empty plot (§4.12).
@@ -1806,6 +1806,15 @@ private:
         add({x + size * 0.5f - 40.0f, y + size + 28.0f, 80.0f, 20.0f}, kKnobValue, 0, id);
         return slot;
     }
+    // "freq · gain · Q" for a band, as its shape has them (the selection label and the strip).
+    [[nodiscard]] std::string bandReadout(int f) const {
+        const auto info = params::shapeInfo(static_cast<dsp::Shape>(static_cast<int>(x_.bval(f, BandField::Shape))));
+        std::string t = fmt::hz(x_.interaction.node(f).hz);
+        const std::string dot = " \xC2\xB7 ";
+        if (info.hasGain) t += dot + fmt::db(x_.bval(f, BandField::Gain));
+        if (info.hasQ) t += dot + "Q " + fmt::q(params::qFromPosition(x_.bval(f, BandField::Q)));
+        return t;
+    }
     void drawPanel(visage::Canvas& c) {
         const auto& P = x_.L.panel;
         const int b = x_.interaction.focused();
@@ -1826,14 +1835,16 @@ private:
             xx += textWidth(F.semi13, title) + 12.0f;
             const auto info = params::shapeInfo(static_cast<dsp::Shape>(static_cast<int>(x_.bval(b, BandField::Shape))));
             text(c, F.label13, std::string(info.name), xx, r.y, 100.0f, r.h, tok::inkMuted);
+            xx += textWidth(F.label13, std::string(info.name)) + 12.0f;
             const Rect er{r.right() - 36.0f, r.y + 8.0f, 28.0f, 28.0f};
+            const std::string ro = bandReadout(b);  // the readout (editor-spec §1.2 strip mode)
+            const float rw = textWidth(F.label13, ro);
+            if (xx + rw < er.x - 8.0f) text(c, F.label13, ro, er.x - 8.0f - rw, r.y, rw + 2.0f, r.h, tok::ink);
             iconButton(c, er, icons::chevUp, {hov(kStripExpand)});
             add(er, kStripExpand);
             return;
         }
-        if (P.mode == PanelMode::Strip) {  // expanded strip: the compact panel over the plot
-            r.y = std::max(4.0f, r.bottom() - 260.0f);
-        }
+        if (P.mode == PanelMode::Strip) r = P.expanded;  // expanded strip: the compact panel over the plot
         theme::panel(c, r, 16.0f);
         const float cy0 = r.y + P.padY;
         const float rowBottom = cy0 + P.row1H;
@@ -1879,10 +1890,10 @@ private:
         // Dynamics group and SIDE CHAIN, inline or on the second row.
         float dynX = x, dynTop = cy0, dynBottom = rowBottom;
         if (P.wrapped) {
-            const float sepY = cy0 + P.row1H + 16.0f;
+            const float sepY = cy0 + P.row1H + P.rowGap;
             c.setColor(tok::lineHairline);
             c.fill(r.x + P.padX, sepY, r.w - 2.0f * P.padX, 1.0f);
-            dynX = r.x + P.padX, dynTop = sepY + 17.0f, dynBottom = dynTop + P.row2H;
+            dynX = r.x + P.padX, dynTop = sepY + 1.0f + P.rowGap, dynBottom = dynTop + P.row2H;
         }
         float colDX = x;
         if (content.dynamic) {
