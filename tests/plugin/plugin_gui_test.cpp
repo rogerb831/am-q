@@ -476,10 +476,11 @@ int main(int argc, char** argv) {
     check(a2 < a0 + 1024 * 1024, "200 attached open/close cycles after warm-up: memory growth under 1 MB (5 KB per cycle)");
     // GPU objects: each attached cycle creates and releases a swap chain, layers and textures, so a
     // leaked per-editor object keeps growing GPU memory by its size (a 1280x720 back buffer is
-    // 3.5 MB) on every cycle. Bounded here at 4 MB over 200 cycles, after the same warm-up.
+    // 3.5 MB) on every cycle, about 700 MB over 200 cycles. The driver allocates in steps (a 7.5 MB
+    // step was seen in one run of four, either way), so the bound is 16 MB.
     std::printf("  GPU memory (DXGI, this process): %.2f -> %.2f MB over 200 attached cycles\n", g0 / kMB, g2 / kMB);
     if (g0 == 0 && g2 == 0) std::printf("  (DXGI 1.4 video memory info unavailable: GPU check skipped)\n");
-    else check(g2 < g0 + 4 * 1024 * 1024, "200 attached open/close cycles after warm-up: GPU memory growth under 4 MB");
+    else check(g2 < g0 + 16 * 1024 * 1024, "200 attached open/close cycles after warm-up: GPU memory growth under 16 MB");
     holderGui->destroy(holder);
     holder->destroy(holder);
     DestroyWindow(holderTop);

@@ -32,10 +32,16 @@ FetchContent_Declare(amq_clap_wrapper
     GIT_SHALLOW    TRUE
     EXCLUDE_FROM_ALL)
 
+# Visage carries one local patch (cmake/patches/visage-user-scale.patch): a user scale on
+# visage::Window, multiplied into the OS DPI scale, for Am-Q's interface zoom (docs/design/
+# editor-spec.md P-7). FETCHCONTENT_SOURCE_DIR_AMQ_VISAGE overrides skip it (CMake runs no patch
+# step on them), so builds against a local clone get no zoom.
 FetchContent_Declare(amq_visage
     GIT_REPOSITORY https://github.com/VitalAudio/visage.git
     GIT_TAG        v1.0.0
     GIT_SHALLOW    TRUE
+    PATCH_COMMAND  ${CMAKE_COMMAND} -DPATCH=${CMAKE_CURRENT_LIST_DIR}/patches/visage-user-scale.patch
+                   -P ${CMAKE_CURRENT_LIST_DIR}/patches/apply_patch.cmake
     EXCLUDE_FROM_ALL)
 
 FetchContent_MakeAvailable(amq_clap amq_clap_helpers amq_vst3sdk)

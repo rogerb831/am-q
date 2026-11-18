@@ -303,6 +303,17 @@ int main(int argc, char** argv) {
         click(xOf(1820), yOf(4.5));
         shot(name);
     }
+    // Interface zoom 150 % at 1280x760: open Settings, pick 150 % in the INTERFACE panel. This host
+    // refuses resize requests, so the layout space shrinks to 853x507 instead.
+    W = 1280, H = 760;
+    w = static_cast<uint32_t>(std::lround(W * scale)), h = static_cast<uint32_t>(std::lround(H * scale));
+    SetWindowPos(top, nullptr, 0, 0, static_cast<int>(w) + 40, static_cast<int>(h) + 80, SWP_NOMOVE | SWP_NOZORDER);
+    gui->set_size(p, w, h);
+    pump(300);
+    click(W - 24 - 28 - 8 - 14, 22);
+    click(W - 24 - 300 + 16 + (300 - 32) * 0.375, H - 44 - 8 - 224 + 16 + 24 + 24 + 16);
+    pump(300);
+    shot("14-zoom-150");
     gui->destroy(p);
     p->stop_processing(p);
     p->deactivate(p);

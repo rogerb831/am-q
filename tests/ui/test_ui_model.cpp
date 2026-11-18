@@ -240,3 +240,28 @@ TEST_CASE("Snapshot poller: floor first, stamps checked, redraw only on visible 
     CHECK(p.poll(c) == ui::SnapshotPoller::kLevels);
     CHECK(p.polls() == 5);
 }
+
+TEST_CASE("Response curve: a settled band uses its exact response until it changes (area 12 R12)") {
+    params::ParameterTable t;
+    t.set(params::bandParam(0, BandField::Used), 1, ParamSource::Preset);
+    t.set(params::bandParam(0, BandField::Gain), 6.0, ParamSource::Preset);
+    ui::ResponseCurve curve;
+    curve.setFrequencies({100.0, 1000.0, 10000.0});
+    curve.update(t);
+    const double analog = curve.combinedDb()[1];
+    CHECK(analog == doctest::Approx(6.0).epsilon(1e-6));
+    CHECK_FALSE(curve.settled(0));
+    curve.setSettled(0, {0.5, 5.9, 0.5});  // the "exact" response
+    CHECK(curve.settled(0));
+    CHECK(curve.update(t));                 // recombined
+    CHECK(curve.combinedDb()[1] == 5.9);
+    CHECK(curve.bandDb(0)[0] == 0.5);
+    curve.setSettled(0, {1.0});            // wrong size: ignored
+    CHECK(curve.combinedDb()[1] == 5.9);
+    curve.markDirty(0);                    // the band moved: back to the analog curve
+    CHECK_FALSE(curve.settled(0));
+    curve.update(t);
+    CHECK(curve.combinedDb()[1] == doctest::Approx(analog));
+    curve.setSettled(1, {1.0, 1.0, 1.0});  // an unused band cannot be settled
+    CHECK_FALSE(curve.settled(1));
+}

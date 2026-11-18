@@ -13,7 +13,8 @@ add_library(amq_ui_model STATIC
     src/eq_match_apply.cpp
     src/display_format.cpp
     src/editor_layout.cpp
-    src/graph_accessible.cpp)
+    src/graph_accessible.cpp
+    src/editor_accessible.cpp)
 add_library(amq::ui_model ALIAS amq_ui_model)
 target_include_directories(amq_ui_model PUBLIC include)
 target_link_libraries(amq_ui_model PUBLIC amq::params amq::dsp amq::analysis)
@@ -29,6 +30,6 @@ if(AMQ_BUILD_PLUGIN)
     endif()
     add_library(amq::ui ALIAS amq_ui)
     target_include_directories(amq_ui PUBLIC include)
-    target_link_libraries(amq_ui PUBLIC amq::ui_model clap PRIVATE visage VisageEmbeddedFonts)
+    target_link_libraries(amq_ui PUBLIC amq::ui_model clap PRIVATE amq::engine visage VisageEmbeddedFonts)
     amq_set_warnings(amq_ui)
 endif()

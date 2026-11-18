@@ -464,7 +464,7 @@ The editor in `ui/src/editor.cpp` follows this spec. The region map and reflow l
 **Not built yet, or built differently:**
 
 - **Font.** Inter isn't bundled (bundling it is a licence and download decision). The editor uses the spec's first fallback, Segoe UI from the system on Windows, and the embedded Lato elsewhere.
-- **Interface scale (P-7).** Not built; the segments are drawn but inactive. Tried on 2026-11-18 by setting the window's DPI scale to the OS scale times the zoom. It does not hold: Visage's Win32 window resets its DPI to the monitor's on every `WM_SIZE` (`handleResizeEnd`), so the editor and Visage fought on every resize, which ran away in the screenshot tool (seen under Remote Desktop). A working zoom needs a user scale inside Visage's windowing layer, multiplied into the DPI it sets itself: a patch to a vendored dependency, pending a decision.
+- **Interface scale (P-7).** Done 2026-11-18 through a local Visage patch (`cmake/patches/visage-user-scale.patch`, applied by FetchContent): `visage::Window` carries a user scale that it multiplies into every OS DPI scale it sets, so the zoom survives Visage's own DPI updates. A first attempt that overrode the window's DPI from outside fought Visage's reset on every `WM_SIZE` and ran away; the patch removes that fight. The zoom is saved with the state; the minimum window size grows with it.
 - **Peak hold.** Done 2026-11-17: `analyzer.peakHold` (non-automatable, default On) drives the toggle and the layer (C-27).
 - **`analyzer.grab`** is not placed (C-28).
 - **Presets.** The preset button shows "Untitled", with "(edited)" while there is undo history. Previous, next and the preset menu (P-28) wait for area 21's preset system.

@@ -27,10 +27,15 @@ const char* const kFeatures[] = {CLAP_PLUGIN_FEATURE_AUDIO_EFFECT, CLAP_PLUGIN_F
 //   u32 magic "AMQS", u32 version, u32 pair count, then per pair u32 host id + f64 plain value.
 // Little-endian. Version 1 was the skeleton (no pairs); version 2 adds the pairs. On load,
 // unknown ids are ignored and missing ids take their defaults, so old sessions keep loading.
+// An optional editor-state trailer follows the pairs: u32 magic "AMQE", u32 version 1, f64 zoom
+// (editor-spec P-7). Loaders that stop after the pairs ignore it; a chunk without it keeps the
+// current zoom.
 constexpr uint32_t kStateMagic = 0x53514D41;  // "AMQS"
 constexpr uint32_t kStateVersion = 2;
 constexpr size_t kHeaderBytes = 12;
 constexpr size_t kPairBytes = 12;
+constexpr uint32_t kEditorMagic = 0x45514D41;  // "AMQE"
+constexpr size_t kEditorBytes = 16;
 
 void putU32(uint8_t* b, uint32_t v) {
     for (int i = 0; i < 4; ++i) b[i] = static_cast<uint8_t>(v >> (8 * i));
@@ -478,7 +483,11 @@ bool AmqPlugin::stateSave(const clap_ostream* stream) noexcept {
         putF64(pair + 4, currentValue(i));
         if (!writeAll(stream, pair, kPairBytes)) return false;
     }
-    return true;
+    uint8_t trailer[kEditorBytes];
+    putU32(trailer, kEditorMagic);
+    putU32(trailer + 4, 1);
+    putF64(trailer + 8, guiZoom_.load());
+    return writeAll(stream, trailer, kEditorBytes);
 }
 
 // Any thread. Values go through the setter with source Preset; the host rescan and editor
@@ -499,6 +508,12 @@ bool AmqPlugin::stateLoad(const clap_istream* stream) noexcept {
             if (!readAll(stream, pair, kPairBytes)) return false;
             if (const auto idx = params::findByHostId(getU32(pair)))  // unknown ids are ignored
                 next[*idx] = getF64(pair + 4);
+        }
+        uint8_t trailer[kEditorBytes];
+        if (readAll(stream, trailer, kEditorBytes) && getU32(trailer) == kEditorMagic && getU32(trailer + 4) >= 1) {
+            const double z = getF64(trailer + 8);
+            for (double k : ui::Editor::kZooms)
+                if (std::abs(z - k) < 1e-6) guiZoom_.store(k);
         }
     }
     // One batch (area 09 R15, area 21 R14): the audio thread applies every value at the start of its
@@ -537,7 +552,8 @@ bool AmqPlugin::guiGetPreferredApi(const char** api, bool* isFloating) noexcept 
 bool AmqPlugin::guiCreate(const char* api, bool isFloating) noexcept {
     if (!guiIsApiSupported(api, isFloating)) return false;
     if (!editor_) {
-        editor_ = std::make_unique<ui::Editor>(undo_, guiLogicalW_, guiLogicalH_);
+        editor_ = std::make_unique<ui::Editor>(undo_, guiLogicalW_, guiLogicalH_, guiZoom_.load());
+        editor_->onZoomChanged = [this](double z) { guiZoom_.store(z); };
         editor_->onSizeChanged = [this](uint32_t w, uint32_t h, double scale) {
             guiHostW_.store(w);
             guiHostH_.store(h);
@@ -588,13 +604,13 @@ bool AmqPlugin::guiGetResizeHints(clap_gui_resize_hints_t* hints) noexcept {
 
 // Any thread: pure clamp at the last known scale.
 bool AmqPlugin::guiAdjustSize(uint32_t* width, uint32_t* height) noexcept {
-    ui::Editor::constrainHostSize(width, height, guiScale_.load());
+    ui::Editor::constrainHostSize(width, height, guiScale_.load(), guiZoom_.load());
     return true;
 }
 
 bool AmqPlugin::guiSetSize(uint32_t width, uint32_t height) noexcept {
     if (!editor_ || !onMainThreadNow()) return false;
-    ui::Editor::constrainHostSize(&width, &height, editor_->hostScale());
+    ui::Editor::constrainHostSize(&width, &height, editor_->hostScale(), editor_->zoom());
     editor_->setHostSize(width, height);
     return true;
 }

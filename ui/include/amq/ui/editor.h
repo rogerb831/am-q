@@ -40,13 +40,19 @@ public:
     // CLAP window API for this platform (CLAP_WINDOW_API_WIN32 / _COCOA / _X11).
     static const char* windowApi() noexcept;
 
-    // Clamp a host-unit size to the logical limits at the given host-unit scale. Pure: safe on
+    // Interface zoom (spec §1.3, P-7): the user scale on top of the OS DPI. The layout space is
+    // the window's logical size divided by the zoom.
+    static constexpr double kZooms[] = {1.0, 1.5, 2.0, 3.0};
+
+    // Clamp a host-unit size to the logical limits at the given host-unit scale and zoom: the
+    // minimum grows with the zoom (640z x 360z window-logical, at most the maximum). Pure: safe on
     // any thread (gui.adjust_size can come from VST3 size checks).
-    static void constrainHostSize(uint32_t* w, uint32_t* h, double scale) noexcept;
+    static void constrainHostSize(uint32_t* w, uint32_t* h, double scale, double zoom = 1.0) noexcept;
 
     // logicalWidth/Height: the size to open at (the plugin remembers it across close/reopen).
+    // logicalWidth/Height are window-logical pixels (OS DPI only, no zoom).
     explicit Editor(UndoController& controller, uint32_t logicalWidth = kDefaultWidth,
-                    uint32_t logicalHeight = kDefaultHeight);
+                    uint32_t logicalHeight = kDefaultHeight, double zoom = 1.0);
     ~Editor();
     Editor(const Editor&) = delete;
     Editor& operator=(const Editor&) = delete;
@@ -55,15 +61,19 @@ public:
     void attach(void* nativeParent);                 // HWND, NSView* or X11 window
     bool hostSize(uint32_t* w, uint32_t* h) const;  // current size in host units
     void setHostSize(uint32_t w, uint32_t h);       // gui.set_size (already constrained)
-    [[nodiscard]] double hostScale() const noexcept;  // host units per logical pixel
-    [[nodiscard]] float logicalWidth() const noexcept;
+    [[nodiscard]] double hostScale() const noexcept;  // host units per window-logical pixel
+    [[nodiscard]] float logicalWidth() const noexcept;   // window-logical (OS DPI only)
     [[nodiscard]] float logicalHeight() const noexcept;
+    [[nodiscard]] double zoom() const noexcept;
+    void setZoom(double zoom);  // keeps the layout size: asks the host for the zoomed window size
 
     // Called after every layout, with the size in host units and the host-unit scale.
     std::function<void(uint32_t w, uint32_t h, double scale)> onSizeChanged;
     // The DPI changed: the editor asks the host for this host-unit size. Return true if the
     // host accepted the request (it then calls gui.set_size).
     std::function<bool(uint32_t w, uint32_t h)> onRequestResize;
+    // The user changed the interface zoom (the plugin saves it with the state).
+    std::function<void(double zoom)> onZoomChanged;
 
     // Root of the accessible-control tree (area 15 R12).
     [[nodiscard]] AccessibleControl& accessibleRoot() noexcept;

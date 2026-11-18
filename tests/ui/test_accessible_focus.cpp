@@ -76,3 +76,84 @@ TEST_CASE("Accessible focus: one focus shared with Tab, in frequency order") {
     ui::BandNodeAccessible gone(u, m, 10);
     CHECK_FALSE(gone.setAccessibleFocus());
 }
+
+#include "amq/ui/editor_accessible.hpp"
+
+TEST_CASE("Editor tree: every region's controls, with one shared focus") {
+    Host h;
+    ui::UndoController u(h);
+    ui::GraphGeometry g;
+    g.setSize(1180.0f, 584.0f);
+    ui::GraphInteraction m(u, g);
+    ui::BandOps ops(u);
+    band(h, 2, 300.0);
+    band(h, 5, 3000.0);
+    ui::EditorAccessible tree(u, m, ops);
+    int undos = 0;
+    tree.setCommand("Undo", [&] { ++undos; }, [] { return true; });
+
+    auto& root = tree.root();
+    const auto regions = root.accessibleChildren();
+    REQUIRE(regions.size() == 4);
+    CHECK(regions[0]->accessibleName() == "Top bar");
+    CHECK(regions[1]->accessibleName() == "Response graph");
+    CHECK(regions[2]->accessibleName() == "Band panel");
+    CHECK(regions[3]->accessibleName() == "Status bar");
+    CHECK(regions[2]->accessibleChildren().empty());  // no band focused: no panel
+
+    // A command runs; a disabled command is not focusable.
+    auto* undo = regions[0]->accessibleChildren()[0];
+    CHECK(undo->accessibleName() == "Undo");
+    CHECK(undo->performAccessibleAction(ui::AccessibleAction::Press));
+    CHECK(undos == 1);
+    CHECK_FALSE(regions[0]->accessibleChildren()[1]->accessibleFocusable());  // Redo: not bound
+
+    // Focus a band: the panel lists its controls, named after the band.
+    m.setSelection({5}, 5);
+    const auto panel = regions[2]->accessibleChildren();
+    REQUIRE_FALSE(panel.empty());
+    auto byName = [&](const std::string& n) -> ui::AccessibleControl* {
+        for (auto* c : panel)
+            if (c->accessibleName() == n) return c;
+        return nullptr;
+    };
+    auto* gain = byName("Band 6 Gain");
+    REQUIRE(gain != nullptr);
+    CHECK(gain->accessibleRole() == ui::AccessibleRole::Slider);
+    CHECK(byName("Band 6 Delete") == nullptr);
+    CHECK(byName("Delete band") != nullptr);
+    // Threshold is greyed until the band is dynamic and Auto is off.
+    auto* thr = byName("Band 6 Threshold");
+    REQUIRE(thr != nullptr);
+    CHECK_FALSE(thr->accessibleEnabled());
+
+    // Values change through gestures; the tree reports the formatted value.
+    CHECK(gain->performAccessibleAction(ui::AccessibleAction::SetValue, 0.75));
+    CHECK(h.t.value(params::bandParam(5, BandField::Gain)) == doctest::Approx(15.0));
+    CHECK(gain->accessibleValueText() == "+15.0 dB");
+    auto* dyn = byName("Band 6 Dynamic");
+    REQUIRE(dyn != nullptr);
+    CHECK(dyn->accessibleRole() == ui::AccessibleRole::Toggle);
+    CHECK(dyn->performAccessibleAction(ui::AccessibleAction::Press));
+    CHECK(h.t.value(params::bandParam(5, BandField::DynEnabled)) == 1.0);
+
+    // One focus: a control takes it from the band node; the band node takes it back.
+    CHECK(ui::accessibleFocusedControl(root)->accessibleName() == "Band 6");
+    CHECK(gain->setAccessibleFocus());
+    CHECK(ui::accessibleFocusedControl(root) == gain);
+    CHECK(tree.focusedParam() == static_cast<long>(params::bandParam(5, BandField::Gain)));
+    auto* next = ui::accessibleFocusNext(root, +1);
+    REQUIRE(next != nullptr);
+    CHECK(next != gain);
+    CHECK(regions[1]->accessibleChildren()[0]->setAccessibleFocus());  // Band 3 (300 Hz)
+    CHECK(m.focused() == 2);
+    CHECK(ui::accessibleFocusedControl(root)->accessibleName() == "Band 3");
+    CHECK(tree.focusedParam() == -1);
+
+    // The status bar's globals.
+    const auto status = regions[3]->accessibleChildren();
+    CHECK(status.front()->accessibleName() == "Processing Mode");
+    CHECK(status.front()->accessibleRole() == ui::AccessibleRole::Choice);
+    CHECK(status.front()->performAccessibleAction(ui::AccessibleAction::Press));  // next mode
+    CHECK(h.t.value(params::globalParam(params::GlobalParam::Mode)) == 1.0);
+}

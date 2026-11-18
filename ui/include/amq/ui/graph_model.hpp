@@ -60,16 +60,27 @@ private:
 };
 
 // Response curve in dB at fixed frequencies, computed from parameter values with the analog
-// prototypes. A settled band's audio is within R12 of these. Only bands marked dirty are
-// recomputed (area 12 R7).
+// prototypes while a band moves, and replaced by the band's exact digital response once it settles
+// (setSettled). Only bands marked dirty are recomputed (area 12 R7).
 // PROVISIONAL: one combined curve over all placements; per-placement curves and the exact
 // shared GUI/DSP curve code are area 12's Phase 2 task.
 class ResponseCurve {
 public:
     void setFrequencies(std::vector<double> hz);
     [[nodiscard]] const std::vector<double>& frequencies() const noexcept { return hz_; }
-    void markDirty(int band) noexcept { dirty_[static_cast<size_t>(band)] = true; }
-    void markAllDirty() noexcept { dirty_.fill(true); }
+    void markDirty(int band) noexcept {
+        dirty_[static_cast<size_t>(band)] = true;
+        settled_[static_cast<size_t>(band)] = false;  // back to the fast analog curve until it settles again
+    }
+    void markAllDirty() noexcept {
+        dirty_.fill(true);
+        settled_.fill(false);
+    }
+    // The exact digital response of a band that has stopped moving (area 12 R12: the refined design
+    // the audio settles on, from engine::bandMagnitudeDb), at frequencies(). It replaces the analog
+    // curve until the band changes. Ignored if the sizes differ or the band is not audible.
+    void setSettled(int band, const std::vector<double>& db);
+    [[nodiscard]] bool settled(int band) const noexcept { return settled_[static_cast<size_t>(band)]; }
     // Recomputes dirty bands; returns true if the curve changed.
     bool update(const params::ParameterTable& t);
     [[nodiscard]] const std::vector<double>& combinedDb() const noexcept { return combined_; }
@@ -81,6 +92,8 @@ private:
     std::array<std::vector<double>, params::kBandCount> band_;
     std::array<bool, params::kBandCount> audible_{};
     std::array<bool, params::kBandCount> dirty_{};
+    std::array<bool, params::kBandCount> settled_{};
+    bool recombine_ = false;
     std::vector<double> combined_;
     double lastScale_ = -1.0;
 };

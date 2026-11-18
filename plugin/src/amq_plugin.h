@@ -186,6 +186,8 @@ private:
     std::atomic<uint32_t> guiHostW_{1280}, guiHostH_{720};  // = ui::Editor defaults (checked in the .cpp)
     std::atomic<double> guiScale_{1.0};
     uint32_t guiLogicalW_ = 1280, guiLogicalH_ = 720;  // main thread
+    // Interface zoom (editor-spec P-7): editor state saved after the parameter pairs.
+    std::atomic<double> guiZoom_{1.0};
 };
 
 }  // namespace amq::plugin

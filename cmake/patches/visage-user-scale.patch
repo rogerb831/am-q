@@ -1,0 +1,32 @@
+diff --git a/visage_windowing/windowing.h b/visage_windowing/windowing.h
+index 6945223..841e919 100644
+--- a/visage_windowing/windowing.h
++++ b/visage_windowing/windowing.h
+@@ -186,7 +186,17 @@ namespace visage {
+     void setWindowSize(int width, int height);
+     void setNativeWindowSize(int width, int height);
+     void setInternalWindowSize(int width, int height);
+-    void setDpiScale(float scale) { dpi_scale_ = scale; }
++    // The platform sets the OS scale; a user scale (an application zoom) multiplies it.
++    void setDpiScale(float scale) {
++      os_dpi_scale_ = scale;
++      dpi_scale_ = scale * user_scale_;
++    }
++    void setUserScale(float scale) {
++      user_scale_ = scale > 0.0f ? scale : 1.0f;
++      dpi_scale_ = os_dpi_scale_ * user_scale_;
++    }
++    float userScale() const { return user_scale_; }
++    float osDpiScale() const { return os_dpi_scale_; }
+     float dpiScale() const { return dpi_scale_; }
+ 
+     IPoint convertToNative(const Point& logical_point) const {
+@@ -260,6 +270,8 @@ namespace visage {
+     std::function<void(double)> draw_callback_ = nullptr;
+     std::function<void(const FrameDecoration&)> frame_decoration_callback_ = nullptr;
+     float dpi_scale_ = 1.0f;
++    float os_dpi_scale_ = 1.0f;
++    float user_scale_ = 1.0f;
+     bool visible_ = true;
+     bool mouse_relative_mode_ = false;
+     int client_width_ = 0;

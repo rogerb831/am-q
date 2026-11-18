@@ -1,6 +1,7 @@
 #include "amq/ui/editor.h"
 
 #include "amq/dsp/latency.hpp"
+#include "amq/engine/band_response.hpp"
 #include "amq/dsp/log_grid.hpp"
 #include "amq/params/mappings.hpp"
 #include "amq/params/shape_info.hpp"
@@ -11,6 +12,7 @@
 #include "amq/ui/editor_layout.hpp"
 #include "amq/ui/eq_match_apply.hpp"
 #include "amq/ui/file_dialog.hpp"
+#include "amq/ui/editor_accessible.hpp"
 #include "amq/ui/graph_accessible.hpp"
 #include "amq/ui/graph_model.hpp"
 #include "amq/ui/key_dispatcher.hpp"
@@ -91,7 +93,7 @@ enum HitKind : int {
     kMenuItem, kSubParent, kSlopeOpt, kMode, kResolution, kSegParam, kTiltPresets, kSelectMenu, kInlineField,
     // EQ Match
     kMatchRec, kMatchReset, kMatchSource, kMatchWindow, kMatchSmoothing, kMatchAlign, kMatchSlider, kMatchPrimary,
-    kMatchCancel,
+    kMatchCancel, kZoom,
 };
 
 int hitAt(const std::vector<Hit>& hits, float x, float y) {
@@ -129,8 +131,23 @@ struct Ctx {
         if (tipChanged) tipChanged();
     }
     void clearTip() { hoverTip("", {}); }
+    // Interface zoom (P-7): the current zoom and the editor's setter.
+    double zoom = 1.0;
+    std::function<void(double)> setZoom;
     // Motion (spec §7): frames call kickAnimation() when a target changes.
     std::function<void()> kickAnimation;
+    // The parameter whose control holds the accessible focus, or -1 (the focus ring).
+    std::function<long()> focusedParam;
+    void focusRings(visage::Canvas& canvas, const std::vector<Hit>& hits) const {
+        const long f = focusedParam ? focusedParam() : -1;
+        if (f < 0) return;
+        for (const auto& h : hits)
+            if (h.id == static_cast<params::ParamIndex>(f) && h.kind != kKnobValue && h.kind != kNone) {
+                canvas.setColor(theme::tok::accent);
+                canvas.roundedRectangleBorder(h.r.x - 4.0f, h.r.y - 4.0f, h.r.w + 8.0f, h.r.h + 8.0f, 10.0f, 2.0f);
+                return;
+            }
+    }
 
     [[nodiscard]] const params::ParameterTable& table() const { return c.table(); }
     [[nodiscard]] double val(params::ParamIndex i) const { return c.table().value(i); }
@@ -422,6 +439,9 @@ public:
                 return;
             }
             case kInlineField: field_ = hit.arg; break;
+            case kZoom:
+                if (x_.setZoom) x_.setZoom(Editor::kZooms[std::clamp(hit.arg, 0, 3)]);
+                return;
             default: break;
         }
         redraw();
@@ -884,8 +904,14 @@ private:
         y += 24.0f;
         text(c, F.label13, "Scale", r.x + 16.0f, y, 200.0f, 16.0f, tok::inkMuted);
         y += 24.0f;
-        // Interface zoom (P-7) is not built yet: the segments show 100 % and are inactive.
-        segmented(c, {r.x + 16.0f, y, r.w - 32.0f, 32.0f}, {"100 %", "150 %", "200 %", "300 %"}, 0, -1, false);
+        {
+            const Rect seg{r.x + 16.0f, y, r.w - 32.0f, 32.0f};
+            int on = 0;
+            for (int i = 0; i < 4; ++i)
+                if (std::abs(Editor::kZooms[i] - x_.zoom) < 1e-6) on = i;
+            segmented(c, seg, {"100 %", "150 %", "200 %", "300 %"}, on, segHover(seg, 4));
+            for (int i = 0; i < 4; ++i) addHit(segPart(seg, 4, i), kZoom, i);
+        }
         y += 40.0f;
         text(c, F.caption12, "Drag the window corner for any size in between.", r.x + 16.0f, y, r.w - 32.0f, 16.0f, tok::inkMuted);
         y += 20.0f;
@@ -1930,6 +1956,7 @@ private:
         iconButton(c, delR, icons::close, {hov(kDelete)});
         add(delR, kDelete);
         panelRect_ = r;
+        x_.focusRings(c, hits_);
         add(r, kNone);  // the panel swallows clicks
     }
 
@@ -2733,6 +2760,7 @@ public:
             chip(c, r, "Auto Gain", {hov(kToggle, static_cast<int>(id)), false, x_.on(id)});
             hits_.push_back({r, kToggle, static_cast<int>(id), id});
         }
+        x_.focusRings(c, hits_);
     }
     void mouseDown(const visage::MouseEvent& e) override {
         const int h = hitAt(hits_, e.position.x, e.position.y);
@@ -2827,23 +2855,6 @@ private:
     Ctx& x_;
 };
 
-// ---------------------------------------------------------------------------
-// Accessible-control model (area 15 R12)
-// ---------------------------------------------------------------------------
-
-class RootAccessible : public AccessibleControl {
-public:
-    explicit RootAccessible(GraphAccessible& g) : g_(g) {}
-    std::string accessibleName() const override { return "Am-Q"; }
-    AccessibleRole accessibleRole() const override { return AccessibleRole::Group; }
-    std::vector<AccessibleAction> accessibleActions() const override { return {}; }
-    bool performAccessibleAction(AccessibleAction, double) override { return false; }
-    std::vector<AccessibleControl*> accessibleChildren() const override { return {&g_}; }
-
-private:
-    GraphAccessible& g_;
-};
-
 }  // namespace
 
 // ---------------------------------------------------------------------------
@@ -2867,8 +2878,7 @@ struct Editor::Impl : params::ParameterListener {
     GraphTop top;
     TopBar topBar;
     StatusBar statusBar;
-    GraphAccessible graphAccess;
-    RootAccessible rootAccess;
+    EditorAccessible access;
 
     explicit Impl(UndoController& ctl)
         : x(ctl),
@@ -2881,8 +2891,7 @@ struct Editor::Impl : params::ParameterListener {
           top(x, overlay),
           topBar(x, overlay, top),
           statusBar(x, overlay),
-          graphAccess(ctl, x.interaction),
-          rootAccess(graphAccess) {
+          access(ctl, x.interaction, x.ops) {
         x.keys.writeSystemClipboard = [](const std::string& s) { visage::setClipboardText(s); };
         x.keys.readSystemClipboard = [] { return visage::readClipboardText(); };
         x.redrawGraph = [this] {
@@ -2935,7 +2944,22 @@ struct Editor::Impl : params::ParameterListener {
             tip.setVisible(false);
             tip.redraw();
         };
+        // The accessible tree (area 15 R12): top-bar commands bound to the editor's actions; the
+        // focused control draws the focus ring.
+        access.setCommand("Undo", [this] { x.c.undo(); x.redrawAll(); }, [this] { return x.c.canUndo(); });
+        access.setCommand("Redo", [this] { x.c.redo(); x.redrawAll(); }, [this] { return x.c.canRedo(); });
+        access.setCommand("EQ Match", [this] {
+            if (x.matchMode) top.exitMatch();
+            else top.enterMatch();
+        }, [this] { return x.c.matchHost() != nullptr; });
+        access.setCommand("Settings", [this] { overlay.openPopover(Pop::Settings, {x.L.width - 100.0f, 8.0f, 28.0f, 28.0f}); });
+        access.setCommand("Help", [this] {
+            x.hintMode = !x.hintMode;
+            x.redrawBars();
+        });
+        x.focusedParam = [this] { return access.focusedParam(); };
         x.interaction.onSelectionChanged = [this] {
+            access.focus().control = nullptr;  // a click or key on the graph moves the focus there
             x.stripExpanded = false;
             x.redrawAll();
         };
@@ -2950,6 +2974,7 @@ struct Editor::Impl : params::ParameterListener {
                 top.redraw();
             }
             top.pollMatch();  // EQ Match status and fits, only while EQ Match mode is on
+            settleOneBand();
             if (!x.tipShown && !x.tipText.empty() && theme::nowMs() - x.tipSince >= 600.0 && overlay.kind() == Pop::None) {
                 x.tipShown = true;
                 tip.setVisible(true);
@@ -2976,6 +3001,32 @@ struct Editor::Impl : params::ParameterListener {
         x.c.removeListener(this);
     }
 
+    // Exact curve (area 12 R12): a band that has not changed for 200 ms is redrawn from the refined
+    // digital design the audio settles on (about 6 ms per band), one band per poll tick so loading a
+    // preset never stalls the editor. While a band moves it uses the fast analog curve.
+    std::array<double, params::kBandCount> lastChange{};
+    std::vector<double> settledDb;
+    void settleOneBand() {
+        const double now = theme::nowMs();
+        const auto& hz = x.curve.frequencies();
+        if (hz.empty() || x.matchMode) return;
+        for (int b = 0; b < params::kBandCount; ++b) {
+            if (x.curve.settled(b) || now - lastChange[static_cast<size_t>(b)] < 200.0) continue;
+            if (x.bval(b, BandField::Used) < 0.5 || x.bval(b, BandField::Enabled) < 0.5) continue;
+            x.curve.update(x.table());  // the band's analog curve and audibility are current first
+            if (!x.curve.bandAudible(b)) continue;
+            settledDb.resize(hz.size());
+            const auto in = engine::bandDesignInputs(x.table(), b, x.sampleRate());
+            if (!engine::bandMagnitudeDb(in, engine::DesignTier::Refined, hz.data(), hz.size(), settledDb.data())) {
+                lastChange[static_cast<size_t>(b)] = now + 1e9;  // no design: keep the analog curve
+                continue;
+            }
+            x.curve.setSettled(b, settledDb);
+            curves.redraw();
+            return;  // one band per tick
+        }
+    }
+
     std::string shotTrigger;
     void checkShotRequest() {
         if (shotTrigger.empty()) return;
@@ -3000,11 +3051,40 @@ struct Editor::Impl : params::ParameterListener {
     float wantW = 0.0f, wantH = 0.0f;  // logical size to keep across DPI changes
     bool dpiResizePending = false;     // asked the host to resize after a DPI change
 
+    // Zoom (spec §1.3, P-7): Visage's window carries a user scale (cmake/patches/
+    // visage-user-scale.patch) that it multiplies into every OS DPI scale it sets, so the canvas,
+    // the frame bounds and the mouse mapping all see the zoomed logical space, and Visage's own DPI
+    // updates on resize keep it.
+    double zoom = 1.0;
+    // Applies the zoom to the window; returns true if that changed anything (a relayout follows).
+    bool applyZoom() {
+        visage::Window* w = app.window();
+        if (!w || std::abs(w->userScale() - zoom) < 1e-6) return false;
+        w->setUserScale(static_cast<float>(zoom));
+        w->handleResized(w->clientWidth(), w->clientHeight());
+        return true;
+    }
+    void setZoom(double z) {
+        if (std::abs(z - zoom) < 1e-6) return;
+        const double layoutW = app.width(), layoutH = app.height();
+        zoom = z;
+        x.zoom = z;
+        if (owner && owner->onZoomChanged) owner->onZoomChanged(z);
+        // Keep the layout size: ask the host for the zoomed window; if it refuses, the layout
+        // space changes instead.
+        const double s = hostScale();
+        uint32_t w = static_cast<uint32_t>(std::lround(layoutW * z * s)), h = static_cast<uint32_t>(std::lround(layoutH * z * s));
+        constrainHostSize(&w, &h, s, z);
+        applyZoom();
+        if (owner && owner->onRequestResize) owner->onRequestResize(w, h);
+        layout();
+    }
+
     double hostScale() const {
 #if defined(__APPLE__)
         return 1.0;  // host units are points
 #else
-        const double s = app.window() ? app.window()->dpiScale() : app.dpiScale();
+        const double s = app.window() ? app.window()->osDpiScale() : app.dpiScale();  // without the zoom
         return s > 0.0 ? s : 1.0;
 #endif
     }
@@ -3027,7 +3107,7 @@ struct Editor::Impl : params::ParameterListener {
         lastScale = s;
         if (!changed || wantW <= 0.0f || !owner || !owner->onRequestResize) return;
         uint32_t w = static_cast<uint32_t>(std::lround(wantW * s)), h = static_cast<uint32_t>(std::lround(wantH * s));
-        constrainHostSize(&w, &h, s);
+        constrainHostSize(&w, &h, s, zoom);
         uint32_t cw = 0, ch = 0;
         hostSize(&cw, &ch);
         if (w == cw && h == ch) return;
@@ -3056,11 +3136,12 @@ struct Editor::Impl : params::ParameterListener {
 
     void layout() {
         checkDpiChange();
+        if (applyZoom()) return;  // handleResized lays out again at the zoomed scale
         computeLayout();
         const auto& L = x.L;
-        if (!dpiResizePending) {
-            wantW = L.width;
-            wantH = L.height;
+        if (!dpiResizePending) {  // window-logical size to keep across DPI changes
+            wantW = L.width * static_cast<float>(zoom);
+            wantH = L.height * static_cast<float>(zoom);
         }
         x.geometry.setSize(L.graph.w, L.graph.h);
         x.geometry.setRangeDb(x.displayRange());
@@ -3089,6 +3170,7 @@ struct Editor::Impl : params::ParameterListener {
     void parameterChanged(params::ParamIndex i, double, params::ParamSource) override {
         if (i < static_cast<params::ParamIndex>(params::kBandCount * params::kBandFieldCount)) {
             x.curve.markDirty(static_cast<int>(i) / params::kBandFieldCount);
+            lastChange[static_cast<size_t>(i) / params::kBandFieldCount] = theme::nowMs();
             const auto before = x.L.panel.rect;
             const auto mode = x.L.panel.mode;
             computeLayout();
@@ -3108,6 +3190,7 @@ struct Editor::Impl : params::ParameterListener {
             top.redraw();
         } else if (i == params::globalParam(GlobalParam::GainScale)) {
             x.curve.markAllDirty();
+            lastChange.fill(theme::nowMs());
             curves.redraw();
             statusBar.redraw();
         } else if ((i >= params::globalParam(GlobalParam::AnalyzerShowPre) && i <= params::globalParam(GlobalParam::AnalyzerGrab)) ||
@@ -3135,22 +3218,27 @@ const char* Editor::windowApi() noexcept {
 #endif
 }
 
-void Editor::constrainHostSize(uint32_t* w, uint32_t* h, double scale) noexcept {
+void Editor::constrainHostSize(uint32_t* w, uint32_t* h, double scale, double zoom) noexcept {
     if (!(scale > 0.0)) scale = 1.0;
-    auto clampOne = [scale](uint32_t v, uint32_t lo, uint32_t hi) {
-        const double logical = std::clamp(v / scale, static_cast<double>(lo), static_cast<double>(hi));
+    if (!(zoom >= 1.0)) zoom = 1.0;
+    auto clampOne = [scale, zoom](uint32_t v, uint32_t lo, uint32_t hi) {
+        const double minLogical = std::min(lo * zoom, static_cast<double>(hi));
+        const double logical = std::clamp(v / scale, minLogical, static_cast<double>(hi));
         return static_cast<uint32_t>(std::lround(logical * scale));
     };
     *w = clampOne(*w, kMinWidth, kMaxWidth);
     *h = clampOne(*h, kMinHeight, kMaxHeight);
 }
 
-Editor::Editor(UndoController& controller, uint32_t logicalWidth, uint32_t logicalHeight)
+Editor::Editor(UndoController& controller, uint32_t logicalWidth, uint32_t logicalHeight, double zoom)
     : impl_(std::make_unique<Impl>(controller)) {
     ++gLiveEditors;
     impl_->owner = this;
+    for (double z : kZooms)
+        if (std::abs(z - zoom) < 1e-6) impl_->zoom = impl_->x.zoom = z;
+    impl_->x.setZoom = [this](double z) { impl_->setZoom(z); };
     auto& app = impl_->app;
-    app.setMinimumDimensions(static_cast<float>(kMinWidth), static_cast<float>(kMinHeight));
+    app.setMinimumDimensions(static_cast<float>(kMinWidth), static_cast<float>(kMinHeight));  // layout space
     app.setWindowDimensions(static_cast<float>(std::clamp(logicalWidth, kMinWidth, kMaxWidth)),
                             static_cast<float>(std::clamp(logicalHeight, kMinHeight, kMaxHeight)));
     auto& m = *impl_;
@@ -3199,10 +3287,12 @@ void Editor::setHostSize(uint32_t w, uint32_t h) {
 }
 
 double Editor::hostScale() const noexcept { return impl_->hostScale(); }
-float Editor::logicalWidth() const noexcept { return impl_->app.width(); }
-float Editor::logicalHeight() const noexcept { return impl_->app.height(); }
+float Editor::logicalWidth() const noexcept { return impl_->app.width() * static_cast<float>(impl_->zoom); }
+float Editor::logicalHeight() const noexcept { return impl_->app.height() * static_cast<float>(impl_->zoom); }
+double Editor::zoom() const noexcept { return impl_->zoom; }
+void Editor::setZoom(double z) { impl_->setZoom(z); }
 
-AccessibleControl& Editor::accessibleRoot() noexcept { return impl_->rootAccess; }
+AccessibleControl& Editor::accessibleRoot() noexcept { return impl_->access.root(); }
 
 int Editor::liveCount() noexcept { return gLiveEditors.load(); }
 

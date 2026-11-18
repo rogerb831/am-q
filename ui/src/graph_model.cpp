@@ -65,6 +65,14 @@ void ResponseCurve::setFrequencies(std::vector<double> hz) {
     markAllDirty();
 }
 
+void ResponseCurve::setSettled(int band, const std::vector<double>& db) {
+    const auto b = static_cast<size_t>(band);
+    if (db.size() != hz_.size() || dirty_[b] || !audible_[b]) return;
+    band_[b] = db;
+    settled_[b] = true;
+    recombine_ = true;
+}
+
 bool ResponseCurve::update(const params::ParameterTable& t) {
     const double scale = t.value(params::globalParam(params::GlobalParam::GainScale)) / 100.0;
     if (scale != lastScale_) {
@@ -94,7 +102,9 @@ bool ResponseCurve::update(const params::ParameterTable& t) {
         for (size_t i = 0; i < hz_.size(); ++i)
             out[i] = proto.supported ? dsp::linearToDb(std::max(std::abs(proto.evaluateHz(hz_[i])), 1e-12)) : 0.0;
     }
-    if (any) {
+    if (any || recombine_) {
+        recombine_ = false;
+        any = true;
         std::fill(combined_.begin(), combined_.end(), 0.0);
         for (int b = 0; b < params::kBandCount; ++b)
             if (audible_[static_cast<size_t>(b)])
